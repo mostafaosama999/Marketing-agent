@@ -5,7 +5,7 @@ import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 
 // Firebase configuration for marketing-app-cc237 project
 const firebaseConfig = {
-  apiKey: "AIzaSyApdeRoMJwmyd3dk5OhD_tfFPOv4GqsxXo",
+  apiKey: process.env.REACT_APP_FIREBASE_API_KEY || "",
   authDomain: "marketing-app-cc237.firebaseapp.com",
   projectId: "marketing-app-cc237",
   storageBucket: "marketing-app-cc237.firebasestorage.app",

@@ -54,8 +54,8 @@ export const generateMarketingReport = functions.pubsub
         console.log("✅ Report sent to Slack channel: project-reports");
       } catch (slackError) {
         console.error("❌ SLACK ERROR:", slackError);
-        console.error("❌ Slack error message:", slackError.message);
-        console.error("❌ Slack error stack:", slackError.stack);
+        console.error("❌ Slack error message:", slackError instanceof Error ? slackError.message : String(slackError));
+        console.error("❌ Slack error stack:", slackError instanceof Error ? slackError.stack : 'No stack trace available');
         console.warn("⚠️ Continuing function execution despite Slack failure");
       }
 
@@ -120,8 +120,8 @@ export const triggerMarketingReport = functions.https.onCall(async (data, contex
       console.log("✅ Manual report sent to Slack successfully");
     } catch (slackError) {
       console.error("❌ MANUAL TRIGGER SLACK ERROR:", slackError);
-      console.error("❌ Manual Slack error message:", slackError.message);
-      console.error("❌ Manual Slack error stack:", slackError.stack);
+      console.error("❌ Manual Slack error message:", slackError instanceof Error ? slackError.message : String(slackError));
+      console.error("❌ Manual Slack error stack:", slackError instanceof Error ? slackError.stack : 'No stack trace available');
     }
     console.log("Manual report generated:", report);
 

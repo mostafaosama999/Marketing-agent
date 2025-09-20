@@ -4,7 +4,7 @@ import {ResearchStep} from "../types";
 import {analyzeCompany} from "../utils/companyAnalysisUtils";
 import {analyzeBlogFromCompany} from "../utils/blogDiscoveryUtils";
 import {generateIdeasForCompany} from "../utils/ideaGenerationUtils";
-import {createGoogleDoc} from "./docGeneration";
+import {createResearchDocument} from "./docGeneration";
 
 const initialSteps: ResearchStep[] = [
   {
@@ -134,7 +134,7 @@ async function processResearchFlow(sessionId: string, companyUrl: string) {
       console.error("Company analysis error:", error);
       await updateResearchStep(sessionId, 0, {
         status: "error",
-        result: `Error analyzing homepage: ${error.message}`,
+        result: `Error analyzing homepage: ${error instanceof Error ? error.message : String(error)}`,
       });
       throw error;
     }
@@ -148,7 +148,7 @@ async function processResearchFlow(sessionId: string, companyUrl: string) {
         `Posts: ${blogAnalysis.recentPosts.length} recent posts\n` +
         `Content Style: ${blogAnalysis.contentStyle}\n` +
         `Posting Frequency: ${blogAnalysis.postingFrequency}\n` +
-        `Recent Titles: ${blogAnalysis.recentPosts.slice(0, 3).map(p => p.title).join(", ")}` :
+        `Recent Titles: ${blogAnalysis.recentPosts.slice(0, 3).map((p: any) => p.title).join(", ")}` :
         "**No blog found** for this company\nRecommendation: Consider starting a company blog for thought leadership";
       await updateResearchStep(sessionId, 1, {
         status: "completed",
@@ -197,7 +197,7 @@ async function processResearchFlow(sessionId: string, companyUrl: string) {
         status: "completed",
         result: `**Generated ${ideaResult.totalGenerated} ideas** (${ideaResult.uniqueCount} unique)\n` +
                 `Sample Ideas:\n` +
-                uniqueIdeas.slice(0, 3).map(idea =>
+                uniqueIdeas.slice(0, 3).map((idea: any) =>
                   `• ${idea.title} (${idea.format}, ${idea.difficulty})`
                 ).join("\n"),
       });
@@ -205,7 +205,7 @@ async function processResearchFlow(sessionId: string, companyUrl: string) {
       console.error("Idea generation error:", error);
       await updateResearchStep(sessionId, 3, {
         status: "error",
-        result: `Error generating ideas: ${error.message}`,
+        result: `Error generating ideas: ${error instanceof Error ? error.message : String(error)}`,
       });
       throw error;
     }
@@ -223,13 +223,17 @@ async function processResearchFlow(sessionId: string, companyUrl: string) {
     await updateResearchStep(sessionId, 5, {status: "in_progress"});
     try {
       const sessionData = {
+        id: sessionId,
+        companyUrl,
+        status: "in_progress" as const,
+        steps: [],
         companyAnalysis,
         blogAnalysis,
         aiTrends,
-        uniqueIdeas: finalIdeas
+        uniqueIdeas: finalIdeas,
+        createdAt: new Date()
       };
-      const docResult = await createGoogleDoc(sessionData, {});
-      googleDocUrl = docResult.documentUrl;
+      googleDocUrl = await createResearchDocument(sessionData);
       await updateResearchStep(sessionId, 5, {
         status: "completed",
         result: `**Google Doc Created Successfully**\n` +
@@ -240,7 +244,7 @@ async function processResearchFlow(sessionId: string, companyUrl: string) {
       console.error("Google Doc creation error:", error);
       await updateResearchStep(sessionId, 5, {
         status: "error",
-        result: `Error creating Google Doc: ${error.message}`,
+        result: `Error creating Google Doc: ${error instanceof Error ? error.message : String(error)}`,
       });
       throw error;
     }
@@ -265,7 +269,7 @@ async function processResearchFlow(sessionId: string, companyUrl: string) {
     console.error("Process research flow error:", error);
     await updateResearchSession(sessionId, {
       status: "error",
-      error: error.message,
+      error: error instanceof Error ? error.message : String(error),
     });
     throw error;
   }

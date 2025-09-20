@@ -51,14 +51,14 @@ export async function sendSlackMessage(message: string): Promise<void> {
     }
   } catch (error) {
     console.error("❌ CRITICAL: Error sending Slack message:", error);
-    console.error("❌ Error name:", error.name);
-    console.error("❌ Error message:", error.message);
-    console.error("❌ Error stack:", error.stack);
-    if (error.data) {
-      console.error("❌ Slack API error data:", JSON.stringify(error.data, null, 2));
+    console.error("❌ Error name:", error instanceof Error ? error.name : 'Unknown');
+    console.error("❌ Error message:", error instanceof Error ? error.message : String(error));
+    console.error("❌ Error stack:", error instanceof Error ? error.stack : 'No stack trace');
+    if (error && typeof error === 'object' && 'data' in error) {
+      console.error("❌ Slack API error data:", JSON.stringify((error as any).data, null, 2));
     }
-    if (error.code) {
-      console.error("❌ Error code:", error.code);
+    if (error && typeof error === 'object' && 'code' in error) {
+      console.error("❌ Error code:", (error as any).code);
     }
     // Re-throw so we can catch it in the calling function
     throw error;
@@ -178,9 +178,9 @@ export async function sendReportToSlack(
     }
   } catch (error) {
     console.error("❌ Error sending formatted report to Slack:", error);
-    console.error("Error details:", error.message);
-    if (error.data) {
-      console.error("Slack API error data:", error.data);
+    console.error("Error details:", error instanceof Error ? error.message : String(error));
+    if (error && typeof error === 'object' && 'data' in error) {
+      console.error("Slack API error data:", (error as any).data);
     }
 
     console.log("📄 Attempting fallback to simple text message...");

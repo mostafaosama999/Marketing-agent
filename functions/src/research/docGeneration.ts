@@ -47,7 +47,7 @@ export const createGoogleDoc = functions.https.onCall(async (data, context) => {
 /**
  * Create comprehensive research document
  */
-async function createResearchDocument(session: ResearchSession): Promise<string> {
+export async function createResearchDocument(session: ResearchSession): Promise<string> {
   try {
     const docs = await getGoogleDocsAPI();
     const drive = await getGoogleDriveAPI();
