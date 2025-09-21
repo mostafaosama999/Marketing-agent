@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Stepper,
   Step,
@@ -14,6 +14,7 @@ import {
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
   Schedule as ScheduleIcon,
+  AccessTime as AccessTimeIcon,
 } from '@mui/icons-material';
 import { ResearchStep } from '../../app/types/research';
 
@@ -23,11 +24,57 @@ interface ProgressStepperProps {
   orientation?: 'horizontal' | 'vertical';
 }
 
+// Utility function to format duration
+const formatDuration = (durationMs: number): string => {
+  const seconds = Math.floor(durationMs / 1000);
+  const minutes = Math.floor(seconds / 60);
+  const remainingSeconds = seconds % 60;
+
+  if (minutes > 0) {
+    return `${minutes}m ${remainingSeconds}s`;
+  }
+  return `${remainingSeconds}s`;
+};
+
+// Utility function to get elapsed time
+const getElapsedTime = (startTime: Date | any): number => {
+  // Handle Firestore Timestamp objects
+  const startTimeMs = startTime?.toDate ? startTime.toDate().getTime() :
+                     startTime?.getTime ? startTime.getTime() :
+                     typeof startTime === 'number' ? startTime : Date.now();
+  return Date.now() - startTimeMs;
+};
+
 export const ProgressStepper: React.FC<ProgressStepperProps> = ({
   steps,
   activeStep,
   orientation = 'vertical',
 }) => {
+  const [currentTime, setCurrentTime] = useState(Date.now());
+
+  // Update current time every second for real-time timer
+  useEffect(() => {
+    const interval = setInterval(() => {
+      setCurrentTime(Date.now());
+    }, 1000);
+
+    return () => clearInterval(interval);
+  }, []);
+
+  // Get timing display text for a step
+  const getTimingText = (step: ResearchStep): string | null => {
+    if (step.status === 'completed' && step.duration) {
+      // Handle duration as either number or any other type
+      const durationMs = typeof step.duration === 'number' ? step.duration : 0;
+      return `Completed in ${formatDuration(durationMs)}`;
+    }
+    if (step.status === 'in_progress' && step.startedAt) {
+      const elapsed = getElapsedTime(step.startedAt);
+      return `Running for ${formatDuration(elapsed)}`;
+    }
+    return null;
+  };
+
   const getStepIcon = (step: ResearchStep, stepIndex: number) => {
     if (step.status === 'completed') {
       return <CheckCircleIcon color="success" />;
@@ -67,9 +114,16 @@ export const ProgressStepper: React.FC<ProgressStepperProps> = ({
                 icon={getStepIcon(step, index)}
                 error={step.status === 'error'}
               >
-                <Typography variant="body2" fontWeight={500}>
-                  {step.title}
-                </Typography>
+                <Box sx={{ textAlign: 'center' }}>
+                  <Typography variant="body2" fontWeight={500}>
+                    {step.title}
+                  </Typography>
+                  {getTimingText(step) && (
+                    <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 0.5 }}>
+                      {getTimingText(step)}
+                    </Typography>
+                  )}
+                </Box>
               </StepLabel>
             </Step>
           ))}
@@ -87,7 +141,7 @@ export const ProgressStepper: React.FC<ProgressStepperProps> = ({
               icon={getStepIcon(step, index)}
               error={step.status === 'error'}
             >
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}>
                 <Typography variant="h6" component="div">
                   {step.title}
                 </Typography>
@@ -97,6 +151,15 @@ export const ProgressStepper: React.FC<ProgressStepperProps> = ({
                   color={getStatusColor(step.status)}
                   variant={step.status === 'pending' ? 'outlined' : 'filled'}
                 />
+                {getTimingText(step) && (
+                  <Chip
+                    size="small"
+                    icon={<AccessTimeIcon />}
+                    label={getTimingText(step)}
+                    variant="outlined"
+                    color="primary"
+                  />
+                )}
               </Box>
             </StepLabel>
             <StepContent>

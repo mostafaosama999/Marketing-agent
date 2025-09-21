@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Typography, Box, Alert, Grid } from '@mui/material';
 import { CompanyResearchForm } from '../components/CompanyResearchForm';
 import { ResearchResults } from '../components/ResearchResults';
-import { ProgressStepper, TestModePanel } from '../../../components/ui';
+import { ProgressStepper, TestModePanel, WebflowTestPanel } from '../../../components/ui';
 import { CompanyResearchRequest, ResearchSession, ResearchStep } from '../../../app/types/research';
 import { triggerResearchFlow, TriggerResearchRequest, TriggerResearchResponse } from '../../../services/researchApi';
 import { subscribeToSession } from '../../../services/firestoreService';
@@ -34,18 +34,12 @@ const initialSteps: ResearchStep[] = [
   },
   {
     id: 5,
-    title: 'Remove Duplicates',
-    description: 'Filter out ideas similar to existing content',
+    title: 'Update Document',
+    description: 'Update existing Google Doc with research results',
     status: 'pending',
   },
   {
     id: 6,
-    title: 'Create Google Doc',
-    description: 'Generate comprehensive report document',
-    status: 'pending',
-  },
-  {
-    id: 7,
     title: 'Complete',
     description: 'Research completed successfully',
     status: 'pending',
@@ -153,6 +147,8 @@ export const CompaniesPage: React.FC = () => {
         testMode={testMode}
         onTestModeToggle={setTestMode}
       />
+
+      <WebflowTestPanel />
 
       <Box
         sx={{

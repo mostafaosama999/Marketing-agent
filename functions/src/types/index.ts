@@ -56,6 +56,9 @@ export interface ResearchStep {
   status: "pending" | "in_progress" | "completed" | "error";
   result?: any;
   error?: string;
+  startedAt?: Date;
+  completedAt?: Date;
+  duration?: number; // Duration in milliseconds
 }
 
 export interface ResearchSession {

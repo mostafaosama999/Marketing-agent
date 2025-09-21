@@ -31,6 +31,14 @@ export const createGoogleDoc = httpsCallable(functions, 'createGoogleDoc');
  */
 export const healthCheck = httpsCallable(functions, 'healthCheck');
 
+/**
+ * Webflow functions
+ */
+export const discoverWebflowCollections = httpsCallable(functions, 'discoverWebflowCollections');
+export const triggerWebflowSync = httpsCallable(functions, 'triggerWebflowSync');
+export const webflowHealthCheck = httpsCallable(functions, 'webflowHealthCheck');
+export const testWebflowAPI = httpsCallable(functions, 'testWebflowAPI');
+
 // API types for requests/responses
 export interface TriggerResearchRequest {
   companyUrl: string;

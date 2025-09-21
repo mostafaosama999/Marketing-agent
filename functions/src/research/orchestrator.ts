@@ -4,7 +4,7 @@ import {ResearchStep} from "../types";
 import {analyzeCompany} from "../utils/companyAnalysisUtils";
 import {analyzeBlogFromCompany} from "../utils/blogDiscoveryUtils";
 import {generateIdeasForCompany} from "../utils/ideaGenerationUtils";
-import {createResearchDocument} from "./docGeneration";
+import {updateResearchDocument} from "../utils/docGenerationUtils";
 
 const initialSteps: ResearchStep[] = [
   {
@@ -33,18 +33,12 @@ const initialSteps: ResearchStep[] = [
   },
   {
     id: 5,
-    title: "Remove Duplicates",
-    description: "Filter out ideas similar to existing content",
+    title: "Update Document",
+    description: "Update existing Google Doc with research results",
     status: "pending",
   },
   {
     id: 6,
-    title: "Create Google Doc",
-    description: "Generate comprehensive report document",
-    status: "pending",
-  },
-  {
-    id: 7,
     title: "Complete",
     description: "Research completed successfully",
     status: "pending",
@@ -120,11 +114,19 @@ async function processResearchFlow(sessionId: string, companyUrl: string) {
     let googleDocUrl: string = "";
 
     // Step 1: Analyze Homepage
-    await updateResearchStep(sessionId, 0, {status: "in_progress"});
+    const step1StartTime = new Date();
+    await updateResearchStep(sessionId, 0, {
+      status: "in_progress",
+      startedAt: step1StartTime,
+    });
     try {
       companyAnalysis = await analyzeCompany(companyUrl);
+      const step1EndTime = new Date();
+      const step1Duration = step1EndTime.getTime() - step1StartTime.getTime();
       await updateResearchStep(sessionId, 0, {
         status: "completed",
+        completedAt: step1EndTime,
+        duration: step1Duration,
         result: `**${companyAnalysis.title}** - ${companyAnalysis.industry} company\n` +
                 `Products: ${companyAnalysis.keyProducts.join(", ")}\n` +
                 `Target Audience: ${companyAnalysis.targetAudience}\n` +
@@ -140,9 +142,15 @@ async function processResearchFlow(sessionId: string, companyUrl: string) {
     }
 
     // Step 2: Find Blog
-    await updateResearchStep(sessionId, 1, {status: "in_progress"});
+    const step2StartTime = new Date();
+    await updateResearchStep(sessionId, 1, {
+      status: "in_progress",
+      startedAt: step2StartTime,
+    });
     try {
       blogAnalysis = await analyzeBlogFromCompany(companyUrl);
+      const step2EndTime = new Date();
+      const step2Duration = step2EndTime.getTime() - step2StartTime.getTime();
       const blogMessage = blogAnalysis.found ?
         `**Blog Found:** ${blogAnalysis.blogUrl}\n` +
         `Posts: ${blogAnalysis.recentPosts.length} recent posts\n` +
@@ -152,19 +160,29 @@ async function processResearchFlow(sessionId: string, companyUrl: string) {
         "**No blog found** for this company\nRecommendation: Consider starting a company blog for thought leadership";
       await updateResearchStep(sessionId, 1, {
         status: "completed",
+        completedAt: step2EndTime,
+        duration: step2Duration,
         result: blogMessage,
       });
     } catch (error) {
       console.error("Blog discovery error:", error);
+      const step2EndTime = new Date();
+      const step2Duration = step2EndTime.getTime() - step2StartTime.getTime();
       await updateResearchStep(sessionId, 1, {
         status: "completed",
+        completedAt: step2EndTime,
+        duration: step2Duration,
         result: "Blog discovery completed (no blog found)",
       });
       blogAnalysis = {found: false, recentPosts: [], themes: []};
     }
 
     // Step 3: Extract AI Trends (mock for now - would integrate with newsletter APIs)
-    await updateResearchStep(sessionId, 2, {status: "in_progress"});
+    const step3StartTime = new Date();
+    await updateResearchStep(sessionId, 2, {
+      status: "in_progress",
+      startedAt: step3StartTime,
+    });
     aiTrends = [
       {
         topic: "Multimodal AI",
@@ -177,13 +195,21 @@ async function processResearchFlow(sessionId: string, companyUrl: string) {
         keywords: ["agents", "autonomous", "AI", "automation"]
       }
     ];
+    const step3EndTime = new Date();
+    const step3Duration = step3EndTime.getTime() - step3StartTime.getTime();
     await updateResearchStep(sessionId, 2, {
       status: "completed",
+      completedAt: step3EndTime,
+      duration: step3Duration,
       result: `Extracted ${aiTrends.length} current AI trends`,
     });
 
     // Step 4: Generate Ideas
-    await updateResearchStep(sessionId, 3, {status: "in_progress"});
+    const step4StartTime = new Date();
+    await updateResearchStep(sessionId, 3, {
+      status: "in_progress",
+      startedAt: step4StartTime,
+    });
     try {
       const ideaRequest = {
         companyAnalysis,
@@ -193,11 +219,16 @@ async function processResearchFlow(sessionId: string, companyUrl: string) {
       };
       const ideaResult = await generateIdeasForCompany(ideaRequest);
       uniqueIdeas = ideaResult.ideas;
+      const step4EndTime = new Date();
+      const step4Duration = step4EndTime.getTime() - step4StartTime.getTime();
+      const filteredIdeas = uniqueIdeas.filter((idea: any) => !idea.isDuplicate);
       await updateResearchStep(sessionId, 3, {
         status: "completed",
-        result: `**Generated ${ideaResult.totalGenerated} ideas** (${ideaResult.uniqueCount} unique)\n` +
-                `Sample Ideas:\n` +
-                uniqueIdeas.slice(0, 3).map((idea: any) =>
+        completedAt: step4EndTime,
+        duration: step4Duration,
+        result: `**Generated ${ideaResult.totalGenerated} ideas** (${filteredIdeas.length} unique)\n` +
+                `All Ideas:\n` +
+                filteredIdeas.map((idea: any) =>
                   `• ${idea.title} (${idea.format}, ${idea.difficulty})`
                 ).join("\n"),
       });
@@ -210,17 +241,15 @@ async function processResearchFlow(sessionId: string, companyUrl: string) {
       throw error;
     }
 
-    // Step 5: Remove Duplicates (already handled in idea generation)
-    await updateResearchStep(sessionId, 4, {status: "in_progress"});
-    const duplicatesRemoved = uniqueIdeas.filter((idea: any) => idea.isDuplicate).length;
+    // Filter out duplicates (done inline now)
     const finalIdeas = uniqueIdeas.filter((idea: any) => !idea.isDuplicate);
-    await updateResearchStep(sessionId, 4, {
-      status: "completed",
-      result: `Removed ${duplicatesRemoved} duplicates - ${finalIdeas.length} unique ideas remain`,
-    });
 
-    // Step 6: Create Google Doc
-    await updateResearchStep(sessionId, 5, {status: "in_progress"});
+    // Step 5: Update Google Doc
+    const step5StartTime = new Date();
+    await updateResearchStep(sessionId, 4, {
+      status: "in_progress",
+      startedAt: step5StartTime,
+    });
     try {
       const sessionData = {
         id: sessionId,
@@ -233,25 +262,35 @@ async function processResearchFlow(sessionId: string, companyUrl: string) {
         uniqueIdeas: finalIdeas,
         createdAt: new Date()
       };
-      googleDocUrl = await createResearchDocument(sessionData);
-      await updateResearchStep(sessionId, 5, {
+      googleDocUrl = await updateResearchDocument(sessionData);
+      const step5EndTime = new Date();
+      const step5Duration = step5EndTime.getTime() - step5StartTime.getTime();
+      await updateResearchStep(sessionId, 4, {
         status: "completed",
-        result: `**Google Doc Created Successfully**\n` +
+        completedAt: step5EndTime,
+        duration: step5Duration,
+        result: `**Document Updated Successfully**\n` +
                 `Document: [View Report](${googleDocUrl})\n` +
                 `Contains: Company analysis, blog insights, ${finalIdeas.length} content ideas`,
       });
     } catch (error) {
-      console.error("Google Doc creation error:", error);
-      await updateResearchStep(sessionId, 5, {
+      console.error("Google Doc update error:", error);
+      await updateResearchStep(sessionId, 4, {
         status: "error",
-        result: `Error creating Google Doc: ${error instanceof Error ? error.message : String(error)}`,
+        result: `Error updating Google Doc: ${error instanceof Error ? error.message : String(error)}`,
       });
       throw error;
     }
 
-    // Step 7: Complete
-    await updateResearchStep(sessionId, 6, {
+    // Step 6: Complete
+    const step6StartTime = new Date();
+    const step6EndTime = new Date();
+    const step6Duration = step6EndTime.getTime() - step6StartTime.getTime();
+    await updateResearchStep(sessionId, 5, {
       status: "completed",
+      startedAt: step6StartTime,
+      completedAt: step6EndTime,
+      duration: step6Duration,
       result: "Research flow completed successfully",
     });
 
