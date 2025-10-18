@@ -50,7 +50,7 @@ export const ProgressStepper: React.FC<ProgressStepperProps> = ({
   activeStep,
   orientation = 'vertical',
 }) => {
-  const [currentTime, setCurrentTime] = useState(Date.now());
+  const [, setCurrentTime] = useState(Date.now());
 
   // Update current time every second for real-time timer
   useEffect(() => {

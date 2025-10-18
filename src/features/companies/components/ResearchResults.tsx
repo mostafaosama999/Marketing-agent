@@ -10,7 +10,6 @@ import {
   ListItem,
   ListItemText,
   Alert,
-  Grid,
 } from '@mui/material';
 import {
   Business as BusinessIcon,

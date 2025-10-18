@@ -8,6 +8,7 @@ import { IdeasPage } from './features/ideas';
 import { PipelinePage } from './features/pipeline';
 import { TasksPage } from './features/tasks';
 import { AnalyticsPage } from './features/analytics';
+import { CRMPage } from './features/crm';
 
 function App() {
   return (
@@ -21,6 +22,7 @@ function App() {
             <Route path="/pipeline" element={<PipelinePage />} />
             <Route path="/tasks" element={<TasksPage />} />
             <Route path="/analytics" element={<AnalyticsPage />} />
+            <Route path="/crm" element={<CRMPage />} />
             <Route path="/settings" element={<SettingsPage />} />
           </Routes>
         </AppLayout>

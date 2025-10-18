@@ -23,6 +23,7 @@ import {
   Task as TaskIcon,
   Analytics as AnalyticsIcon,
   Settings as SettingsIcon,
+  People as PeopleIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -41,7 +42,7 @@ const navigationItems: NavigationItem[] = [
     icon: <DashboardIcon />,
   },
   {
-    label: 'Companies',
+    label: 'Companies Research',
     path: '/companies',
     icon: <BusinessIcon />,
   },
@@ -64,6 +65,11 @@ const navigationItems: NavigationItem[] = [
     label: 'Analytics',
     path: '/analytics',
     icon: <AnalyticsIcon />,
+  },
+  {
+    label: 'CRM',
+    path: '/crm',
+    icon: <PeopleIcon />,
   },
 ];
 

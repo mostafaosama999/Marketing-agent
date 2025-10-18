@@ -1,8 +1,8 @@
 import React, { useState, useEffect } from 'react';
-import { Typography, Box, Alert, Grid } from '@mui/material';
+import { Typography, Box, Alert } from '@mui/material';
 import { CompanyResearchForm } from '../components/CompanyResearchForm';
 import { ResearchResults } from '../components/ResearchResults';
-import { ProgressStepper, TestModePanel, WebflowTestPanel } from '../../../components/ui';
+import { ProgressStepper, TestModePanel } from '../../../components/ui';
 import { CompanyResearchRequest, ResearchSession, ResearchStep } from '../../../app/types/research';
 import { triggerResearchFlow, TriggerResearchRequest, TriggerResearchResponse } from '../../../services/researchApi';
 import { subscribeToSession } from '../../../services/firestoreService';
@@ -147,8 +147,6 @@ export const CompaniesPage: React.FC = () => {
         testMode={testMode}
         onTestModeToggle={setTestMode}
       />
-
-      <WebflowTestPanel />
 
       <Box
         sx={{

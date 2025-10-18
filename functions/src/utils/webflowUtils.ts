@@ -150,7 +150,7 @@ export class WebflowAPI {
           name: blogPost.name,
           slug: blogPost.slug,
           url: blogPost.url || '',
-          'post-summary': blogPost.postSummary || '',
+          'meta-description': blogPost.postSummary || '',
           'main-image': 'https://via.placeholder.com/400x300'
         },
         isDraft: true,

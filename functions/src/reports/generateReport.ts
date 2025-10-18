@@ -48,7 +48,7 @@ async function performReportGeneration(triggerType: 'scheduled' | 'manual' = 'sc
     try {
       console.log(`🚀 ${triggerType}: Calling sendReportToSlack function...`);
       await sendReportToSlack(report, programDistribution, ideasDistribution);
-      console.log(`✅ ${triggerType} report sent to Slack channel: project-reports`);
+      console.log(`✅ ${triggerType} report sent to Slack channel: marketing-reports`);
     } catch (slackError) {
       console.error(`❌ ${triggerType.toUpperCase()} SLACK ERROR:`, slackError);
       console.error("❌ Slack error message:", slackError instanceof Error ? slackError.message : String(slackError));

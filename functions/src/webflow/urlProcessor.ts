@@ -100,12 +100,17 @@ export class UrlProcessor {
         console.log(`   Column ${index}: "${header}" - matches:`, matches);
       });
 
-      const postSummaryColumnIndex = headerRow.findIndex(header =>
-        header.includes('post summary') ||
-        header.includes('post_summary') ||
-        header.includes('postsummary') ||
-        header === 'summary'
-      );
+      const postSummaryColumnIndex = headerRow.findIndex(header => {
+        const cleanHeader = header.toLowerCase().replace(/[^a-z]/g, ''); // Remove spaces, underscores, etc.
+        return (
+          header.includes('post summary') ||
+          header.includes('post_summary') ||
+          header.includes('postsummary') ||
+          header === 'summary' ||
+          cleanHeader === 'postsummary' ||
+          cleanHeader.includes('post') && cleanHeader.includes('summary')
+        );
+      });
 
       console.log(`🎯 POST SUMMARY COLUMN DETECTION RESULT: Index ${postSummaryColumnIndex}`);
 
@@ -156,6 +161,13 @@ export class UrlProcessor {
       }
 
       console.log(`✅ Found ${rows.length} valid data rows in sheet`);
+
+      // Debug: Log all parsed row data
+      console.log(`🔍 ALL PARSED ROW DATA:`);
+      rows.forEach((row, index) => {
+        console.log(`   Row ${index + 1}: URL="${row.url}", PostSummary="${row.postSummary}", Published="${row.published}"`);
+      });
+
       return rows;
     } catch (error) {
       console.error('❌ Error reading data from sheet:', error);
@@ -333,6 +345,10 @@ export class UrlProcessor {
           url: newBlogPost.url,
           postSummary: newBlogPost.postSummary
         });
+
+        console.log(`🔍 DEBUG - PostSummary source data: "${rowData.postSummary}"`);
+        console.log(`🔍 DEBUG - Generated title: "${title}"`);
+        console.log(`🔍 DEBUG - Generated slug: "${slug}"`);
 
         try {
           const createdPost = await this.webflowAPI.createBlogPost(newBlogPost);
