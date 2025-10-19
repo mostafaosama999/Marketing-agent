@@ -107,6 +107,17 @@ export interface GoogleDocTemplate {
   ideasSection: string;
 }
 
+// API Cost Tracking Types
+export interface ApiCostInfo {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  inputCost: number;
+  outputCost: number;
+  totalCost: number;
+  model: string;
+}
+
 // Blog Qualification Types
 export interface BlogQualificationResult {
   companyName: string;
@@ -125,6 +136,7 @@ export interface BlogQualificationResult {
   rssFeedFound: boolean;
   analysisMethod: "RSS" | "AI" | "RSS + AI (authors)" | "None";
   qualified: boolean;
+  costInfo?: ApiCostInfo;
 }
 
 export interface CompanyInput {
@@ -151,4 +163,32 @@ export interface AIBlogAnalysis {
   authorsAreEmployees: "employees" | "freelancers" | "mixed" | "unknown";
   coversAiTopics: boolean;
   contentSummary: string;
+}
+
+// Writing Program Finder Types
+export interface WritingProgramResult {
+  url: string;
+  exists: boolean;
+  status?: number;
+  finalUrl?: string;
+  error?: string;
+}
+
+export interface AIWritingProgramSuggestion {
+  url: string;
+  confidence: "high" | "medium" | "low";
+  reasoning: string;
+  verified: boolean;
+  verificationError?: string;
+}
+
+export interface WritingProgramFinderResult {
+  website: string;
+  totalChecked: number;
+  validUrls: WritingProgramResult[];
+  patternsFound: string[];
+  usedAiFallback: boolean;
+  aiSuggestions?: AIWritingProgramSuggestion[];
+  aiReasoning?: string;
+  costInfo?: ApiCostInfo;
 }

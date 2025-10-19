@@ -12,6 +12,20 @@ export interface ApolloEnrichmentResult {
   organization: string | null;
 }
 
+export interface ApolloSearchPerson {
+  id: string;
+  name: string;
+  first_name: string;
+  last_name: string;
+  email: string | null;
+  title: string | null;
+  linkedin_url: string | null;
+  organization_name: string | null;
+  city: string | null;
+  state: string | null;
+  country: string | null;
+}
+
 interface ApolloPersonMatch {
   person: {
     email: string;
@@ -35,13 +49,17 @@ export async function enrichLeadEmail(lead: Lead): Promise<ApolloEnrichmentResul
 
   try {
     // Extract LinkedIn URL from custom fields if available
-    const linkedinUrl = lead.customFields?.linkedin_url || lead.customFields?.linkedin;
+    // Check multiple possible field names
+    const linkedinUrl =
+      lead.customFields?.linkedin_url ||
+      lead.customFields?.linkedin ||
+      lead.customFields?.link ||
+      lead.customFields?.Link ||
+      lead.customFields?.linkedin_link;
 
     // Build the match request
     // Apollo can match on: first_name + last_name + company, or LinkedIn URL
-    const requestBody: any = {
-      api_key: APOLLO_API_KEY,
-    };
+    const requestBody: any = {};
 
     if (linkedinUrl) {
       // If we have LinkedIn URL, use it (most accurate)
@@ -68,6 +86,7 @@ export async function enrichLeadEmail(lead: Lead): Promise<ApolloEnrichmentResul
         headers: {
           'Content-Type': 'application/json',
           'Cache-Control': 'no-cache',
+          'X-Api-Key': APOLLO_API_KEY,
         },
       }
     );
@@ -121,17 +140,17 @@ export async function searchPeople(query: {
   name?: string;
   company?: string;
   title?: string;
+  titles?: string[];
   limit?: number;
-}): Promise<any[]> {
+}): Promise<ApolloSearchPerson[]> {
   if (!APOLLO_API_KEY) {
     throw new Error('Apollo API key not configured');
   }
 
   try {
     const requestBody: any = {
-      api_key: APOLLO_API_KEY,
       page: 1,
-      per_page: query.limit || 10,
+      per_page: query.limit || 50,
     };
 
     if (query.name) {
@@ -139,24 +158,43 @@ export async function searchPeople(query: {
     }
 
     if (query.company) {
-      requestBody.organization_name = query.company;
+      requestBody.organization_names = [query.company];
     }
 
-    if (query.title) {
+    // Support both single title and multiple titles
+    if (query.titles && query.titles.length > 0) {
+      requestBody.person_titles = query.titles;
+    } else if (query.title) {
       requestBody.person_titles = [query.title];
     }
 
     const response = await axios.post(
-      `${APOLLO_API_BASE}/people/search`,
+      `${APOLLO_API_BASE}/mixed_people/search`,
       requestBody,
       {
         headers: {
           'Content-Type': 'application/json',
+          'X-Api-Key': APOLLO_API_KEY,
         },
       }
     );
 
-    return response.data.people || [];
+    const people = response.data.people || [];
+
+    // Map Apollo response to our interface
+    return people.map((person: any) => ({
+      id: person.id,
+      name: person.name || `${person.first_name} ${person.last_name}`,
+      first_name: person.first_name,
+      last_name: person.last_name,
+      email: person.email || null,
+      title: person.title || null,
+      linkedin_url: person.linkedin_url || null,
+      organization_name: person.organization?.name || null,
+      city: person.city || null,
+      state: person.state || null,
+      country: person.country || null,
+    }));
   } catch (error: any) {
     if (axios.isAxiosError(error)) {
       const status = error.response?.status;

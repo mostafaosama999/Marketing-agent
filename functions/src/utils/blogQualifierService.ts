@@ -8,6 +8,7 @@ import {
   RSSFeedPost,
   AIBlogAnalysis,
 } from "../types";
+import {extractTokenUsage, calculateCost, CostInfo} from "./costTracker";
 
 const rssParser = new Parser({
   timeout: 10000,
@@ -409,6 +410,7 @@ async function analyzeBlogWithAI(
   authEmployees: "employees" | "freelancers" | "mixed" | "unknown";
   coversAi: boolean;
   contentSumm: string;
+  costInfo: CostInfo | null;
 }> {
   console.log("RSS not found, trying AI analysis of blog page...");
 
@@ -456,6 +458,7 @@ async function analyzeBlogWithAI(
       authEmployees: "unknown",
       coversAi: false,
       contentSumm: "",
+      costInfo: null,
     };
   }
 
@@ -505,6 +508,8 @@ Rules:
 
 Respond with ONLY the JSON object, no other text.`;
 
+  let costInfo: CostInfo | null = null;
+
   try {
     const completion = await openai.chat.completions.create({
       model: "gpt-4-turbo-preview",
@@ -513,6 +518,13 @@ Respond with ONLY the JSON object, no other text.`;
     });
 
     const response = completion.choices[0].message.content || "";
+
+    // Extract token usage and calculate cost
+    const tokenUsage = extractTokenUsage(completion);
+    if (tokenUsage) {
+      costInfo = calculateCost(tokenUsage, "gpt-4-turbo-preview");
+      console.log(`💰 OpenAI cost: $${costInfo.totalCost.toFixed(4)} (${tokenUsage.totalTokens} tokens)`);
+    }
 
     // Parse JSON response
     const jsonMatch = response.match(/\{[\s\S]*\}/);
@@ -563,6 +575,7 @@ Respond with ONLY the JSON object, no other text.`;
       authEmployees,
       coversAi,
       contentSumm,
+      costInfo,
     };
   } catch (error) {
     console.error(`Failed to parse AI response: ${error}`);
@@ -578,6 +591,7 @@ Respond with ONLY the JSON object, no other text.`;
       authEmployees: "unknown",
       coversAi: false,
       contentSumm: "",
+      costInfo: null,
     };
   }
 }
@@ -634,6 +648,7 @@ export async function qualifyCompany(
     result.blogLinkUsed = aiResult.blogUrl || "";
     result.rssFeedFound = false;
     result.analysisMethod = "AI";
+    result.costInfo = aiResult.costInfo || undefined;
 
     console.log("\n2️⃣  Author check completed via AI analysis");
   } else {
@@ -664,6 +679,7 @@ export async function qualifyCompany(
       result.coversAiTopics = aiResult.coversAi;
       result.contentSummary = aiResult.contentSumm;
       result.analysisMethod = "RSS + AI (authors)";
+      result.costInfo = aiResult.costInfo || undefined;
     }
   }
 

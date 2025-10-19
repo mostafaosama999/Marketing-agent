@@ -68,9 +68,8 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({ open, lead, stages, cust
       newErrors.name = 'Name is required';
     }
 
-    if (!formData.email.trim()) {
-      newErrors.email = 'Email is required';
-    } else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
+    // Email is optional (can be fetched via Apollo), but validate format if provided
+    if (formData.email.trim() && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(formData.email)) {
       newErrors.email = 'Invalid email format';
     }
 
@@ -152,9 +151,8 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({ open, lead, stages, cust
             value={formData.email}
             onChange={(e) => handleChange('email', e.target.value)}
             error={!!errors.email}
-            helperText={errors.email}
+            helperText={errors.email || 'Optional - can be fetched via Apollo'}
             fullWidth
-            required
           />
 
           <TextField

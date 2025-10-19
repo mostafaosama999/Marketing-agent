@@ -6,6 +6,7 @@ import {
   TableContainer,
   TableHead,
   TableRow,
+  TableFooter,
   Paper,
   IconButton,
   Chip,
@@ -20,6 +21,7 @@ import {
   Button,
   CircularProgress,
   Tooltip,
+  Typography,
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -216,6 +218,15 @@ export const TableView: React.FC<TableViewProps> = ({
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
   const [enrichingLeadId, setEnrichingLeadId] = useState<string | null>(null);
   const [enrichError, setEnrichError] = useState<{ leadId: string; message: string } | null>(null);
+  const [enrichConfirm, setEnrichConfirm] = useState<{
+    open: boolean;
+    lead: Lead | null;
+    result: any;
+  }>({
+    open: false,
+    lead: null,
+    result: null,
+  });
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
@@ -280,12 +291,11 @@ export const TableView: React.FC<TableViewProps> = ({
       const result = await enrichLeadEmail(lead);
 
       if (result.email) {
-        // Update the lead with the enriched email
-        await updateLead(lead.id, {
-          email: result.email,
-          ...(result.phone && !lead.phone ? { phone: result.phone } : {}),
-          apolloEnriched: true,
-          lastEnrichedAt: new Date(),
+        // Show confirmation dialog instead of auto-saving
+        setEnrichConfirm({
+          open: true,
+          lead: lead,
+          result: result,
         });
       } else {
         setEnrichError({
@@ -363,6 +373,16 @@ export const TableView: React.FC<TableViewProps> = ({
     });
   };
 
+  // Check if email is missing or a placeholder
+  const isPlaceholderEmail = (email: string): boolean => {
+    if (!email || !email.trim()) return true;
+
+    // Check for .example domain (placeholder)
+    if (email.toLowerCase().endsWith('.example')) return true;
+
+    return false;
+  };
+
   const formatCustomFieldValue = (field: CustomField, value: any) => {
     if (!value) return '-';
 
@@ -402,8 +422,28 @@ export const TableView: React.FC<TableViewProps> = ({
     />
 
     <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
-    <TableContainer component={Paper}>
-      <Table>
+    <TableContainer
+      component={Paper}
+      sx={{
+        maxWidth: '100%',
+        overflowX: 'auto',
+        '&::-webkit-scrollbar': {
+          height: 12,
+        },
+        '&::-webkit-scrollbar-track': {
+          backgroundColor: 'grey.200',
+          borderRadius: 4,
+        },
+        '&::-webkit-scrollbar-thumb': {
+          backgroundColor: 'grey.500',
+          borderRadius: 4,
+          '&:hover': {
+            backgroundColor: 'grey.600',
+          },
+        },
+      }}
+    >
+      <Table stickyHeader sx={{ minWidth: 1200 }}>
         <TableHead>
           <TableRow>
             <TableCell padding="checkbox">
@@ -497,7 +537,38 @@ export const TableView: React.FC<TableViewProps> = ({
                   dragDisabled={selectedIds.size > 0}
                 >
                   <TableCell onClick={() => onEditLead(lead)} sx={{ cursor: 'pointer' }}>{lead.name}</TableCell>
-                  <TableCell onClick={() => onEditLead(lead)} sx={{ cursor: 'pointer' }}>{lead.email}</TableCell>
+                  <TableCell
+                    onClick={() => !isPlaceholderEmail(lead.email) && onEditLead(lead)}
+                    sx={{ cursor: isPlaceholderEmail(lead.email) ? 'default' : 'pointer' }}
+                  >
+                    {isPlaceholderEmail(lead.email) ? (
+                      <Tooltip
+                        title={
+                          enrichError?.leadId === lead.id
+                            ? enrichError.message
+                            : 'Get email from Apollo.io (costs 1 credit)'
+                        }
+                      >
+                        <IconButton
+                          size="small"
+                          color={enrichError?.leadId === lead.id ? 'error' : 'primary'}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleGetEmail(lead);
+                          }}
+                          disabled={enrichingLeadId === lead.id}
+                        >
+                          {enrichingLeadId === lead.id ? (
+                            <CircularProgress size={16} />
+                          ) : (
+                            <EmailIcon fontSize="small" />
+                          )}
+                        </IconButton>
+                      </Tooltip>
+                    ) : (
+                      lead.email
+                    )}
+                  </TableCell>
                   <TableCell onClick={() => onEditLead(lead)} sx={{ cursor: 'pointer' }}>{lead.company}</TableCell>
                   <TableCell onClick={() => onEditLead(lead)} sx={{ cursor: 'pointer' }}>{lead.phone || '-'}</TableCell>
                   <TableCell onClick={() => onEditLead(lead)} sx={{ cursor: 'pointer' }}>
@@ -519,32 +590,6 @@ export const TableView: React.FC<TableViewProps> = ({
                   ))}
                   <TableCell align="right">
                     <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
-                      {/* Get Email button - only show if email is missing */}
-                      {!lead.email && (
-                        <Tooltip
-                          title={
-                            enrichError?.leadId === lead.id
-                              ? enrichError.message
-                              : 'Get email from Apollo.io (costs 1 credit)'
-                          }
-                        >
-                          <IconButton
-                            size="small"
-                            color={enrichError?.leadId === lead.id ? 'error' : 'primary'}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              handleGetEmail(lead);
-                            }}
-                            disabled={enrichingLeadId === lead.id}
-                          >
-                            {enrichingLeadId === lead.id ? (
-                              <CircularProgress size={16} />
-                            ) : (
-                              <EmailIcon fontSize="small" />
-                            )}
-                          </IconButton>
-                        </Tooltip>
-                      )}
                       <IconButton
                         size="small"
                         onClick={(e) => {
@@ -572,6 +617,23 @@ export const TableView: React.FC<TableViewProps> = ({
           )}
           </SortableContext>
         </TableBody>
+        <TableFooter>
+          <TableRow>
+            <TableCell
+              colSpan={9 + tableCustomFields.length}
+              sx={{
+                backgroundColor: 'grey.50',
+                borderTop: 2,
+                borderColor: 'divider',
+                py: 1.5
+              }}
+            >
+              <Typography variant="body2" color="text.secondary" align="center">
+                Showing {sortedLeads.length} lead{sortedLeads.length !== 1 ? 's' : ''}
+              </Typography>
+            </TableCell>
+          </TableRow>
+        </TableFooter>
       </Table>
     </TableContainer>
     </DndContext>
@@ -591,6 +653,63 @@ export const TableView: React.FC<TableViewProps> = ({
       }}
       onCancel={() => setConfirmDelete({ open: false, lead: null })}
     />
+
+    {/* Apollo Email Confirmation Dialog */}
+    <Dialog
+      open={enrichConfirm.open}
+      onClose={() => setEnrichConfirm({ open: false, lead: null, result: null })}
+      maxWidth="sm"
+      fullWidth
+    >
+      <DialogTitle>Confirm Email from Apollo</DialogTitle>
+      <DialogContent>
+        <Typography variant="body1" gutterBottom>
+          Found the following information for <strong>{enrichConfirm.lead?.name}</strong>:
+        </Typography>
+        <Box sx={{ mt: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            <strong>Email:</strong> {enrichConfirm.result?.email || 'N/A'}
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            <strong>Company:</strong> {enrichConfirm.result?.organization || 'N/A'}
+          </Typography>
+          <Typography variant="body2" sx={{ mb: 1 }}>
+            <strong>Title:</strong> {enrichConfirm.result?.title || 'N/A'}
+          </Typography>
+          {enrichConfirm.result?.phone && (
+            <Typography variant="body2" sx={{ mb: 1 }}>
+              <strong>Phone:</strong> {enrichConfirm.result.phone}
+            </Typography>
+          )}
+        </Box>
+        <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+          Does this information look correct?
+        </Typography>
+      </DialogContent>
+      <DialogActions>
+        <Button
+          onClick={() => setEnrichConfirm({ open: false, lead: null, result: null })}
+        >
+          Cancel
+        </Button>
+        <Button
+          onClick={async () => {
+            if (enrichConfirm.lead && enrichConfirm.result) {
+              await updateLead(enrichConfirm.lead.id, {
+                email: enrichConfirm.result.email,
+                ...(enrichConfirm.result.phone && !enrichConfirm.lead.phone ? { phone: enrichConfirm.result.phone } : {}),
+                apolloEnriched: true,
+                lastEnrichedAt: new Date(),
+              });
+            }
+            setEnrichConfirm({ open: false, lead: null, result: null });
+          }}
+          variant="contained"
+        >
+          Confirm & Save
+        </Button>
+      </DialogActions>
+    </Dialog>
   </>
   );
 };

@@ -21,25 +21,11 @@ export const db = getFirestore(app);
 export const auth = getAuth(app);
 export const functions = getFunctions(app);
 
-// Connect to emulators only when explicitly enabled
-const useEmulators = process.env.REACT_APP_USE_EMULATORS === 'true';
+// Connect to Functions emulator only when explicitly enabled
+const useFunctionsEmulator = process.env.REACT_APP_USE_FUNCTIONS_EMULATOR === 'true';
 
-if (useEmulators && process.env.NODE_ENV === 'development') {
-  console.log('🔧 Using Firebase Emulators');
-
-  // Only connect to emulators if not already connected
-  try {
-    connectAuthEmulator(auth, 'http://localhost:9099');
-  } catch (error) {
-    // Emulator already connected
-  }
-
-  // Check if Firestore is already connected to avoid multiple connections
-  try {
-    connectFirestoreEmulator(db, 'localhost', 8080);
-  } catch (error) {
-    // Emulator already connected
-  }
+if (useFunctionsEmulator && process.env.NODE_ENV === 'development') {
+  console.log('🔧 Using Functions Emulator (Auth & Firestore remain in production)');
 
   try {
     connectFunctionsEmulator(functions, 'localhost', 5001);

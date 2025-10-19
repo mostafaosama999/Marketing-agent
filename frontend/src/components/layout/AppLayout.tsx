@@ -37,6 +37,7 @@ interface NavigationItem {
   label: string;
   path: string;
   icon: React.ReactNode;
+  badge?: 'alpha' | 'beta';
 }
 
 const navigationItems: NavigationItem[] = [
@@ -44,36 +45,43 @@ const navigationItems: NavigationItem[] = [
     label: 'Dashboard',
     path: '/',
     icon: <DashboardIcon />,
+    badge: 'beta',
   },
   {
     label: 'Companies Research',
     path: '/companies',
     icon: <BusinessIcon />,
+    badge: 'beta',
   },
   {
     label: 'Ideas',
     path: '/ideas',
     icon: <LightbulbIcon />,
+    badge: 'beta',
   },
   {
     label: 'Pipeline',
     path: '/pipeline',
     icon: <ViewKanbanIcon />,
+    badge: 'beta',
   },
   {
     label: 'Tasks',
     path: '/tasks',
     icon: <TaskIcon />,
+    badge: 'beta',
   },
   {
     label: 'Analytics',
     path: '/analytics',
     icon: <AnalyticsIcon />,
+    badge: 'beta',
   },
   {
     label: 'CRM',
     path: '/crm',
     icon: <PeopleIcon />,
+    badge: 'alpha',
   },
 ];
 
@@ -167,7 +175,27 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
                   {item.icon}
                 </ListItemIcon>
                 <ListItemText
-                  primary={item.label}
+                  primary={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <span>{item.label}</span>
+                      {item.badge && (
+                        <Chip
+                          label={item.badge.toUpperCase()}
+                          size="small"
+                          sx={{
+                            height: 18,
+                            fontSize: '0.65rem',
+                            fontWeight: 600,
+                            backgroundColor: item.badge === 'alpha' ? 'error.main' : 'warning.main',
+                            color: 'white',
+                            '& .MuiChip-label': {
+                              px: 0.75,
+                            },
+                          }}
+                        />
+                      )}
+                    </Box>
+                  }
                   primaryTypographyProps={{
                     fontSize: '0.9rem',
                     fontWeight: isActivePath(item.path) ? 600 : 400,

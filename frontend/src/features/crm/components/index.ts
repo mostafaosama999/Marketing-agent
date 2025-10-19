@@ -11,3 +11,5 @@ export { CustomFieldsDialog } from './CustomFieldsDialog';
 export { ConfirmDialog } from './ConfirmDialog';
 export { BulkActionsToolbar } from './BulkActionsToolbar';
 export { BulkEditDialog } from './BulkEditDialog';
+export { TitleSelectionDialog } from './TitleSelectionDialog';
+export { LeadSearchResultsDialog } from './LeadSearchResultsDialog';

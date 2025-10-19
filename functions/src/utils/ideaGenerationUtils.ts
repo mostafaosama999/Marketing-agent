@@ -10,7 +10,7 @@ import {
 
 // Initialize OpenAI
 const openai = new OpenAI({
-  apiKey: functions.config().openai?.api_key || process.env.OPENAI_API_KEY,
+  apiKey: functions.config().openai?.key || process.env.OPENAI_API_KEY,
 });
 
 /**

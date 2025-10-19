@@ -8,6 +8,7 @@ import {
   updateDoc,
   deleteDoc,
   serverTimestamp,
+  getDocs,
   Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '../app/config/firebase';
@@ -55,6 +56,27 @@ export function subscribeToLeads(
       callback([]);
     }
   );
+}
+
+/**
+ * Get all leads (one-time fetch)
+ */
+export async function getLeads(): Promise<Lead[]> {
+  try {
+    const leadsRef = collection(db, LEADS_COLLECTION);
+    const q = query(leadsRef, orderBy('createdAt', 'desc'));
+    const snapshot = await getDocs(q);
+
+    const leads: Lead[] = [];
+    snapshot.forEach((doc) => {
+      leads.push(convertToLead(doc.id, doc.data()));
+    });
+
+    return leads;
+  } catch (error) {
+    console.error('Error fetching leads:', error);
+    return [];
+  }
 }
 
 /**

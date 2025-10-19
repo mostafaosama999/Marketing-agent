@@ -12,6 +12,31 @@ export interface Lead {
   updatedAt: Date;
   apolloEnriched?: boolean; // Track if enriched with Apollo
   lastEnrichedAt?: Date; // Last enrichment timestamp
+  // Blog Qualification
+  blogQualified?: boolean; // Whether blog was qualified
+  blogQualificationData?: BlogQualificationData; // Full qualification results
+  blogQualifiedAt?: Date; // When qualification was performed
+  // API Cost Tracking
+  totalApiCosts?: number; // Total API costs accumulated for this lead
+  lastApiCostUpdate?: Date; // Last time API costs were updated
+}
+
+export interface BlogQualificationData {
+  website: string;
+  hasActiveBlog: boolean;
+  blogPostCount: number;
+  lastBlogCreatedAt: string;
+  hasMultipleAuthors: boolean;
+  authorCount: number;
+  authorNames: string;
+  isDeveloperB2BSaas: boolean;
+  authorsAreEmployees: "employees" | "freelancers" | "mixed" | "unknown";
+  coversAiTopics: boolean;
+  contentSummary: string;
+  blogLinkUsed: string;
+  rssFeedFound: boolean;
+  analysisMethod: "RSS" | "AI" | "RSS + AI (authors)" | "None";
+  qualified: boolean;
 }
 
 export type ViewMode = 'board' | 'table';

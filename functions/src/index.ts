@@ -20,3 +20,4 @@ export {triggerResearchFlow} from "./research/orchestrator";
 export {generateMarketingReport, scheduledMarketingReport} from "./reports/generateReport";
 export {dailyWebflowSync} from "./webflow/dailySync";
 export {qualifyCompanyBlog} from "./blogQualifier/qualifyBlog";
+export {findWritingProgramCloud} from "./writingProgramFinder/findWritingProgram";

@@ -71,6 +71,19 @@ export interface DocGenerationRequest {
 }
 
 /**
+ * API Cost Info
+ */
+export interface ApiCostInfo {
+  inputTokens: number;
+  outputTokens: number;
+  totalTokens: number;
+  inputCost: number;
+  outputCost: number;
+  totalCost: number;
+  model: string;
+}
+
+/**
  * Qualify a company's blog
  */
 export const qualifyCompanyBlog = httpsCallable(functions, 'qualifyCompanyBlog');
@@ -78,6 +91,7 @@ export const qualifyCompanyBlog = httpsCallable(functions, 'qualifyCompanyBlog')
 export interface QualifyBlogRequest {
   companyName: string;
   website: string;
+  leadId: string;
 }
 
 export interface QualifyBlogResponse {
@@ -97,4 +111,45 @@ export interface QualifyBlogResponse {
   rssFeedFound: boolean;
   analysisMethod: "RSS" | "AI" | "RSS + AI (authors)" | "None";
   qualified: boolean;
+  costInfo?: ApiCostInfo;
+}
+
+/**
+ * Find writing programs for a website
+ */
+export const findWritingProgram = httpsCallable(functions, 'findWritingProgramCloud');
+
+export interface FindWritingProgramRequest {
+  website: string;
+  useAiFallback?: boolean;
+  concurrent?: number;
+  timeout?: number;
+  leadId?: string;
+}
+
+export interface WritingProgramResult {
+  url: string;
+  exists: boolean;
+  status?: number;
+  finalUrl?: string;
+  error?: string;
+}
+
+export interface AIWritingProgramSuggestion {
+  url: string;
+  confidence: "high" | "medium" | "low";
+  reasoning: string;
+  verified: boolean;
+  verificationError?: string;
+}
+
+export interface FindWritingProgramResponse {
+  website: string;
+  totalChecked: number;
+  validUrls: WritingProgramResult[];
+  patternsFound: string[];
+  usedAiFallback: boolean;
+  aiSuggestions?: AIWritingProgramSuggestion[];
+  aiReasoning?: string;
+  costInfo?: ApiCostInfo;
 }
