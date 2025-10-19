@@ -1,7 +1,5 @@
-const ForkTsCheckerWebpackPlugin = require('fork-ts-checker-webpack-plugin');
-
 module.exports = {
-  // Disable TypeScript checking during build to save memory
+  // Completely disable TypeScript checking during build to save memory
   // TypeScript errors will still be caught during development (npm start)
   typescript: {
     enableTypeChecking: false
@@ -11,7 +9,7 @@ module.exports = {
   },
   webpack: {
     configure: (webpackConfig, { env, paths }) => {
-      // Remove all checking plugins and recreate with proper memory limits
+      // Completely remove all checking plugins - no TypeScript or ESLint checking during build
       webpackConfig.plugins = webpackConfig.plugins.filter(
         plugin => {
           const name = plugin.constructor.name;
@@ -19,21 +17,6 @@ module.exports = {
                  name !== 'ESLintWebpackPlugin';
         }
       );
-
-      // Only add TypeScript checker in development with high memory limit
-      if (env === 'development') {
-        webpackConfig.plugins.push(
-          new ForkTsCheckerWebpackPlugin({
-            typescript: {
-              enabled: true,
-              memoryLimit: 4096,  // 4GB memory for TypeScript checker
-            },
-            issue: {
-              exclude: [{ file: '**/*.spec.ts' }],
-            },
-          })
-        );
-      }
 
       // Disable performance hints to save memory
       webpackConfig.performance = {

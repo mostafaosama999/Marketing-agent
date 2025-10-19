@@ -7,6 +7,11 @@ export SKIP_PREFLIGHT_CHECK=true
 export TSC_COMPILE_ON_ERROR=true
 export DISABLE_ESLINT_PLUGIN=true
 
+# Completely disable the TypeScript checker that runs after build
+export TSC_COMPILE_ON_ERROR=true
+export ESLINT_NO_DEV_ERRORS=true
+export DISABLE_NEW_JSX_TRANSFORM=false
+
 # Trap to kill child processes on exit
 cleanup() {
   # Kill any lingering node processes from this build
