@@ -18,8 +18,16 @@ import {
   DialogContent,
   DialogActions,
   Button,
+  CircularProgress,
+  Tooltip,
 } from '@mui/material';
-import { Edit as EditIcon, Delete as DeleteIcon, DragIndicator as DragIcon, EditOutlined as EditOutlinedIcon } from '@mui/icons-material';
+import {
+  Edit as EditIcon,
+  Delete as DeleteIcon,
+  DragIndicator as DragIcon,
+  EditOutlined as EditOutlinedIcon,
+  Email as EmailIcon
+} from '@mui/icons-material';
 import { DndContext, DragEndEvent, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
@@ -27,6 +35,8 @@ import { Lead, PipelineStage, CustomField } from '../../../app/types/crm';
 import { ConfirmDialog } from './ConfirmDialog';
 import { BulkActionsToolbar } from './BulkActionsToolbar';
 import { updateCustomField } from '../../../services/customFieldsService';
+import { enrichLeadEmail } from '../../../services/apolloService';
+import { updateLead } from '../../../services/crmService';
 
 interface TableViewProps {
   leads: Lead[];
@@ -204,6 +214,8 @@ export const TableView: React.FC<TableViewProps> = ({
   const [sortDirection, setSortDirection] = useState<SortDirection>('desc');
   const [orderedLeads, setOrderedLeads] = useState<Lead[]>(leads);
   const [selectedIds, setSelectedIds] = useState<Set<string>>(new Set());
+  const [enrichingLeadId, setEnrichingLeadId] = useState<string | null>(null);
+  const [enrichError, setEnrichError] = useState<{ leadId: string; message: string } | null>(null);
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
 
@@ -256,6 +268,39 @@ export const TableView: React.FC<TableViewProps> = ({
       await updateCustomField(fieldId, { label: newLabel });
     } catch (error) {
       console.error('Failed to update field label:', error);
+    }
+  };
+
+  // Handle Apollo email enrichment
+  const handleGetEmail = async (lead: Lead) => {
+    setEnrichingLeadId(lead.id);
+    setEnrichError(null);
+
+    try {
+      const result = await enrichLeadEmail(lead);
+
+      if (result.email) {
+        // Update the lead with the enriched email
+        await updateLead(lead.id, {
+          email: result.email,
+          ...(result.phone && !lead.phone ? { phone: result.phone } : {}),
+          apolloEnriched: true,
+          lastEnrichedAt: new Date(),
+        });
+      } else {
+        setEnrichError({
+          leadId: lead.id,
+          message: 'No email found in Apollo database',
+        });
+      }
+    } catch (error: any) {
+      console.error('Failed to enrich lead:', error);
+      setEnrichError({
+        leadId: lead.id,
+        message: error.message || 'Failed to get email from Apollo',
+      });
+    } finally {
+      setEnrichingLeadId(null);
     }
   };
 
@@ -474,6 +519,32 @@ export const TableView: React.FC<TableViewProps> = ({
                   ))}
                   <TableCell align="right">
                     <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
+                      {/* Get Email button - only show if email is missing */}
+                      {!lead.email && (
+                        <Tooltip
+                          title={
+                            enrichError?.leadId === lead.id
+                              ? enrichError.message
+                              : 'Get email from Apollo.io (costs 1 credit)'
+                          }
+                        >
+                          <IconButton
+                            size="small"
+                            color={enrichError?.leadId === lead.id ? 'error' : 'primary'}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleGetEmail(lead);
+                            }}
+                            disabled={enrichingLeadId === lead.id}
+                          >
+                            {enrichingLeadId === lead.id ? (
+                              <CircularProgress size={16} />
+                            ) : (
+                              <EmailIcon fontSize="small" />
+                            )}
+                          </IconButton>
+                        </Tooltip>
+                      )}
                       <IconButton
                         size="small"
                         onClick={(e) => {

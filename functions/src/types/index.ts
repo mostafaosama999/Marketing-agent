@@ -106,3 +106,49 @@ export interface GoogleDocTemplate {
   trendsSection: string;
   ideasSection: string;
 }
+
+// Blog Qualification Types
+export interface BlogQualificationResult {
+  companyName: string;
+  website: string;
+  hasActiveBlog: boolean;
+  blogPostCount: number;
+  lastBlogCreatedAt: string;
+  hasMultipleAuthors: boolean;
+  authorCount: number;
+  authorNames: string;
+  isDeveloperB2BSaas: boolean;
+  authorsAreEmployees: "employees" | "freelancers" | "mixed" | "unknown";
+  coversAiTopics: boolean;
+  contentSummary: string;
+  blogLinkUsed: string;
+  rssFeedFound: boolean;
+  analysisMethod: "RSS" | "AI" | "RSS + AI (authors)" | "None";
+  qualified: boolean;
+}
+
+export interface CompanyInput {
+  name: string;
+  website: string;
+  description?: string;
+}
+
+export interface RSSFeedPost {
+  title: string;
+  date: Date;
+  author: string;
+  link: string;
+}
+
+export interface AIBlogAnalysis {
+  activeBlog: boolean;
+  postCount: number;
+  multipleAuthors: boolean;
+  authorCount: number;
+  authors: string[];
+  lastPostDate: string | null;
+  isDeveloperB2BSaas: boolean;
+  authorsAreEmployees: "employees" | "freelancers" | "mixed" | "unknown";
+  coversAiTopics: boolean;
+  contentSummary: string;
+}

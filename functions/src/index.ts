@@ -15,7 +15,8 @@ export const healthCheck = functions.https.onCall(async (_data, _context) => {
   };
 });
 
-// Export core functions only (4 total)
+// Export core functions
 export {triggerResearchFlow} from "./research/orchestrator";
 export {generateMarketingReport, scheduledMarketingReport} from "./reports/generateReport";
 export {dailyWebflowSync} from "./webflow/dailySync";
+export {qualifyCompanyBlog} from "./blogQualifier/qualifyBlog";

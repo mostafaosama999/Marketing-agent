@@ -69,3 +69,32 @@ export interface IdeaGenerationRequest {
 export interface DocGenerationRequest {
   sessionData: any;
 }
+
+/**
+ * Qualify a company's blog
+ */
+export const qualifyCompanyBlog = httpsCallable(functions, 'qualifyCompanyBlog');
+
+export interface QualifyBlogRequest {
+  companyName: string;
+  website: string;
+}
+
+export interface QualifyBlogResponse {
+  companyName: string;
+  website: string;
+  hasActiveBlog: boolean;
+  blogPostCount: number;
+  lastBlogCreatedAt: string;
+  hasMultipleAuthors: boolean;
+  authorCount: number;
+  authorNames: string;
+  isDeveloperB2BSaas: boolean;
+  authorsAreEmployees: "employees" | "freelancers" | "mixed" | "unknown";
+  coversAiTopics: boolean;
+  contentSummary: string;
+  blogLinkUsed: string;
+  rssFeedFound: boolean;
+  analysisMethod: "RSS" | "AI" | "RSS + AI (authors)" | "None";
+  qualified: boolean;
+}

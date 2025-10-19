@@ -10,6 +10,8 @@ export interface Lead {
   customFields: Record<string, any>; // Dynamic custom field values
   createdAt: Date;
   updatedAt: Date;
+  apolloEnriched?: boolean; // Track if enriched with Apollo
+  lastEnrichedAt?: Date; // Last enrichment timestamp
 }
 
 export type ViewMode = 'board' | 'table';
