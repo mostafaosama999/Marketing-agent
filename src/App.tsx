@@ -9,24 +9,30 @@ import { PipelinePage } from './features/pipeline';
 import { TasksPage } from './features/tasks';
 import { AnalyticsPage } from './features/analytics';
 import { CRMPage } from './features/crm';
+import { AuthProvider } from './contexts/AuthContext';
+import { ProtectedRoute } from './components/auth';
 
 function App() {
   return (
     <ThemeProvider>
-      <Router>
-        <AppLayout>
-          <Routes>
-            <Route path="/" element={<DashboardPage />} />
-            <Route path="/companies" element={<CompaniesPage />} />
-            <Route path="/ideas" element={<IdeasPage />} />
-            <Route path="/pipeline" element={<PipelinePage />} />
-            <Route path="/tasks" element={<TasksPage />} />
-            <Route path="/analytics" element={<AnalyticsPage />} />
-            <Route path="/crm" element={<CRMPage />} />
-            <Route path="/settings" element={<SettingsPage />} />
-          </Routes>
-        </AppLayout>
-      </Router>
+      <AuthProvider>
+        <Router>
+          <ProtectedRoute>
+            <AppLayout>
+              <Routes>
+                <Route path="/" element={<DashboardPage />} />
+                <Route path="/companies" element={<CompaniesPage />} />
+                <Route path="/ideas" element={<IdeasPage />} />
+                <Route path="/pipeline" element={<PipelinePage />} />
+                <Route path="/tasks" element={<TasksPage />} />
+                <Route path="/analytics" element={<AnalyticsPage />} />
+                <Route path="/crm" element={<CRMPage />} />
+                <Route path="/settings" element={<SettingsPage />} />
+              </Routes>
+            </AppLayout>
+          </ProtectedRoute>
+        </Router>
+      </AuthProvider>
     </ThemeProvider>
   );
 }

@@ -13,6 +13,8 @@ import {
   IconButton,
   useTheme,
   useMediaQuery,
+  Button,
+  Chip,
 } from '@mui/material';
 import {
   Menu as MenuIcon,
@@ -24,8 +26,10 @@ import {
   Analytics as AnalyticsIcon,
   Settings as SettingsIcon,
   People as PeopleIcon,
+  Logout as LogoutIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { useAuth } from '../../contexts/AuthContext';
 
 const DRAWER_WIDTH = 280;
 
@@ -90,8 +94,17 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
   const isMobile = useMediaQuery(theme.breakpoints.down('md'));
   const navigate = useNavigate();
   const location = useLocation();
+  const { user, signOut } = useAuth();
 
   const [mobileOpen, setMobileOpen] = useState(false);
+
+  const handleLogout = async () => {
+    try {
+      await signOut();
+    } catch (error) {
+      console.error('Logout error:', error);
+    }
+  };
 
   const handleDrawerToggle = () => {
     setMobileOpen(!mobileOpen);
@@ -234,6 +247,36 @@ export const AppLayout: React.FC<AppLayoutProps> = ({ children }) => {
           <Typography variant="h6" noWrap component="div" sx={{ flexGrow: 1 }}>
             {navigationItems.find(item => isActivePath(item.path))?.label || 'Dashboard'}
           </Typography>
+
+          {/* User Info and Logout */}
+          {user && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Box sx={{ display: { xs: 'none', sm: 'flex' }, flexDirection: 'column', alignItems: 'flex-end' }}>
+                <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                  {user.displayName}
+                </Typography>
+                <Typography variant="caption" color="text.secondary">
+                  {user.role} • {user.department}
+                </Typography>
+              </Box>
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<LogoutIcon />}
+                onClick={handleLogout}
+                sx={{ display: { xs: 'none', sm: 'flex' } }}
+              >
+                Logout
+              </Button>
+              <IconButton
+                onClick={handleLogout}
+                sx={{ display: { xs: 'flex', sm: 'none' } }}
+                title="Logout"
+              >
+                <LogoutIcon />
+              </IconButton>
+            </Box>
+          )}
         </Toolbar>
       </AppBar>
 
