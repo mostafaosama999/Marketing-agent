@@ -9,5 +9,19 @@
       "codebase": "default",
       "runtime": "nodejs20"
     }
-  ]
+  ],
+  "hosting": {
+    "public": "frontend/build",
+    "ignore": [
+      "firebase.json",
+      "**/.*",
+      "**/node_modules/**"
+    ],
+    "rewrites": [
+      {
+        "source": "**",
+        "destination": "/index.html"
+      }
+    ]
+  }
 }

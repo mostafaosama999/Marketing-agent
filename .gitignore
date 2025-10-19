@@ -1,12 +1,12 @@
 # Dependencies
-node_modules/
+frontend/node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 lerna-debug.log*
 
 # Production builds
-build/
+frontend/build/
 dist/
 .next/
 out/
