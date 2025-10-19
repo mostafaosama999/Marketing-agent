@@ -8,26 +8,30 @@ import {
   PointerSensor,
   useSensor,
   useSensors,
+  useDroppable,
+  DragOverEvent,
 } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable';
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Lead, PipelineStage } from '../../../app/types/crm';
+import { Lead, PipelineStage, CustomField } from '../../../app/types/crm';
 import { LeadCard } from './LeadCard';
 
 interface BoardViewProps {
   leads: Lead[];
   stages: PipelineStage[];
+  customFields: CustomField[];
   onStatusChange: (leadId: string, newStatus: string) => void;
   onEditLead: (lead: Lead) => void;
 }
 
 interface SortableLeadCardProps {
   lead: Lead;
+  customFields: CustomField[];
   onEdit: (lead: Lead) => void;
 }
 
-const SortableLeadCard: React.FC<SortableLeadCardProps> = ({ lead, onEdit }) => {
+const SortableLeadCard: React.FC<SortableLeadCardProps> = ({ lead, customFields, onEdit }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id: lead.id,
   });
@@ -39,12 +43,35 @@ const SortableLeadCard: React.FC<SortableLeadCardProps> = ({ lead, onEdit }) => 
 
   return (
     <div ref={setNodeRef} style={style} {...attributes} {...listeners}>
-      <LeadCard lead={lead} onEdit={onEdit} isDragging={isDragging} />
+      <LeadCard lead={lead} customFields={customFields} onEdit={onEdit} isDragging={isDragging} />
     </div>
   );
 };
 
-export const BoardView: React.FC<BoardViewProps> = ({ leads, stages, onStatusChange, onEditLead }) => {
+interface DroppableColumnProps {
+  id: string;
+  children: React.ReactNode;
+}
+
+const DroppableColumn: React.FC<DroppableColumnProps> = ({ id, children }) => {
+  const { setNodeRef, isOver } = useDroppable({ id });
+
+  return (
+    <Box
+      ref={setNodeRef}
+      sx={{
+        minHeight: 100,
+        backgroundColor: isOver ? 'action.hover' : 'transparent',
+        borderRadius: 1,
+        transition: 'background-color 0.2s',
+      }}
+    >
+      {children}
+    </Box>
+  );
+};
+
+export const BoardView: React.FC<BoardViewProps> = ({ leads, stages, customFields, onStatusChange, onEditLead }) => {
   const [activeId, setActiveId] = React.useState<string | null>(null);
 
   const sensors = useSensors(
@@ -62,12 +89,27 @@ export const BoardView: React.FC<BoardViewProps> = ({ leads, stages, onStatusCha
   const handleDragEnd = (event: DragEndEvent) => {
     const { active, over } = event;
 
-    if (over && active.id !== over.id) {
+    if (over) {
       const lead = leads.find((l) => l.id === active.id);
-      const newStatus = over.id as string;
 
-      if (lead && stages.some((s) => s.label === newStatus)) {
-        onStatusChange(lead.id, newStatus);
+      if (lead) {
+        let newStatus: string | null = null;
+
+        // Check if dropped on a column (stage label)
+        if (stages.some((s) => s.label === over.id)) {
+          newStatus = over.id as string;
+        } else {
+          // Dropped on another lead card, get that lead's status
+          const targetLead = leads.find((l) => l.id === over.id);
+          if (targetLead) {
+            newStatus = targetLead.status;
+          }
+        }
+
+        // Only update if status changed
+        if (newStatus && newStatus !== lead.status) {
+          onStatusChange(lead.id, newStatus);
+        }
       }
     }
 
@@ -154,16 +196,16 @@ export const BoardView: React.FC<BoardViewProps> = ({ leads, stages, onStatusCha
                   </Box>
                 </Box>
 
-                <Box sx={{ minHeight: 100 }}>
+                <DroppableColumn id={stage.label}>
                   {statusLeads.map((lead) => (
-                    <SortableLeadCard key={lead.id} lead={lead} onEdit={onEditLead} />
+                    <SortableLeadCard key={lead.id} lead={lead} customFields={customFields} onEdit={onEditLead} />
                   ))}
                   {statusLeads.length === 0 && (
                     <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'center', py: 4 }}>
                       No leads
                     </Typography>
                   )}
-                </Box>
+                </DroppableColumn>
               </Paper>
             </SortableContext>
           );
@@ -171,7 +213,7 @@ export const BoardView: React.FC<BoardViewProps> = ({ leads, stages, onStatusCha
       </Box>
 
       <DragOverlay>
-        {activeLead ? <LeadCard lead={activeLead} onEdit={onEditLead} isDragging /> : null}
+        {activeLead ? <LeadCard lead={activeLead} customFields={customFields} onEdit={onEditLead} isDragging /> : null}
       </DragOverlay>
     </DndContext>
   );

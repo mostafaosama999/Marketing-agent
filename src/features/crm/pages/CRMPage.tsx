@@ -23,6 +23,7 @@ import {
   PipelineStage,
   LeadFilters,
   CSVRow,
+  CustomField,
 } from '../../../app/types/crm';
 import {
   BoardView,
@@ -32,6 +33,8 @@ import {
   PipelineSettingsDialog,
   CSVUploadDialog,
   FieldMappingDialog,
+  CustomFieldsDialog,
+  ConfirmDialog,
 } from '../components';
 import {
   subscribeToLeads,
@@ -41,15 +44,19 @@ import {
   deleteLead,
 } from '../../../services/crmService';
 import { subscribeToPipelineConfig, updatePipelineConfig } from '../../../services/pipelineService';
+import { subscribeToCustomFields } from '../../../services/customFieldsService';
 import { ImportResult } from '../../../services/importService';
+import { findDuplicates, getDeduplicationConfig } from '../../../services/deduplicationService';
 
 export const CRMPage: React.FC = () => {
-  const [viewMode, setViewMode] = useState<ViewMode>('board');
+  const [viewMode, setViewMode] = useState<ViewMode>('table');
   const [leads, setLeads] = useState<Lead[]>([]);
   const [stages, setStages] = useState<PipelineStage[]>([]);
+  const [customFields, setCustomFields] = useState<CustomField[]>([]);
   const [dialogOpen, setDialogOpen] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [pipelineSettingsOpen, setPipelineSettingsOpen] = useState(false);
+  const [customFieldsOpen, setCustomFieldsOpen] = useState(false);
   const [csvUploadOpen, setCSVUploadOpen] = useState(false);
   const [fieldMappingOpen, setFieldMappingOpen] = useState(false);
   const [csvData, setCSVData] = useState<CSVRow[]>([]);
@@ -68,6 +75,15 @@ export const CRMPage: React.FC = () => {
     message: '',
     severity: 'success',
   });
+  const [duplicateConfirm, setDuplicateConfirm] = useState<{
+    open: boolean;
+    data: LeadFormData | null;
+    duplicateNames: string[];
+  }>({
+    open: false,
+    data: null,
+    duplicateNames: [],
+  });
 
   // Subscribe to real-time leads updates
   useEffect(() => {
@@ -82,6 +98,16 @@ export const CRMPage: React.FC = () => {
     const unsubscribe = subscribeToPipelineConfig((config) => {
       if (config) {
         setStages(config.stages);
+      }
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Subscribe to custom fields configuration
+  useEffect(() => {
+    const unsubscribe = subscribeToCustomFields((config) => {
+      if (config) {
+        setCustomFields(config.fields);
       }
     });
     return () => unsubscribe();
@@ -103,12 +129,40 @@ export const CRMPage: React.FC = () => {
         await updateLead(selectedLead.id, data);
         showSnackbar('Lead updated successfully', 'success');
       } else {
+        // Check for duplicates before creating
+        const config = getDeduplicationConfig();
+        const duplicates = findDuplicates(data, leads, config);
+
+        if (duplicates.length > 0) {
+          // Show confirmation dialog instead of saving
+          const duplicateNames = duplicates.map(d => d.name);
+          setDuplicateConfirm({
+            open: true,
+            data,
+            duplicateNames,
+          });
+          return; // Don't save yet
+        }
+
         await createLead(data);
         showSnackbar('Lead created successfully', 'success');
       }
     } catch (error) {
       showSnackbar('Failed to save lead', 'error');
       throw error;
+    }
+  };
+
+  const handleConfirmDuplicateSave = async () => {
+    if (!duplicateConfirm.data) return;
+
+    try {
+      await createLead(duplicateConfirm.data);
+      showSnackbar('Lead created successfully', 'success');
+      setDuplicateConfirm({ open: false, data: null, duplicateNames: [] });
+    } catch (error) {
+      showSnackbar('Failed to save lead', 'error');
+      setDuplicateConfirm({ open: false, data: null, duplicateNames: [] });
     }
   };
 
@@ -121,12 +175,55 @@ export const CRMPage: React.FC = () => {
     }
   };
 
+  const handleBulkDelete = async (leadIds: string[]) => {
+    try {
+      await Promise.all(leadIds.map(id => deleteLead(id)));
+      showSnackbar(`${leadIds.length} lead${leadIds.length !== 1 ? 's' : ''} deleted successfully`, 'success');
+    } catch (error) {
+      showSnackbar('Failed to delete leads', 'error');
+    }
+  };
+
   const handleStatusChange = async (leadId: string, newStatus: string) => {
     try {
       await updateLeadStatus(leadId, newStatus);
       showSnackbar('Lead status updated', 'success');
     } catch (error) {
       showSnackbar('Failed to update status', 'error');
+    }
+  };
+
+  const handleBulkStatusChange = async (leadIds: string[], newStatus: string) => {
+    try {
+      await Promise.all(leadIds.map(id => updateLeadStatus(id, newStatus)));
+      showSnackbar(`${leadIds.length} lead${leadIds.length !== 1 ? 's' : ''} moved to ${newStatus}`, 'success');
+    } catch (error) {
+      showSnackbar('Failed to update status', 'error');
+    }
+  };
+
+  const handleBulkEdit = async (leadIds: string[], updates: Record<string, any>) => {
+    try {
+      // Update custom fields for all selected leads
+      await Promise.all(
+        leadIds.map(leadId => {
+          const lead = leads.find(l => l.id === leadId);
+          if (lead) {
+            const updatedCustomFields = {
+              ...lead.customFields,
+              ...updates,
+            };
+            return updateLead(leadId, {
+              ...lead,
+              customFields: updatedCustomFields,
+            });
+          }
+          return Promise.resolve();
+        })
+      );
+      showSnackbar(`${leadIds.length} lead${leadIds.length !== 1 ? 's' : ''} updated successfully`, 'success');
+    } catch (error) {
+      showSnackbar('Failed to update leads', 'error');
     }
   };
 
@@ -151,10 +248,20 @@ export const CRMPage: React.FC = () => {
     setFieldMappingOpen(false);
     setCSVData([]);
     setCSVHeaders([]);
+
+    const parts = [`${result.successful} leads imported`];
+    if (result.customFieldsCreated > 0) {
+      parts.push(`${result.customFieldsCreated} custom fields created`);
+    }
+    if (result.skipped > 0) {
+      parts.push(`${result.skipped} duplicates skipped`);
+    }
+    if (result.failed > 0) {
+      parts.push(`${result.failed} failed`);
+    }
+
     showSnackbar(
-      `Import complete: ${result.successful} leads imported${
-        result.failed > 0 ? `, ${result.failed} failed` : ''
-      }`,
+      `Import complete: ${parts.join(', ')}`,
       result.failed > 0 ? 'error' : 'success'
     );
   };
@@ -216,6 +323,10 @@ export const CRMPage: React.FC = () => {
             <SettingsIcon />
           </IconButton>
 
+          <Button variant="outlined" onClick={() => setCustomFieldsOpen(true)}>
+            Custom Fields
+          </Button>
+
           <Button variant="outlined" startIcon={<UploadIcon />} onClick={() => setCSVUploadOpen(true)}>
             Import CSV
           </Button>
@@ -250,6 +361,7 @@ export const CRMPage: React.FC = () => {
         <BoardView
           leads={filteredLeads}
           stages={stages}
+          customFields={customFields}
           onStatusChange={handleStatusChange}
           onEditLead={handleEditLead}
         />
@@ -257,8 +369,13 @@ export const CRMPage: React.FC = () => {
         <TableView
           leads={filteredLeads}
           stages={stages}
+          customFields={customFields}
           onEditLead={handleEditLead}
           onDeleteLead={handleDeleteLead}
+          onStatusChange={handleStatusChange}
+          onBulkDelete={handleBulkDelete}
+          onBulkStatusChange={handleBulkStatusChange}
+          onBulkEdit={handleBulkEdit}
         />
       )}
 
@@ -267,6 +384,7 @@ export const CRMPage: React.FC = () => {
         open={dialogOpen}
         lead={selectedLead}
         stages={stages}
+        customFields={customFields}
         onClose={() => setDialogOpen(false)}
         onSave={handleSaveLead}
       />
@@ -277,6 +395,13 @@ export const CRMPage: React.FC = () => {
         stages={stages}
         onClose={() => setPipelineSettingsOpen(false)}
         onSave={handleSavePipelineSettings}
+      />
+
+      {/* Custom Fields Dialog */}
+      <CustomFieldsDialog
+        open={customFieldsOpen}
+        fields={customFields}
+        onClose={() => setCustomFieldsOpen(false)}
       />
 
       {/* CSV Upload Dialog */}
@@ -292,6 +417,7 @@ export const CRMPage: React.FC = () => {
         csvData={csvData}
         headers={csvHeaders}
         stages={stages}
+        leads={leads}
         onClose={() => {
           setFieldMappingOpen(false);
           setCSVData([]);
@@ -303,14 +429,26 @@ export const CRMPage: React.FC = () => {
       {/* Snackbar Notifications */}
       <Snackbar
         open={snackbar.open}
-        autoHideDuration={3000}
+        autoHideDuration={6000}
         onClose={handleCloseSnackbar}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
       >
-        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
+        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%', maxWidth: 500 }}>
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      {/* Duplicate Lead Confirmation */}
+      <ConfirmDialog
+        open={duplicateConfirm.open}
+        title="Duplicate Lead Detected"
+        message={`A lead with the name "${duplicateConfirm.duplicateNames.join(', ')}" already exists. Are you sure you want to create another one?`}
+        confirmText="Create Anyway"
+        cancelText="Cancel"
+        severity="warning"
+        onConfirm={handleConfirmDuplicateSave}
+        onCancel={() => setDuplicateConfirm({ open: false, data: null, duplicateNames: [] })}
+      />
     </Box>
   );
 };

@@ -8,18 +8,22 @@ import {
   TextField,
   MenuItem,
   Box,
+  Typography,
+  Divider,
 } from '@mui/material';
-import { Lead, LeadFormData, PipelineStage } from '../../../app/types/crm';
+import { Lead, LeadFormData, PipelineStage, CustomField } from '../../../app/types/crm';
+import { CustomFieldRenderer } from './CustomFieldRenderer';
 
 interface LeadDialogProps {
   open: boolean;
   lead?: Lead | null;
   stages: PipelineStage[];
+  customFields: CustomField[];
   onClose: () => void;
   onSave: (data: LeadFormData) => Promise<void>;
 }
 
-export const LeadDialog: React.FC<LeadDialogProps> = ({ open, lead, stages, onClose, onSave }) => {
+export const LeadDialog: React.FC<LeadDialogProps> = ({ open, lead, stages, customFields, onClose, onSave }) => {
   const visibleStages = stages.filter((s) => s.visible);
   const defaultStatus = visibleStages.length > 0 ? visibleStages[0].label : '';
 
@@ -29,9 +33,10 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({ open, lead, stages, onCl
     company: '',
     phone: '',
     status: defaultStatus,
+    customFields: {},
   });
   const [loading, setLoading] = useState(false);
-  const [errors, setErrors] = useState<Partial<Record<keyof LeadFormData, string>>>({});
+  const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
 
   useEffect(() => {
     if (lead) {
@@ -41,6 +46,7 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({ open, lead, stages, onCl
         company: lead.company,
         phone: lead.phone,
         status: lead.status,
+        customFields: lead.customFields || {},
       });
     } else {
       setFormData({
@@ -49,13 +55,14 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({ open, lead, stages, onCl
         company: '',
         phone: '',
         status: defaultStatus,
+        customFields: {},
       });
     }
     setErrors({});
   }, [lead, open, defaultStatus]);
 
   const validateForm = (): boolean => {
-    const newErrors: Partial<Record<keyof LeadFormData, string>> = {};
+    const newErrors: Partial<Record<string, string>> = {};
 
     if (!formData.name.trim()) {
       newErrors.name = 'Name is required';
@@ -70,6 +77,14 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({ open, lead, stages, onCl
     if (!formData.company.trim()) {
       newErrors.company = 'Company is required';
     }
+
+    // Validate required custom fields
+    customFields.filter(f => f.required && f.visible).forEach(field => {
+      const value = formData.customFields?.[field.name];
+      if (!value || (typeof value === 'string' && !value.trim())) {
+        newErrors[`customField_${field.name}`] = `${field.label} is required`;
+      }
+    });
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -98,6 +113,23 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({ open, lead, stages, onCl
       setErrors((prev) => ({ ...prev, [field]: undefined }));
     }
   };
+
+  const handleCustomFieldChange = (fieldName: string, value: any) => {
+    setFormData((prev) => ({
+      ...prev,
+      customFields: {
+        ...prev.customFields,
+        [fieldName]: value,
+      },
+    }));
+    // Clear error for this field
+    const errorKey = `customField_${fieldName}`;
+    if (errors[errorKey]) {
+      setErrors((prev) => ({ ...prev, [errorKey]: undefined }));
+    }
+  };
+
+  const visibleCustomFields = customFields.filter(f => f.visible).sort((a, b) => a.order - b.order);
 
   return (
     <Dialog open={open} onClose={onClose} maxWidth="sm" fullWidth>
@@ -158,6 +190,26 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({ open, lead, stages, onCl
               </MenuItem>
             ))}
           </TextField>
+
+          {/* Custom Fields Section */}
+          {visibleCustomFields.length > 0 && (
+            <>
+              <Divider sx={{ my: 2 }} />
+              <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+                Additional Information
+              </Typography>
+              {visibleCustomFields.map((field) => (
+                <Box key={field.id} sx={{ mb: 2 }}>
+                  <CustomFieldRenderer
+                    field={field}
+                    value={formData.customFields?.[field.name]}
+                    onChange={(value) => handleCustomFieldChange(field.name, value)}
+                    error={errors[`customField_${field.name}`]}
+                  />
+                </Box>
+              ))}
+            </>
+          )}
         </Box>
       </DialogContent>
       <DialogActions>

@@ -22,6 +22,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // CRM custom fields configuration - allow all operations for development
+    match /custom_fields/{configId} {
+      allow read, write: if true;
+    }
+
     // Default deny for security
     match /{document=**} {
       allow read, write: if false;

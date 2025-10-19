@@ -26,6 +26,7 @@ function convertToLead(id: string, data: any): Lead {
     company: data.company || '',
     phone: data.phone || '',
     status: data.status || 'new_lead',
+    customFields: data.customFields || {},
     createdAt: data.createdAt?.toDate() || new Date(),
     updatedAt: data.updatedAt?.toDate() || new Date(),
   };
@@ -64,6 +65,7 @@ export async function createLead(leadData: LeadFormData): Promise<string> {
     const leadsRef = collection(db, LEADS_COLLECTION);
     const docRef = await addDoc(leadsRef, {
       ...leadData,
+      customFields: leadData.customFields || {},
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });

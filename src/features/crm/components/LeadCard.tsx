@@ -1,15 +1,40 @@
 import React from 'react';
-import { Card, CardContent, Typography, Box, IconButton } from '@mui/material';
+import { Card, CardContent, Typography, Box, IconButton, Chip } from '@mui/material';
 import { Edit as EditIcon, Email as EmailIcon, Phone as PhoneIcon, Business as BusinessIcon } from '@mui/icons-material';
-import { Lead } from '../../../app/types/crm';
+import { Lead, CustomField } from '../../../app/types/crm';
 
 interface LeadCardProps {
   lead: Lead;
+  customFields: CustomField[];
   onEdit: (lead: Lead) => void;
   isDragging?: boolean;
 }
 
-export const LeadCard: React.FC<LeadCardProps> = ({ lead, onEdit, isDragging = false }) => {
+export const LeadCard: React.FC<LeadCardProps> = ({ lead, customFields, onEdit, isDragging = false }) => {
+  // Filter custom fields that should be shown on cards
+  const cardCustomFields = customFields
+    .filter(f => f.showInCard && f.visible)
+    .sort((a, b) => a.order - b.order)
+    .slice(0, 3); // Limit to 3 fields to avoid clutter
+
+  const formatCustomFieldValue = (field: CustomField, value: any) => {
+    if (!value) return null;
+
+    switch (field.type) {
+      case 'date':
+        return new Date(value).toLocaleDateString();
+      case 'checkbox':
+        return Array.isArray(value) ? value.join(', ') : null;
+      case 'number':
+        return typeof value === 'number' ? value.toLocaleString() : value;
+      case 'select':
+      case 'radio':
+        return value;
+      default:
+        return String(value).length > 30 ? String(value).substring(0, 30) + '...' : value;
+    }
+  };
+
   return (
     <Card
       sx={{
@@ -51,6 +76,31 @@ export const LeadCard: React.FC<LeadCardProps> = ({ lead, onEdit, isDragging = f
             <Typography variant="body2" color="text.secondary">
               {lead.phone}
             </Typography>
+          </Box>
+        )}
+
+        {/* Custom Fields */}
+        {cardCustomFields.length > 0 && (
+          <Box sx={{ mt: 1.5, pt: 1.5, borderTop: 1, borderColor: 'divider' }}>
+            {cardCustomFields.map((field) => {
+              const value = formatCustomFieldValue(field, lead.customFields?.[field.name]);
+              if (!value) return null;
+
+              return (
+                <Box key={field.id} sx={{ mb: 0.5 }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ display: 'block' }}>
+                    {field.label}
+                  </Typography>
+                  {field.type === 'select' || field.type === 'radio' ? (
+                    <Chip label={value} size="small" sx={{ mt: 0.5, height: 20, fontSize: '0.7rem' }} />
+                  ) : (
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      {value}
+                    </Typography>
+                  )}
+                </Box>
+              );
+            })}
           </Box>
         )}
       </CardContent>

@@ -7,6 +7,7 @@ export interface Lead {
   company: string;
   phone: string;
   status: string; // Now flexible to support custom pipeline stages
+  customFields: Record<string, any>; // Dynamic custom field values
   createdAt: Date;
   updatedAt: Date;
 }
@@ -19,6 +20,7 @@ export interface LeadFormData {
   company: string;
   phone: string;
   status: string;
+  customFields?: Record<string, any>; // Optional for form data
 }
 
 // Pipeline Stage Configuration
@@ -65,5 +67,72 @@ export interface CSVRow {
 
 export interface FieldMapping {
   csvField: string;
-  leadField: keyof LeadFormData | null;
+  leadField: keyof LeadFormData | string | null; // Allow custom field names
 }
+
+// Custom Fields Configuration
+export type CustomFieldType =
+  | 'text'
+  | 'textarea'
+  | 'number'
+  | 'select'
+  | 'radio'
+  | 'checkbox'
+  | 'date'
+  | 'url';
+
+export interface CustomField {
+  id: string;
+  name: string; // Internal field name (e.g., "lead_owner")
+  label: string; // Display label (e.g., "Lead Owner")
+  type: CustomFieldType;
+  options?: string[]; // For select, radio, checkbox types
+  required: boolean;
+  visible: boolean; // Show in UI
+  showInTable: boolean; // Display as column in table view
+  showInCard: boolean; // Display on kanban cards
+  order: number; // Display order
+}
+
+export interface CustomFieldsConfig {
+  id: string;
+  fields: CustomField[];
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+// Default custom fields
+export const DEFAULT_CUSTOM_FIELDS: Omit<CustomField, 'id'>[] = [
+  {
+    name: 'lead_owner',
+    label: 'Lead Owner',
+    type: 'select',
+    options: ['Unassigned', 'Sales Team A', 'Sales Team B', 'Sales Team C'],
+    required: false,
+    visible: true,
+    showInTable: true,
+    showInCard: true,
+    order: 0,
+  },
+  {
+    name: 'priority',
+    label: 'Priority',
+    type: 'select',
+    options: ['Low', 'Medium', 'High', 'Urgent'],
+    required: false,
+    visible: true,
+    showInTable: true,
+    showInCard: true,
+    order: 1,
+  },
+  {
+    name: 'deal_value',
+    label: 'Deal Value',
+    type: 'number',
+    required: false,
+    visible: true,
+    showInTable: true,
+    showInCard: false,
+    order: 2,
+  },
+];

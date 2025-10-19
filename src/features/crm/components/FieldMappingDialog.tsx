@@ -20,6 +20,8 @@ import {
   TableRow,
   Paper,
   CircularProgress,
+  Checkbox,
+  FormControlLabel,
 } from '@mui/material';
 import { CSVRow, FieldMapping, LeadFormData, PipelineStage } from '../../../app/types/crm';
 import { autoDetectMappings, validateMappings, importLeadsFromCSV, ImportResult } from '../../../services/importService';
@@ -29,23 +31,19 @@ interface FieldMappingDialogProps {
   csvData: CSVRow[];
   headers: string[];
   stages: PipelineStage[];
+  leads: import('../../../app/types/crm').Lead[];
   onClose: () => void;
   onComplete: (result: ImportResult) => void;
 }
 
-const LEAD_FIELDS: { value: keyof LeadFormData; label: string; required: boolean }[] = [
-  { value: 'name', label: 'Name', required: true },
-  { value: 'email', label: 'Email', required: true },
-  { value: 'company', label: 'Company', required: true },
-  { value: 'phone', label: 'Phone', required: false },
-  { value: 'status', label: 'Status/Stage', required: false },
-];
+// Removed - will be dynamically generated from custom fields
 
 export const FieldMappingDialog: React.FC<FieldMappingDialogProps> = ({
   open,
   csvData,
   headers,
   stages,
+  leads,
   onClose,
   onComplete,
 }) => {
@@ -53,10 +51,21 @@ export const FieldMappingDialog: React.FC<FieldMappingDialogProps> = ({
   const [defaultStatus, setDefaultStatus] = useState<string>('');
   const [errors, setErrors] = useState<string[]>([]);
   const [importing, setImporting] = useState(false);
+  const [customFields, setCustomFields] = useState<import('../../../app/types/crm').CustomField[]>([]);
+  const [autoCreateCustomFields, setAutoCreateCustomFields] = useState(true);
+
+  // Load custom fields
+  useEffect(() => {
+    import('../../../services/customFieldsService').then(({ getCustomFields }) => {
+      getCustomFields().then((config) => {
+        setCustomFields(config.fields.filter(f => f.visible));
+      });
+    });
+  }, []);
 
   useEffect(() => {
     if (open && headers.length > 0) {
-      const autoMappings = autoDetectMappings(headers);
+      const autoMappings = autoDetectMappings(headers, customFields);
       setMappings(autoMappings);
 
       // Set default status to first visible stage
@@ -65,14 +74,29 @@ export const FieldMappingDialog: React.FC<FieldMappingDialogProps> = ({
         setDefaultStatus(firstStage.label);
       }
     }
-  }, [open, headers, stages]);
+  }, [open, headers, stages, customFields]);
 
-  const handleMappingChange = (csvField: string, leadField: keyof LeadFormData | null) => {
+  const handleMappingChange = (csvField: string, leadField: string | null) => {
     setMappings((prev) =>
       prev.map((m) => (m.csvField === csvField ? { ...m, leadField } : m))
     );
     setErrors([]);
   };
+
+  // Build available fields list (standard + custom)
+  const availableFields = [
+    { value: 'name', label: 'Name', required: true, isCustom: false },
+    { value: 'email', label: 'Email (auto-generated if empty)', required: false, isCustom: false },
+    { value: 'company', label: 'Company', required: true, isCustom: false },
+    { value: 'phone', label: 'Phone', required: false, isCustom: false },
+    { value: 'status', label: 'Status/Stage', required: false, isCustom: false },
+    ...customFields.map(field => ({
+      value: `custom_${field.name}`,
+      label: `${field.label} (Custom)`,
+      required: field.required,
+      isCustom: true,
+    })),
+  ];
 
   const handleImport = async () => {
     // Validate mappings
@@ -86,7 +110,7 @@ export const FieldMappingDialog: React.FC<FieldMappingDialogProps> = ({
     setErrors([]);
 
     try {
-      const result = await importLeadsFromCSV(csvData, mappings, defaultStatus);
+      const result = await importLeadsFromCSV(csvData, mappings, leads, autoCreateCustomFields, defaultStatus);
       onComplete(result);
     } catch (error) {
       setErrors(['Failed to import leads. Please try again.']);
@@ -158,14 +182,14 @@ export const FieldMappingDialog: React.FC<FieldMappingDialogProps> = ({
                           onChange={(e) =>
                             handleMappingChange(
                               mapping.csvField,
-                              e.target.value as keyof LeadFormData | null
+                              e.target.value as string | null
                             )
                           }
                         >
                           <MenuItem value="">
                             <em>Skip this field</em>
                           </MenuItem>
-                          {LEAD_FIELDS.map((field) => (
+                          {availableFields.map((field) => (
                             <MenuItem key={field.value} value={field.value}>
                               {field.label} {field.required && '*'}
                             </MenuItem>
@@ -185,7 +209,22 @@ export const FieldMappingDialog: React.FC<FieldMappingDialogProps> = ({
           </Table>
         </TableContainer>
 
-        <Typography variant="caption" color="text.secondary">
+        <Box sx={{ mt: 2 }}>
+          <FormControlLabel
+            control={
+              <Checkbox
+                checked={autoCreateCustomFields}
+                onChange={(e) => setAutoCreateCustomFields(e.target.checked)}
+              />
+            }
+            label="Automatically create custom fields for unmapped columns"
+          />
+          <Typography variant="caption" color="text.secondary" sx={{ display: 'block', ml: 4, mt: 0.5 }}>
+            Unmapped CSV columns will be added as custom fields with smart type detection
+          </Typography>
+        </Box>
+
+        <Typography variant="caption" color="text.secondary" sx={{ display: 'block', mt: 2 }}>
           * Required fields
         </Typography>
       </DialogContent>
