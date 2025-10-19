@@ -38,7 +38,7 @@ export interface CostInfo {
 export interface ApiCostRecord {
   userId: string;
   leadId?: string;
-  service: "blog-qualification" | "writing-program-finder";
+  service: "blog-qualification" | "writing-program-finder" | "idea-generation";
   model: string;
   timestamp: admin.firestore.FieldValue;
   inputTokens: number;
@@ -80,7 +80,7 @@ export function calculateCost(
  */
 export async function logApiCost(
   userId: string,
-  service: "blog-qualification" | "writing-program-finder",
+  service: "blog-qualification" | "writing-program-finder" | "idea-generation",
   costInfo: CostInfo,
   metadata: {
     leadId?: string;

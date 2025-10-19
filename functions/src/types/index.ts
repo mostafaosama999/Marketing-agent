@@ -192,3 +192,34 @@ export interface WritingProgramFinderResult {
   aiReasoning?: string;
   costInfo?: ApiCostInfo;
 }
+
+// Custom Idea Generator Types
+export interface GeneratedIdea {
+  id: string;
+  content: string;
+  title?: string; // Optional short title for the idea
+  status: "pending" | "approved" | "attached";
+  createdAt: Date;
+  updatedAt?: Date;
+  attachedAt?: Date;
+  prompt: string; // The user's prompt that generated this idea
+  costInfo?: ApiCostInfo;
+}
+
+export interface CustomIdeaRequest {
+  leadId: string;
+  prompt: string;
+  context?: {
+    companyName?: string;
+    website?: string;
+    industry?: string;
+    blogUrl?: string;
+  };
+}
+
+export interface CustomIdeaResponse {
+  ideas: GeneratedIdea[];
+  totalGenerated: number;
+  costInfo?: ApiCostInfo;
+  sessionId: string; // For tracking
+}

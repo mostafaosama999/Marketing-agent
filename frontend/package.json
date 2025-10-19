@@ -35,8 +35,8 @@
   },
   "scripts": {
     "start": "craco start",
-    "build": "GENERATE_SOURCEMAP=false craco build",
-    "build:prod": "GENERATE_SOURCEMAP=false craco build",
+    "build": "./build.sh",
+    "build:prod": "./build.sh",
     "test": "craco test",
     "eject": "react-scripts eject"
   },

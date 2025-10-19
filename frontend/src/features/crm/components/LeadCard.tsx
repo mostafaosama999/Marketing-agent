@@ -1,8 +1,8 @@
 import React, { useState } from 'react';
 import { Card, CardContent, Typography, Box, IconButton, Chip, Button, CircularProgress, Dialog, DialogTitle, DialogContent, DialogActions, TextField, Alert, Link } from '@mui/material';
-import { Edit as EditIcon, Email as EmailIcon, Phone as PhoneIcon, Business as BusinessIcon, CheckCircle as CheckCircleIcon, Article as ArticleIcon, Check as CheckIcon, Close as CloseIcon, Search as SearchIcon } from '@mui/icons-material';
+import { Edit as EditIcon, Email as EmailIcon, Phone as PhoneIcon, Business as BusinessIcon, CheckCircle as CheckCircleIcon, Article as ArticleIcon, Check as CheckIcon, Close as CloseIcon, Search as SearchIcon, Lightbulb as LightbulbIcon } from '@mui/icons-material';
 import { Lead, CustomField, LeadFormData } from '../../../app/types/crm';
-import { qualifyCompanyBlog, QualifyBlogResponse, findWritingProgram, FindWritingProgramResponse } from '../../../services/researchApi';
+import { qualifyCompanyBlog, QualifyBlogResponse, findWritingProgram, FindWritingProgramResponse, generateCustomIdeas, GenerateCustomIdeasResponse, GeneratedIdea, updateIdeaStatus } from '../../../services/researchApi';
 import { updateLead, createLead, getLeads } from '../../../services/crmService';
 import { searchPeople, ApolloSearchPerson } from '../../../services/apolloService';
 import { TitleSelectionDialog } from './TitleSelectionDialog';
@@ -39,6 +39,15 @@ export const LeadCard: React.FC<LeadCardProps> = ({ lead, customFields, onEdit, 
   const [apolloSearchResults, setApolloSearchResults] = useState<ApolloSearchPerson[]>([]);
   const [apolloSearchLoading, setApolloSearchLoading] = useState(false);
   const [apolloDuplicateIds, setApolloDuplicateIds] = useState<Set<string>>(new Set());
+
+  // State for idea generator
+  const [ideaDialogOpen, setIdeaDialogOpen] = useState(false);
+  const [ideaPrompt, setIdeaPrompt] = useState('');
+  const [isGeneratingIdeas, setIsGeneratingIdeas] = useState(false);
+  const [generatedIdeas, setGeneratedIdeas] = useState<GeneratedIdea[]>([]);
+  const [ideaError, setIdeaError] = useState<string | null>(null);
+  const [approvedIdeaIds, setApprovedIdeaIds] = useState<Set<string>>(new Set());
+  const [attachedIdeaId, setAttachedIdeaId] = useState<string | null>(null);
 
   // Filter custom fields that should be shown on cards
   const cardCustomFields = customFields
@@ -249,6 +258,96 @@ export const LeadCard: React.FC<LeadCardProps> = ({ lead, customFields, onEdit, 
     });
   };
 
+  // Idea Generator Handlers
+  const handleGenerateIdeasClick = () => {
+    setIdeaDialogOpen(true);
+    setIdeaError(null);
+    setGeneratedIdeas([]);
+    setIdeaPrompt('');
+    setApprovedIdeaIds(new Set());
+    setAttachedIdeaId(null);
+  };
+
+  const handleGenerateIdeas = async () => {
+    if (!ideaPrompt.trim() || ideaPrompt.trim().length < 10) {
+      setIdeaError('Please enter a prompt (at least 10 characters)');
+      return;
+    }
+
+    setIsGeneratingIdeas(true);
+    setIdeaError(null);
+
+    try {
+      const result = await generateCustomIdeas({
+        leadId: lead.id,
+        prompt: ideaPrompt.trim(),
+        context: {
+          companyName: lead.company,
+          website: getWebsiteFromLead() || undefined,
+        },
+      });
+
+      const response = result.data as GenerateCustomIdeasResponse;
+      setGeneratedIdeas(response.ideas);
+    } catch (err: any) {
+      console.error('Error generating ideas:', err);
+      setIdeaError(err.message || 'Failed to generate ideas. Please try again.');
+    } finally {
+      setIsGeneratingIdeas(false);
+    }
+  };
+
+  const handleApproveIdea = async (ideaId: string) => {
+    setApprovedIdeaIds(prev => new Set(prev).add(ideaId));
+
+    try {
+      await updateIdeaStatus({
+        leadId: lead.id,
+        ideaId,
+        status: 'approved',
+      });
+    } catch (error) {
+      console.error('Failed to approve idea:', error);
+    }
+  };
+
+  const handleAttachIdea = async (idea: GeneratedIdea) => {
+    setAttachedIdeaId(idea.id);
+
+    try {
+      // Update idea status to attached
+      await updateIdeaStatus({
+        leadId: lead.id,
+        ideaId: idea.id,
+        status: 'attached',
+      });
+
+      // Save to lead's custom fields
+      await updateLead(lead.id, {
+        customFields: {
+          ...lead.customFields,
+          attached_idea: {
+            id: idea.id,
+            title: idea.title,
+            content: idea.content,
+            attachedAt: new Date().toISOString(),
+          },
+        },
+      });
+    } catch (error) {
+      console.error('Failed to attach idea:', error);
+    }
+  };
+
+  const handleCloseIdeaDialog = () => {
+    setIdeaDialogOpen(false);
+    setIdeaPrompt('');
+    setGeneratedIdeas([]);
+    setIdeaError(null);
+    setApprovedIdeaIds(new Set());
+    setAttachedIdeaId(null);
+  };
+
   // Apollo Lead Search Handlers
   const handleFindLeadsByTitle = () => {
     setTitleSelectionOpen(true);
@@ -443,6 +542,17 @@ export const LeadCard: React.FC<LeadCardProps> = ({ lead, customFields, onEdit, 
             sx={{ textTransform: 'none' }}
           >
             Find Writing Program
+          </Button>
+          <Button
+            fullWidth
+            variant={lead.hasGeneratedIdeas ? "contained" : "outlined"}
+            size="small"
+            onClick={handleGenerateIdeasClick}
+            startIcon={<LightbulbIcon />}
+            sx={{ textTransform: 'none' }}
+            color={lead.hasGeneratedIdeas ? "secondary" : "primary"}
+          >
+            {lead.hasGeneratedIdeas ? "View Ideas" : "Generate Ideas"}
           </Button>
           <Button
             fullWidth
@@ -859,6 +969,169 @@ export const LeadCard: React.FC<LeadCardProps> = ({ lead, customFields, onEdit, 
               disabled={!writingProgramWebsite.trim()}
             >
               Search
+            </Button>
+          )}
+        </DialogActions>
+      </Dialog>
+
+      {/* Idea Generator Dialog */}
+      <Dialog open={ideaDialogOpen} onClose={handleCloseIdeaDialog} maxWidth="md" fullWidth>
+        <DialogTitle>Generate Content Collaboration Ideas for {lead.company}</DialogTitle>
+        <DialogContent>
+          {isGeneratingIdeas && generatedIdeas.length === 0 ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center', py: 4 }}>
+              <CircularProgress size={48} />
+              <Typography variant="body2" color="text.secondary" sx={{ mt: 2 }}>
+                Generating ideas with AI...
+              </Typography>
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1 }}>
+                This may take 10-20 seconds
+              </Typography>
+            </Box>
+          ) : generatedIdeas.length === 0 ? (
+            <>
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Enter your prompt to generate content collaboration ideas. The AI will generate 5-10 ideas based on your requirements.
+              </Typography>
+
+              {lead.company && (
+                <Box sx={{ mb: 2, p: 2, bgcolor: 'grey.50', borderRadius: 1 }}>
+                  <Typography variant="caption" sx={{ fontWeight: 600, display: 'block', mb: 0.5 }}>
+                    Context:
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary">
+                    Company: {lead.company}
+                    {getWebsiteFromLead() && <><br/>Website: {getWebsiteFromLead()}</>}
+                  </Typography>
+                </Box>
+              )}
+
+              <TextField
+                autoFocus
+                margin="dense"
+                label="Your Prompt"
+                multiline
+                rows={6}
+                fullWidth
+                value={ideaPrompt}
+                onChange={(e) => setIdeaPrompt(e.target.value)}
+                placeholder="Example: Generate 10 content collaboration ideas for this company that focus on AI/ML topics. Include guest post opportunities, co-hosted webinars, and technical tutorial partnerships. Each idea should target their developer audience and align with our expertise in machine learning infrastructure."
+                disabled={isGeneratingIdeas}
+                helperText={`${ideaPrompt.length} characters (minimum 10)`}
+              />
+              {ideaError && (
+                <Alert severity="error" sx={{ mt: 2 }}>
+                  {ideaError}
+                </Alert>
+              )}
+            </>
+          ) : (
+            <Box sx={{ mt: 2 }}>
+              <Alert severity="success" sx={{ mb: 2 }}>
+                <strong>Generated {generatedIdeas.length} ideas!</strong>
+                {approvedIdeaIds.size > 0 && <> ({approvedIdeaIds.size} approved)</>}
+                {attachedIdeaId && <> (1 attached to lead)</>}
+              </Alert>
+
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Review the ideas below. You can approve ideas for later use or attach one to the lead record.
+              </Typography>
+
+              <Box sx={{ mb: 2 }}>
+                {generatedIdeas.map((idea, index) => {
+                  const isApproved = approvedIdeaIds.has(idea.id);
+                  const isAttached = attachedIdeaId === idea.id;
+                  return (
+                    <Box
+                      key={idea.id}
+                      sx={{
+                        mb: 2,
+                        p: 2,
+                        border: 1,
+                        borderColor: isAttached ? 'info.main' : isApproved ? 'success.main' : 'divider',
+                        borderRadius: 1,
+                        bgcolor: isAttached ? 'info.light' : isApproved ? 'success.light' : 'transparent',
+                        opacity: isAttached || isApproved ? 0.9 : 1,
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
+                        <Box sx={{ flex: 1 }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                            {idea.title || `Idea ${index + 1}`}
+                          </Typography>
+                          <Typography variant="body2" color="text.secondary" sx={{ mb: 1, whiteSpace: 'pre-wrap' }}>
+                            {idea.content}
+                          </Typography>
+                          <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+                            <Chip
+                              label={idea.status.charAt(0).toUpperCase() + idea.status.slice(1)}
+                              size="small"
+                              color={isAttached ? 'info' : isApproved ? 'success' : 'default'}
+                            />
+                            {isAttached && (
+                              <Chip
+                                icon={<CheckCircleIcon />}
+                                label="Attached to Lead"
+                                size="small"
+                                color="info"
+                                variant="filled"
+                              />
+                            )}
+                            {isApproved && !isAttached && (
+                              <Chip
+                                icon={<CheckCircleIcon />}
+                                label="Approved"
+                                size="small"
+                                color="success"
+                                variant="filled"
+                              />
+                            )}
+                          </Box>
+                        </Box>
+                        <Box sx={{ display: 'flex', gap: 0.5, ml: 2, flexDirection: 'column' }}>
+                          {!isApproved && !isAttached && (
+                            <Button
+                              size="small"
+                              variant="outlined"
+                              color="success"
+                              startIcon={<CheckIcon />}
+                              onClick={() => handleApproveIdea(idea.id)}
+                            >
+                              Approve
+                            </Button>
+                          )}
+                          {!isAttached && (
+                            <Button
+                              size="small"
+                              variant="contained"
+                              color="primary"
+                              onClick={() => handleAttachIdea(idea)}
+                            >
+                              Attach to Lead
+                            </Button>
+                          )}
+                        </Box>
+                      </Box>
+                    </Box>
+                  );
+                })}
+              </Box>
+            </Box>
+          )}
+        </DialogContent>
+        <DialogActions>
+          {!isGeneratingIdeas && (
+            <Button onClick={handleCloseIdeaDialog}>
+              {generatedIdeas.length > 0 ? 'Close' : 'Cancel'}
+            </Button>
+          )}
+          {generatedIdeas.length === 0 && !isGeneratingIdeas && (
+            <Button
+              onClick={handleGenerateIdeas}
+              variant="contained"
+              disabled={!ideaPrompt.trim() || ideaPrompt.trim().length < 10}
+            >
+              Generate Ideas
             </Button>
           )}
         </DialogActions>

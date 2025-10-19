@@ -19,6 +19,9 @@ export interface Lead {
   // API Cost Tracking
   totalApiCosts?: number; // Total API costs accumulated for this lead
   lastApiCostUpdate?: Date; // Last time API costs were updated
+  // Idea Generation
+  hasGeneratedIdeas?: boolean; // Whether ideas have been generated for this lead
+  lastIdeaGeneratedAt?: Date; // Last time ideas were generated
 }
 
 export interface BlogQualificationData {

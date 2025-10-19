@@ -153,3 +153,62 @@ export interface FindWritingProgramResponse {
   aiReasoning?: string;
   costInfo?: ApiCostInfo;
 }
+
+/**
+ * Idea Generator functions
+ */
+export const generateCustomIdeas = httpsCallable(functions, 'generateCustomIdeasCloud');
+export const getLeadIdeas = httpsCallable(functions, 'getLeadIdeas');
+export const updateIdeaStatus = httpsCallable(functions, 'updateIdeaStatus');
+
+export interface GeneratedIdea {
+  id: string;
+  content: string;
+  title?: string;
+  status: 'pending' | 'approved' | 'attached';
+  createdAt: any;
+  updatedAt?: any;
+  attachedAt?: any;
+  prompt: string;
+  costInfo?: ApiCostInfo;
+  sessionId?: string;
+}
+
+export interface GenerateCustomIdeasRequest {
+  leadId: string;
+  prompt: string;
+  context?: {
+    companyName?: string;
+    website?: string;
+    industry?: string;
+    blogUrl?: string;
+  };
+}
+
+export interface GenerateCustomIdeasResponse {
+  ideas: GeneratedIdea[];
+  totalGenerated: number;
+  costInfo?: ApiCostInfo;
+  sessionId: string;
+}
+
+export interface GetLeadIdeasRequest {
+  leadId: string;
+}
+
+export interface GetLeadIdeasResponse {
+  ideas: GeneratedIdea[];
+  total: number;
+}
+
+export interface UpdateIdeaStatusRequest {
+  leadId: string;
+  ideaId: string;
+  status: 'pending' | 'approved' | 'attached';
+}
+
+export interface UpdateIdeaStatusResponse {
+  success: boolean;
+  ideaId: string;
+  status: string;
+}
