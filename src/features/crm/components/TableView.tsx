@@ -12,14 +12,21 @@ import {
   TableSortLabel,
   Box,
   Checkbox,
+  TextField,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
 } from '@mui/material';
-import { Edit as EditIcon, Delete as DeleteIcon, DragIndicator as DragIcon } from '@mui/icons-material';
+import { Edit as EditIcon, Delete as DeleteIcon, DragIndicator as DragIcon, EditOutlined as EditOutlinedIcon } from '@mui/icons-material';
 import { DndContext, DragEndEvent, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
 import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Lead, PipelineStage, CustomField } from '../../../app/types/crm';
 import { ConfirmDialog } from './ConfirmDialog';
 import { BulkActionsToolbar } from './BulkActionsToolbar';
+import { updateCustomField } from '../../../services/customFieldsService';
 
 interface TableViewProps {
   leads: Lead[];
@@ -35,6 +42,92 @@ interface TableViewProps {
 
 type SortField = 'name' | 'email' | 'company' | 'phone' | 'status' | 'createdAt';
 type SortDirection = 'asc' | 'desc';
+
+interface EditableHeaderProps {
+  field: CustomField;
+  onSave: (fieldId: string, newLabel: string) => void;
+}
+
+const EditableHeader: React.FC<EditableHeaderProps> = ({ field, onSave }) => {
+  const [dialogOpen, setDialogOpen] = useState(false);
+  const [label, setLabel] = useState(field.label);
+
+  const handleOpen = () => {
+    setLabel(field.label);
+    setDialogOpen(true);
+  };
+
+  const handleClose = () => {
+    setLabel(field.label);
+    setDialogOpen(false);
+  };
+
+  const handleSave = () => {
+    if (label.trim() && label !== field.label) {
+      onSave(field.id, label.trim());
+    }
+    setDialogOpen(false);
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      handleSave();
+    }
+  };
+
+  return (
+    <>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 0.5,
+          cursor: 'pointer',
+          '&:hover': {
+            color: 'primary.main',
+            '& .edit-icon': {
+              opacity: 1,
+            },
+          },
+        }}
+        onClick={handleOpen}
+      >
+        <span>{field.label}</span>
+        <EditOutlinedIcon
+          className="edit-icon"
+          sx={{
+            fontSize: '0.875rem',
+            opacity: 0,
+            transition: 'opacity 0.2s',
+          }}
+        />
+      </Box>
+
+      <Dialog open={dialogOpen} onClose={handleClose} maxWidth="xs" fullWidth>
+        <DialogTitle>Edit Column Name</DialogTitle>
+        <DialogContent>
+          <TextField
+            autoFocus
+            fullWidth
+            label="Column Name"
+            value={label}
+            onChange={(e) => setLabel(e.target.value)}
+            onKeyDown={handleKeyDown}
+            margin="dense"
+            variant="outlined"
+          />
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={handleClose}>Cancel</Button>
+          <Button onClick={handleSave} variant="contained" disabled={!label.trim()}>
+            Save
+          </Button>
+        </DialogActions>
+      </Dialog>
+    </>
+  );
+};
 
 interface SortableRowProps {
   lead: Lead;
@@ -156,6 +249,14 @@ export const TableView: React.FC<TableViewProps> = ({
 
   const handleClearSelection = () => {
     setSelectedIds(new Set());
+  };
+
+  const handleUpdateFieldLabel = async (fieldId: string, newLabel: string) => {
+    try {
+      await updateCustomField(fieldId, { label: newLabel });
+    } catch (error) {
+      console.error('Failed to update field label:', error);
+    }
   };
 
   // Handle drag end for reordering
@@ -324,7 +425,7 @@ export const TableView: React.FC<TableViewProps> = ({
             </TableCell>
             {tableCustomFields.map((field) => (
               <TableCell key={field.id}>
-                {field.label}
+                <EditableHeader field={field} onSave={handleUpdateFieldLabel} />
               </TableCell>
             ))}
             <TableCell align="right">Actions</TableCell>

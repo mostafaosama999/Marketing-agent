@@ -183,7 +183,9 @@ export async function importLeadsFromCSV(
             showInTable: true,
             showInCard: true,
             order: 999, // Add to end
-            options: detectedType === 'select' || detectedType === 'radio' ? [] : undefined,
+            ...(detectedType === 'select' || detectedType === 'radio' || detectedType === 'checkbox'
+              ? { options: [] }
+              : {}),
           };
 
           await createCustomField(newField);
