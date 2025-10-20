@@ -84,6 +84,7 @@ export const CRMPage: React.FC = () => {
     data: null,
     duplicateNames: [],
   });
+  const [displayedLeadCount, setDisplayedLeadCount] = useState<number>(0);
 
   // Subscribe to real-time leads updates
   useEffect(() => {
@@ -359,7 +360,7 @@ export const CRMPage: React.FC = () => {
       {/* Lead Count Summary */}
       <Box sx={{ mb: 2, mt: 2 }}>
         <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary' }}>
-          Showing {filteredLeads.length} lead{filteredLeads.length !== 1 ? 's' : ''}
+          Showing {viewMode === 'table' ? displayedLeadCount : filteredLeads.length} lead{(viewMode === 'table' ? displayedLeadCount : filteredLeads.length) !== 1 ? 's' : ''}
         </Typography>
       </Box>
 
@@ -383,6 +384,7 @@ export const CRMPage: React.FC = () => {
           onBulkDelete={handleBulkDelete}
           onBulkStatusChange={handleBulkStatusChange}
           onBulkEdit={handleBulkEdit}
+          onFilteredCountChange={setDisplayedLeadCount}
         />
       )}
 

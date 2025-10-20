@@ -51,6 +51,29 @@ export function useColumnVisibility({ storageKey, defaultColumns }: UseColumnVis
     return defaultColumns;
   });
 
+  // Update columns when defaultColumns change (e.g., custom fields added/removed)
+  useEffect(() => {
+    const currentIds = new Set(columns.map(c => c.id));
+    const defaultIds = new Set(defaultColumns.map(c => c.id));
+
+    // Check if columns have changed
+    const columnsChanged = currentIds.size !== defaultIds.size ||
+      [...defaultIds].some(id => !currentIds.has(id));
+
+    if (columnsChanged) {
+      // Create a map of current columns for quick lookup
+      const currentMap = new Map(columns.map(col => [col.id, col]));
+
+      // Merge with new default columns, preserving visibility settings
+      const updatedColumns = defaultColumns.map(col => ({
+        ...col,
+        visible: currentMap.has(col.id) ? currentMap.get(col.id)!.visible : col.visible,
+      }));
+
+      setColumns(updatedColumns);
+    }
+  }, [defaultColumns]); // Only watch defaultColumns, not columns to avoid infinite loop
+
   // Save to localStorage whenever columns change
   useEffect(() => {
     try {

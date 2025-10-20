@@ -35,10 +35,8 @@ import { ColumnVisibilityMenu } from './ColumnVisibilityMenu';
 import { FilterBuilder } from './FilterBuilder';
 import { FilterPresetManager } from './FilterPresetManager';
 import { ResizeHandle } from './ResizeHandle';
-import { StickyScrollbar } from './StickyScrollbar';
 import { useColumnVisibility } from '../hooks/useColumnVisibility';
 import { useColumnResize } from '../hooks/useColumnResize';
-import { useScrollSync } from '../hooks/useScrollSync';
 import { useFilters } from '../hooks/useFilters';
 import { FilterableField } from '../../../app/types/filters';
 import { updateCustomField } from '../../../services/customFieldsService';
@@ -55,6 +53,7 @@ interface TableViewProps {
   onBulkDelete: (leadIds: string[]) => void;
   onBulkStatusChange: (leadIds: string[], newStatus: string) => void;
   onBulkEdit: (leadIds: string[], updates: Record<string, any>) => void;
+  onFilteredCountChange?: (count: number) => void;
 }
 
 type SortField = 'name' | 'email' | 'company' | 'phone' | 'status' | 'createdAt';
@@ -225,6 +224,7 @@ export const TableView: React.FC<TableViewProps> = ({
   onBulkDelete,
   onBulkStatusChange,
   onBulkEdit,
+  onFilteredCountChange,
 }) => {
   const [sortField, setSortField] = useState<SortField>('createdAt');
   const [confirmDelete, setConfirmDelete] = useState<{ open: boolean; lead: Lead | null }>({
@@ -319,14 +319,17 @@ export const TableView: React.FC<TableViewProps> = ({
   ];
   const { getColumnWidth, handleMouseDown, resizingColumn } = useColumnResize(visibleColumnKeys);
 
-  // Scroll sync for sticky scrollbar
-  const { tableRef, scrollbarRef, hasHorizontalOverflow, scrollbarWidth } = useScrollSync();
-
-
   // Sync orderedLeads with filteredLeads changes
   useEffect(() => {
     setOrderedLeads(filteredLeads);
   }, [filteredLeads]);
+
+  // Notify parent of filtered count changes
+  useEffect(() => {
+    if (onFilteredCountChange) {
+      onFilteredCountChange(filteredLeads.length);
+    }
+  }, [filteredLeads.length, onFilteredCountChange]);
 
   // Clear selection when leads change (e.g., after deletion)
   useEffect(() => {
@@ -653,7 +656,6 @@ export const TableView: React.FC<TableViewProps> = ({
 
     <Box sx={{ position: 'relative', width: '100%' }}>
     <TableContainer
-      ref={tableRef}
       component={Paper}
       sx={{
         maxWidth: '100%',
@@ -661,24 +663,6 @@ export const TableView: React.FC<TableViewProps> = ({
         overflowY: 'auto',
         position: 'relative',
         maxHeight: 'calc(100vh - 450px)',
-        // Style the scrollbar
-        '&::-webkit-scrollbar': {
-          height: 14,
-        },
-        '&::-webkit-scrollbar-track': {
-          backgroundColor: '#f1f1f1',
-          borderRadius: 4,
-        },
-        '&::-webkit-scrollbar-thumb': {
-          backgroundColor: '#888',
-          borderRadius: 4,
-          '&:hover': {
-            backgroundColor: '#555',
-          },
-        },
-        // For Firefox
-        scrollbarWidth: 'auto',
-        scrollbarColor: '#888 #f1f1f1',
       }}
     >
       <Table stickyHeader sx={{ minWidth: 1200 }}>
@@ -776,13 +760,6 @@ export const TableView: React.FC<TableViewProps> = ({
         </TableBody>
       </Table>
     </TableContainer>
-
-    {/* Sticky horizontal scrollbar */}
-    <StickyScrollbar
-      scrollbarRef={scrollbarRef}
-      scrollbarWidth={scrollbarWidth}
-      visible={hasHorizontalOverflow}
-    />
     </Box>
 
     <ConfirmDialog

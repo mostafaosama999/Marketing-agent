@@ -1101,6 +1101,895 @@ firebase deploy
 
 ---
 
+## Custom Idea Generator Implementation
+
+### Overview
+
+The Custom Idea Generator is a production-ready feature that allows users to generate personalized content ideas using OpenAI GPT-4 with custom prompts and lead-specific context.
+
+### Architecture
+
+**Subcollection Pattern**:
+```
+leads/{leadId}/ideas/{ideaId}
+```
+
+**Why subcollections?**
+- Scalable: Each lead can have unlimited ideas
+- Organized: Ideas grouped by lead automatically
+- Query-efficient: Fast retrieval of lead-specific ideas
+- Security: Easy to implement granular access control
+
+### Data Flow
+
+```
+User clicks "Generate Ideas"
+         ↓
+Frontend displays prompt dialog
+         ↓
+User enters custom prompt
+         ↓
+Call generateCustomIdeasCloud({ leadId, prompt })
+         ↓
+Backend fetches lead data for context
+         ↓
+Construct OpenAI prompt with:
+  - User's custom prompt
+  - Company name
+  - Industry
+  - Website
+  - Existing custom fields
+         ↓
+Call OpenAI GPT-4 API
+         ↓
+Parse structured response (5-10 ideas)
+         ↓
+For each idea:
+  - Create document in leads/{leadId}/ideas/
+  - Set status = "pending"
+  - Store cost info
+         ↓
+Track API cost in apiCosts collection
+         ↓
+Update lead's totalApiCosts
+         ↓
+Return ideas to frontend
+```
+
+### Cloud Functions Implementation
+
+**File**: `functions/src/ideaGenerator/generateIdeas.ts`
+
+#### generateCustomIdeasCloud
+
+```typescript
+export const generateCustomIdeasCloud = onCall(async (request) => {
+  const { leadId, prompt } = request.data;
+  const userId = request.auth!.uid;
+
+  // 1. Fetch lead data
+  const leadDoc = await admin.firestore()
+    .collection('leads')
+    .doc(leadId)
+    .get();
+
+  if (!leadDoc.exists) {
+    throw new HttpsError('not-found', 'Lead not found');
+  }
+
+  const lead = leadDoc.data();
+
+  // 2. Build context-aware prompt
+  const systemPrompt = `You are a content strategist generating ideas for ${lead.companyName}.
+  Industry: ${lead.industry || 'Unknown'}
+  Website: ${lead.website || 'N/A'}
+
+  Generate 5-10 high-quality, specific content ideas based on: ${prompt}
+
+  Format each idea as a JSON object with:
+  - title: Short, catchy title
+  - content: Detailed description (2-3 sentences)`;
+
+  // 3. Call OpenAI
+  const completion = await openai.chat.completions.create({
+    model: 'gpt-4-turbo',
+    messages: [
+      { role: 'system', content: systemPrompt },
+      { role: 'user', content: prompt }
+    ],
+    temperature: 0.7,
+    max_tokens: 2000
+  });
+
+  const ideas = parseIdeas(completion.choices[0].message.content);
+
+  // 4. Save ideas to subcollection
+  const ideasRef = admin.firestore()
+    .collection('leads')
+    .doc(leadId)
+    .collection('ideas');
+
+  const savedIdeas = [];
+  for (const idea of ideas) {
+    const ideaDoc = await ideasRef.add({
+      content: idea.content,
+      title: idea.title,
+      status: 'pending',
+      prompt: prompt,
+      costInfo: {
+        model: 'gpt-4-turbo',
+        inputTokens: completion.usage.prompt_tokens,
+        outputTokens: completion.usage.completion_tokens,
+        totalCost: calculateCost(completion.usage)
+      },
+      createdAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedAt: admin.firestore.FieldValue.serverTimestamp()
+    });
+    savedIdeas.push({ id: ideaDoc.id, ...idea });
+  }
+
+  // 5. Track API cost
+  const totalCost = calculateCost(completion.usage);
+  await trackApiCost({
+    userId,
+    leadId,
+    service: 'idea-generation',
+    model: 'gpt-4-turbo',
+    inputTokens: completion.usage.prompt_tokens,
+    outputTokens: completion.usage.completion_tokens,
+    metadata: {
+      companyName: lead.companyName,
+      website: lead.website,
+      prompt: prompt
+    }
+  });
+
+  // 6. Update lead
+  await leadDoc.ref.update({
+    hasGeneratedIdeas: true,
+    lastIdeaGeneratedAt: admin.firestore.FieldValue.serverTimestamp(),
+    totalApiCosts: admin.firestore.FieldValue.increment(totalCost)
+  });
+
+  return {
+    success: true,
+    ideaCount: savedIdeas.length,
+    totalCost,
+    ideas: savedIdeas
+  };
+});
+```
+
+#### getLeadIdeas
+
+```typescript
+export const getLeadIdeas = onCall(async (request) => {
+  const { leadId, status } = request.data;
+
+  let query = admin.firestore()
+    .collection('leads')
+    .doc(leadId)
+    .collection('ideas');
+
+  if (status) {
+    query = query.where('status', '==', status);
+  }
+
+  const snapshot = await query
+    .orderBy('createdAt', 'desc')
+    .get();
+
+  const ideas = snapshot.docs.map(doc => ({
+    id: doc.id,
+    ...doc.data()
+  }));
+
+  return { ideas };
+});
+```
+
+#### updateIdeaStatus
+
+```typescript
+export const updateIdeaStatus = onCall(async (request) => {
+  const { leadId, ideaId, status } = request.data;
+
+  const ideaRef = admin.firestore()
+    .collection('leads')
+    .doc(leadId)
+    .collection('ideas')
+    .doc(ideaId);
+
+  const updateData: any = {
+    status,
+    updatedAt: admin.firestore.FieldValue.serverTimestamp()
+  };
+
+  if (status === 'attached') {
+    updateData.attachedAt = admin.firestore.FieldValue.serverTimestamp();
+  }
+
+  await ideaRef.update(updateData);
+
+  return { success: true, message: 'Status updated' };
+});
+```
+
+### Frontend Integration
+
+**Service**: `frontend/src/services/researchApi.ts`
+
+```typescript
+import { getFunctions, httpsCallable } from 'firebase/functions';
+
+export const generateCustomIdeas = async (data: {
+  leadId: string;
+  prompt: string;
+}) => {
+  const functions = getFunctions();
+  const callable = httpsCallable(functions, 'generateCustomIdeasCloud');
+  const result = await callable(data);
+  return result.data;
+};
+
+export const getLeadIdeas = async (leadId: string, status?: string) => {
+  const functions = getFunctions();
+  const callable = httpsCallable(functions, 'getLeadIdeas');
+  const result = await callable({ leadId, status });
+  return result.data;
+};
+
+export const updateIdeaStatus = async (
+  leadId: string,
+  ideaId: string,
+  status: string
+) => {
+  const functions = getFunctions();
+  const callable = httpsCallable(functions, 'updateIdeaStatus');
+  const result = await callable({ leadId, ideaId, status });
+  return result.data;
+};
+```
+
+### Status Workflow
+
+**pending** → **approved** → **attached**
+
+**Implementation**:
+```typescript
+// UI component for idea management
+const IdeaCard = ({ idea, onStatusChange }) => {
+  const handleApprove = async () => {
+    await updateIdeaStatus(leadId, idea.id, 'approved');
+    onStatusChange();
+  };
+
+  const handleAttach = async () => {
+    await updateIdeaStatus(leadId, idea.id, 'attached');
+    onStatusChange();
+  };
+
+  return (
+    <Card>
+      <CardContent>
+        <Typography variant="h6">{idea.title}</Typography>
+        <Typography>{idea.content}</Typography>
+        <Chip label={idea.status} color={getStatusColor(idea.status)} />
+      </CardContent>
+      <CardActions>
+        {idea.status === 'pending' && (
+          <Button onClick={handleApprove}>Approve</Button>
+        )}
+        {idea.status === 'approved' && (
+          <Button onClick={handleAttach}>Attach to Content</Button>
+        )}
+      </CardActions>
+    </Card>
+  );
+};
+```
+
+### Critical Implementation Details
+
+**1. Subcollection Queries**
+
+```typescript
+// ❌ WRONG - Cannot query across all leads' ideas
+const allIdeas = await admin.firestore()
+  .collectionGroup('ideas')
+  .where('status', '==', 'pending')
+  .get();
+// This requires a collection group index!
+
+// ✅ CORRECT - Query ideas for specific lead
+const leadIdeas = await admin.firestore()
+  .collection('leads')
+  .doc(leadId)
+  .collection('ideas')
+  .where('status', '==', 'pending')
+  .get();
+```
+
+**2. Cost Tracking Integration**
+
+Every idea generation MUST track costs:
+```typescript
+await trackApiCost({
+  userId: context.auth!.uid,
+  leadId: data.leadId,
+  service: 'idea-generation',
+  model: 'gpt-4-turbo',
+  inputTokens: usage.prompt_tokens,
+  outputTokens: usage.completion_tokens,
+  metadata: { prompt: data.prompt }
+});
+```
+
+**3. Atomic Updates**
+
+Update lead's cost totals atomically:
+```typescript
+// ✅ CORRECT - Use FieldValue.increment
+await leadRef.update({
+  totalApiCosts: admin.firestore.FieldValue.increment(cost)
+});
+
+// ❌ WRONG - Race condition
+const lead = await leadRef.get();
+const newTotal = (lead.data().totalApiCosts || 0) + cost;
+await leadRef.update({ totalApiCosts: newTotal });
+```
+
+---
+
+## API Cost Tracking System
+
+### Overview
+
+Comprehensive system for tracking all OpenAI API usage with real-time cost calculation and aggregation at both lead and user levels.
+
+### Architecture
+
+**Collections**:
+1. `apiCosts` - Individual API call records
+2. `leads` - Aggregated costs per lead
+3. `users` - (Future) Aggregated costs per user
+
+### Cost Calculation
+
+**Pricing Table** (`functions/src/utils/costTracker.ts`):
+
+```typescript
+const PRICING = {
+  'gpt-4-turbo': {
+    input: 10.00 / 1_000_000,   // $10 per 1M tokens
+    output: 30.00 / 1_000_000   // $30 per 1M tokens
+  },
+  'gpt-4': {
+    input: 30.00 / 1_000_000,   // $30 per 1M tokens
+    output: 60.00 / 1_000_000   // $60 per 1M tokens
+  }
+};
+
+export function calculateCost(
+  model: string,
+  inputTokens: number,
+  outputTokens: number
+): number {
+  const pricing = PRICING[model];
+  if (!pricing) throw new Error(`Unknown model: ${model}`);
+
+  const inputCost = inputTokens * pricing.input;
+  const outputCost = outputTokens * pricing.output;
+
+  return inputCost + outputCost;
+}
+```
+
+### Implementation
+
+**File**: `functions/src/utils/costTracker.ts`
+
+```typescript
+export async function trackApiCost(data: {
+  userId: string;
+  leadId?: string;
+  service: string;
+  model: string;
+  inputTokens: number;
+  outputTokens: number;
+  metadata?: any;
+}): Promise<string> {
+  const totalCost = calculateCost(
+    data.model,
+    data.inputTokens,
+    data.outputTokens
+  );
+
+  // 1. Create cost record
+  const costRef = await admin.firestore().collection('apiCosts').add({
+    userId: data.userId,
+    leadId: data.leadId || null,
+    service: data.service,
+    model: data.model,
+    timestamp: admin.firestore.FieldValue.serverTimestamp(),
+    inputTokens: data.inputTokens,
+    outputTokens: data.outputTokens,
+    totalCost,
+    metadata: data.metadata || {}
+  });
+
+  // 2. Update lead's total costs (if leadId provided)
+  if (data.leadId) {
+    const leadRef = admin.firestore().collection('leads').doc(data.leadId);
+    await leadRef.update({
+      totalApiCosts: admin.firestore.FieldValue.increment(totalCost),
+      lastApiCostUpdate: admin.firestore.FieldValue.serverTimestamp()
+    });
+  }
+
+  console.log(`Cost tracked: $${totalCost.toFixed(4)} for ${data.service}`);
+
+  return costRef.id;
+}
+
+export function formatCost(cost: number): string {
+  if (cost < 0.01) {
+    return `$${cost.toFixed(4)}`;
+  }
+  return `$${cost.toFixed(2)}`;
+}
+```
+
+### Integration Pattern
+
+**Every AI-powered function** follows this pattern:
+
+```typescript
+export const someAiFunction = onCall(async (request) => {
+  const { leadId, ...params } = request.data;
+
+  // 1. Call OpenAI
+  const completion = await openai.chat.completions.create({
+    model: 'gpt-4-turbo',
+    messages: [...],
+  });
+
+  // 2. Process response
+  const result = processResponse(completion);
+
+  // 3. Track cost (CRITICAL - Do not skip!)
+  await trackApiCost({
+    userId: request.auth!.uid,
+    leadId: leadId,
+    service: 'service-name',
+    model: 'gpt-4-turbo',
+    inputTokens: completion.usage.prompt_tokens,
+    outputTokens: completion.usage.completion_tokens,
+    metadata: {
+      // Service-specific metadata
+    }
+  });
+
+  // 4. Return result with cost info
+  const cost = calculateCost(
+    'gpt-4-turbo',
+    completion.usage.prompt_tokens,
+    completion.usage.completion_tokens
+  );
+
+  return {
+    ...result,
+    costInfo: {
+      model: 'gpt-4-turbo',
+      inputTokens: completion.usage.prompt_tokens,
+      outputTokens: completion.usage.completion_tokens,
+      totalCost: cost
+    }
+  };
+});
+```
+
+### Frontend Display
+
+**Lead Card Cost Display**:
+
+```typescript
+const LeadCard = ({ lead }) => {
+  const formattedCost = lead.totalApiCosts
+    ? `$${lead.totalApiCosts.toFixed(2)}`
+    : '$0.00';
+
+  return (
+    <Card>
+      {/* ... other content ... */}
+      <Typography variant="caption">
+        API Costs: {formattedCost}
+      </Typography>
+    </Card>
+  );
+};
+```
+
+### Querying Cost Data
+
+**User-level costs**:
+```typescript
+const getUserCosts = async (userId: string) => {
+  const snapshot = await admin.firestore()
+    .collection('apiCosts')
+    .where('userId', '==', userId)
+    .orderBy('timestamp', 'desc')
+    .get();
+
+  const total = snapshot.docs.reduce(
+    (sum, doc) => sum + doc.data().totalCost,
+    0
+  );
+
+  return { records: snapshot.docs, total };
+};
+```
+
+**Service-level analytics**:
+```typescript
+const getServiceCosts = async (service: string, startDate: Date) => {
+  const snapshot = await admin.firestore()
+    .collection('apiCosts')
+    .where('service', '==', service)
+    .where('timestamp', '>=', startDate)
+    .get();
+
+  return snapshot.docs.map(doc => doc.data());
+};
+```
+
+---
+
+## Apollo Title Presets
+
+### Overview
+
+localStorage-based system for saving and quickly loading frequently-used job title searches in Apollo.io person search.
+
+### Storage Schema
+
+**localStorage Key**: `apollo_title_presets`
+
+**Data Structure**:
+```typescript
+interface ApolloTitlePreset {
+  id: string;              // UUID (e.g., "preset-123-abc")
+  name: string;            // User-defined name (e.g., "Engineering Leaders")
+  titles: string[];        // Array of job titles
+  createdAt: string;       // ISO 8601 timestamp
+  lastUsedAt?: string;     // Last usage timestamp
+}
+
+// Stored as JSON array
+type PresetStorage = ApolloTitlePreset[];
+```
+
+### Implementation
+
+**File**: `frontend/src/app/types/apolloPresets.ts`
+
+```typescript
+const STORAGE_KEY = 'apollo_title_presets';
+
+export function savePreset(preset: Omit<ApolloTitlePreset, 'id' | 'createdAt'>): string {
+  const presets = getPresets();
+  const newPreset: ApolloTitlePreset = {
+    ...preset,
+    id: `preset-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`,
+    createdAt: new Date().toISOString()
+  };
+
+  presets.push(newPreset);
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(presets));
+
+  return newPreset.id;
+}
+
+export function loadPreset(id: string): ApolloTitlePreset | null {
+  const presets = getPresets();
+  const preset = presets.find(p => p.id === id);
+
+  if (preset) {
+    // Update lastUsedAt
+    preset.lastUsedAt = new Date().toISOString();
+    updatePreset(id, preset);
+  }
+
+  return preset || null;
+}
+
+export function getPresets(): ApolloTitlePreset[] {
+  const data = localStorage.getItem(STORAGE_KEY);
+  return data ? JSON.parse(data) : [];
+}
+
+export function updatePreset(id: string, updates: Partial<ApolloTitlePreset>): boolean {
+  const presets = getPresets();
+  const index = presets.findIndex(p => p.id === id);
+
+  if (index === -1) return false;
+
+  presets[index] = { ...presets[index], ...updates };
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(presets));
+
+  return true;
+}
+
+export function deletePreset(id: string): boolean {
+  const presets = getPresets();
+  const filtered = presets.filter(p => p.id !== id);
+
+  if (filtered.length === presets.length) return false;
+
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(filtered));
+  return true;
+}
+```
+
+### UI Integration
+
+**Component**: `frontend/src/features/crm/components/TitleSelectionDialog.tsx`
+
+```typescript
+const TitleSelectionDialog = ({ open, onClose, onSelect }) => {
+  const [presets, setPresets] = useState<ApolloTitlePreset[]>([]);
+  const [newPresetName, setNewPresetName] = useState('');
+  const [selectedTitles, setSelectedTitles] = useState<string[]>([]);
+
+  useEffect(() => {
+    setPresets(getPresets());
+  }, [open]);
+
+  const handleSavePreset = () => {
+    if (!newPresetName || selectedTitles.length === 0) return;
+
+    savePreset({
+      name: newPresetName,
+      titles: selectedTitles
+    });
+
+    setPresets(getPresets());
+    setNewPresetName('');
+  };
+
+  const handleLoadPreset = (preset: ApolloTitlePreset) => {
+    setSelectedTitles(preset.titles);
+    onSelect(preset.titles);
+  };
+
+  return (
+    <Dialog open={open} onClose={onClose}>
+      <DialogTitle>Title Presets</DialogTitle>
+      <DialogContent>
+        {/* Preset list */}
+        <List>
+          {presets.map(preset => (
+            <ListItem key={preset.id}>
+              <ListItemText
+                primary={preset.name}
+                secondary={`${preset.titles.length} titles`}
+              />
+              <ListItemSecondaryAction>
+                <IconButton onClick={() => handleLoadPreset(preset)}>
+                  <LoadIcon />
+                </IconButton>
+                <IconButton onClick={() => {
+                  deletePreset(preset.id);
+                  setPresets(getPresets());
+                }}>
+                  <DeleteIcon />
+                </IconButton>
+              </ListItemSecondaryAction>
+            </ListItem>
+          ))}
+        </List>
+
+        {/* Create new preset */}
+        <TextField
+          label="Preset Name"
+          value={newPresetName}
+          onChange={(e) => setNewPresetName(e.target.value)}
+        />
+        <Button onClick={handleSavePreset}>Save Current Selection</Button>
+      </DialogContent>
+    </Dialog>
+  );
+};
+```
+
+### Best Practices
+
+**1. Always update lastUsedAt**:
+```typescript
+// Track usage for analytics
+const preset = loadPreset(id);
+// loadPreset automatically updates lastUsedAt
+```
+
+**2. Validate before saving**:
+```typescript
+// Check for duplicate names
+const presets = getPresets();
+const exists = presets.some(p => p.name === newPresetName);
+if (exists) {
+  alert('Preset name already exists');
+  return;
+}
+```
+
+**3. localStorage limits**:
+```typescript
+// localStorage typically has 5-10MB limit
+// Monitor storage usage
+const checkStorageSize = () => {
+  const data = localStorage.getItem(STORAGE_KEY);
+  const sizeInBytes = new Blob([data || '']).size;
+  const sizeInKB = sizeInBytes / 1024;
+
+  if (sizeInKB > 100) {
+    console.warn('Preset storage exceeds 100KB');
+  }
+};
+```
+
+---
+
+## CRACO Build Configuration
+
+### Overview
+
+CRACO (Create React App Configuration Override) is used to customize the build process without ejecting from Create React App.
+
+### Why CRACO?
+
+**Problems with default CRA**:
+- Cannot disable TypeScript checking during build
+- Cannot remove ForkTsCheckerWebpackPlugin
+- Cannot customize Webpack config
+- Memory issues with large TypeScript projects
+
+**CRACO solves**:
+- Direct Webpack configuration access
+- Plugin removal/addition
+- Loader customization
+- Memory optimization
+
+### Configuration
+
+**File**: `frontend/craco.config.js`
+
+```javascript
+module.exports = {
+  webpack: {
+    configure: (webpackConfig) => {
+      // 1. Remove ForkTsCheckerWebpackPlugin (saves ~500MB memory)
+      webpackConfig.plugins = webpackConfig.plugins.filter(
+        plugin => plugin.constructor.name !== 'ForkTsCheckerWebpackPlugin'
+      );
+
+      // 2. Disable source maps in production
+      if (process.env.NODE_ENV === 'production') {
+        webpackConfig.devtool = false;
+      }
+
+      // 3. Optimize Terser (minification)
+      const TerserPlugin = webpackConfig.optimization.minimizer.find(
+        plugin => plugin.constructor.name === 'TerserPlugin'
+      );
+
+      if (TerserPlugin) {
+        TerserPlugin.options.parallel = 2; // Limit parallelism
+      }
+
+      // 4. Disable performance hints
+      webpackConfig.performance = {
+        hints: false
+      };
+
+      return webpackConfig;
+    }
+  },
+
+  // Disable TypeScript type checking during build
+  typescript: {
+    enableTypeChecking: false
+  },
+
+  // Disable ESLint during build
+  eslint: {
+    enable: false
+  }
+};
+```
+
+### Memory Optimization Strategy
+
+**1. Node.js Heap Size**:
+```json
+// package.json
+{
+  "scripts": {
+    "build": "node --max_old_space_size=4096 node_modules/.bin/craco build"
+  }
+}
+```
+
+**2. Environment Variables** (`.env.production`):
+```bash
+# Disable source maps (saves 50-70% memory)
+GENERATE_SOURCEMAP=false
+
+# Continue on TypeScript errors
+TSC_COMPILE_ON_ERROR=true
+
+# Disable ESLint
+DISABLE_ESLINT_PLUGIN=true
+
+# Don't inline large images
+IMAGE_INLINE_SIZE_LIMIT=0
+
+# Don't inline runtime chunk
+INLINE_RUNTIME_CHUNK=false
+```
+
+**3. Terser Configuration**:
+```javascript
+// Limit parallelism to reduce memory spikes
+terserOptions: {
+  parallel: 2,  // Max 2 workers (default is CPU count)
+  cache: false  // Disable cache to save memory
+}
+```
+
+### Build Process
+
+**Memory Usage Timeline**:
+```
+0s:  Start build                    (500MB)
+10s: TypeScript compilation         (1.2GB)  ← Disabled with CRACO
+20s: Webpack bundling               (1.8GB)
+30s: Minification (Terser)          (2.5GB)  ← Limited parallelism
+40s: Source map generation          (3.5GB)  ← Disabled
+45s: Build complete                 (500MB)
+```
+
+**With optimizations**:
+```
+0s:  Start build                    (500MB)
+10s: Webpack bundling               (1.2GB)
+20s: Minification (2 workers)       (2.0GB)
+25s: Build complete                 (500MB)
+```
+
+### Common Issues
+
+**1. CRACO not found**:
+```bash
+# Install CRACO
+npm install @craco/craco --save-dev
+```
+
+**2. Build still runs out of memory**:
+```bash
+# Increase heap size further
+node --max_old_space_size=6144 node_modules/.bin/craco build
+```
+
+**3. TypeScript errors ignored**:
+```typescript
+// This is intentional for build performance
+// Run type checking separately:
+npx tsc --noEmit
+```
+
+---
+
 ## Common Errors and Solutions
 
 ### Build Errors

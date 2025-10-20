@@ -9,14 +9,17 @@ module.exports = {
   },
   webpack: {
     configure: (webpackConfig, { env, paths }) => {
-      // Completely remove all checking plugins - no TypeScript or ESLint checking during build
-      webpackConfig.plugins = webpackConfig.plugins.filter(
-        plugin => {
-          const name = plugin.constructor.name;
-          return name !== 'ForkTsCheckerWebpackPlugin' &&
-                 name !== 'ESLintWebpackPlugin';
+      // Completely remove ForkTsCheckerWebpackPlugin and ESLintWebpackPlugin
+      webpackConfig.plugins = webpackConfig.plugins.filter(plugin => {
+        const pluginName = plugin.constructor.name;
+        // Remove both TypeScript checker and ESLint plugin
+        if (pluginName === 'ForkTsCheckerWebpackPlugin' ||
+            pluginName === 'ESLintWebpackPlugin') {
+          console.log(`Removing ${pluginName} to save memory`);
+          return false;
         }
-      );
+        return true;
+      });
 
       // Disable performance hints to save memory
       webpackConfig.performance = {
@@ -24,6 +27,11 @@ module.exports = {
         maxAssetSize: 512000,
         maxEntrypointSize: 512000
       };
+
+      // Disable module concatenation to reduce memory
+      if (webpackConfig.optimization) {
+        webpackConfig.optimization.concatenateModules = false;
+      }
 
       // Optimize for production builds
       if (env === 'production') {
@@ -34,10 +42,19 @@ module.exports = {
         if (webpackConfig.optimization.minimizer) {
           webpackConfig.optimization.minimizer.forEach(minimizer => {
             if (minimizer.constructor.name === 'TerserPlugin') {
-              minimizer.options.parallel = 2;  // Limit parallel processes
+              minimizer.options.parallel = 1;  // Single process to minimize memory
+              if (minimizer.options.terserOptions) {
+                minimizer.options.terserOptions.compress = {
+                  ...minimizer.options.terserOptions.compress,
+                  passes: 1  // Reduce optimization passes
+                };
+              }
             }
           });
         }
+
+        // Disable stats to save memory
+        webpackConfig.stats = 'errors-only';
       }
 
       return webpackConfig;

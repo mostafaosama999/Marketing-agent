@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Export NODE_OPTIONS for all processes (parent and children)
-export NODE_OPTIONS="--max_old_space_size=4096"
+export NODE_OPTIONS="--max_old_space_size=16384"
 export GENERATE_SOURCEMAP=false
 export SKIP_PREFLIGHT_CHECK=true
 export TSC_COMPILE_ON_ERROR=true

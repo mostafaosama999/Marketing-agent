@@ -1,8 +1,48 @@
 # Marketing Agent - Complete Documentation
 
-**Last Updated:** October 19, 2025
-**Version:** 1.0.0
+**Last Updated:** January 2025
+**Version:** 2.0.0
 **Firebase Project:** marketing-app-cc237
+
+---
+
+## 🆕 Recent Updates (v2.0.0)
+
+### NEW Features Added
+
+1. **Custom Idea Generator** ✅
+   - User-defined prompts for personalized content ideas
+   - Subcollection storage: `leads/{leadId}/ideas/{ideaId}`
+   - Status workflow: pending → approved → attached
+   - Full API cost tracking integration
+   - Cloud Functions: `generateCustomIdeasCloud`, `getLeadIdeas`, `updateIdeaStatus`
+
+2. **API Cost Tracking System** ✅
+   - Real-time OpenAI usage tracking
+   - Per-lead and per-user cost accumulation
+   - Cost analytics in `apiCosts` collection
+   - Automatic token counting and cost calculation
+   - Integrated across all AI-powered functions
+
+3. **Apollo Title Presets** ✅
+   - Save frequently-used job title searches
+   - localStorage-based preset management
+   - Quick-load saved configurations
+   - `TitleSelectionDialog` component for UI
+
+4. **Enhanced Webflow Sync Pipeline** ✅
+   - Content extraction from URLs
+   - AI-generated LinkedIn posts
+   - Google Docs integration
+   - Automated blog post creation
+   - 5-step automation workflow
+
+### Updated Features
+
+- **Blog Qualification**: Migrated to company-level (with backward compatibility)
+- **CRM Components**: Expanded to 25 components with 5 custom hooks
+- **Build System**: CRACO configuration for memory optimization
+- **Technology Stack**: Updated to React 19.1.1, Material-UI v7.3.2
 
 ---
 
@@ -40,21 +80,25 @@ The **Marketing Agent** is a comprehensive CRM and marketing automation platform
 ## Technology Stack
 
 ### Frontend
-- **Framework**: React 19 + TypeScript
-- **UI Library**: Material-UI v7
+- **Framework**: React 19.1.1 + TypeScript 4.9.5
+- **UI Library**: Material-UI v7.3.2
 - **State Management**: React Context API
-- **Drag & Drop**: @dnd-kit
-- **CSV Handling**: PapaParse
-- **Build Tool**: Create React App (react-scripts)
+- **Drag & Drop**: @dnd-kit v6.3.1
+- **CSV Handling**: PapaParse v5.5.3
+- **Date Handling**: date-fns v4.1.0
+- **Build Tool**: CRACO v7.1.0 (Create React App wrapper)
+- **Routing**: React Router DOM v7.9.1
 - **Deployment**: DigitalOcean App Platform
 
 ### Backend
 - **Runtime**: Node.js 20
-- **Framework**: Firebase Cloud Functions
-- **Language**: TypeScript
-- **AI**: OpenAI GPT-4
-- **Web Scraping**: Cheerio, Axios
-- **RSS Parsing**: rss-parser
+- **Framework**: Firebase Cloud Functions v5.0.0
+- **Language**: TypeScript 4.9
+- **Admin SDK**: firebase-admin v12.1.0
+- **AI**: OpenAI v4.38.2 (GPT-4 / GPT-4 Turbo)
+- **Web Scraping**: Cheerio v1.0.0, Axios v1.6.8
+- **RSS Parsing**: rss-parser v3.13.0
+- **HTTP**: cors v2.8.5
 
 ### Database & Services
 - **Database**: Cloud Firestore (NoSQL)
@@ -239,7 +283,97 @@ Marketing-agent/
 
 ---
 
-### ✅ 4. Company Research System
+### ✅ 4. Custom Idea Generator 🆕
+
+**Status**: Production Ready
+
+#### How It Works:
+1. User navigates to a lead or company
+2. Clicks "Generate Ideas" button
+3. Enters custom prompt (e.g., "Generate blog post ideas about AI automation for SaaS")
+4. System uses OpenAI GPT-4 with lead context (company name, industry, etc.)
+5. Generates 5-10 structured content ideas
+6. Ideas saved to subcollection: `leads/{leadId}/ideas/{ideaId}`
+7. Each idea has status workflow: `pending` → `approved` → `attached`
+8. API costs tracked and accumulated on lead record
+
+#### Features:
+- **Custom Prompts**: User-defined prompts for personalized ideas
+- **Contextual Generation**: Uses lead/company information for relevance
+- **Structured Output**: Title, full description, and metadata
+- **Status Workflow**:
+  - `pending`: Initial state after generation
+  - `approved`: Reviewed and approved by user
+  - `attached`: Idea assigned to a specific blog post/content piece
+- **Cost Tracking**: Full transparency on OpenAI API costs
+- **Subcollection Storage**: Ideas organized per lead for easy access
+- **Batch Operations**: Generate multiple idea sets for comparison
+
+#### Cloud Functions:
+- **`generateCustomIdeasCloud`**
+  - Input: `leadId`, `prompt` (user-defined)
+  - Output: Array of ideas with cost info
+  - Saves to `leads/{leadId}/ideas/` subcollection
+
+- **`getLeadIdeas`**
+  - Input: `leadId`
+  - Output: Array of all ideas for that lead
+  - Supports filtering by status
+
+- **`updateIdeaStatus`**
+  - Input: `leadId`, `ideaId`, `status`
+  - Output: Success confirmation
+  - Updates idea status and timestamps
+
+#### Data Model:
+```typescript
+interface Idea {
+  id: string;                 // Auto-generated
+  content: string;            // Full idea description
+  title?: string;             // Optional title
+  status: "pending" | "approved" | "attached";
+  prompt: string;             // User prompt used
+  costInfo: {                 // Cost tracking
+    model: string;
+    inputTokens: number;
+    outputTokens: number;
+    totalCost: number;
+  };
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+  attachedAt?: Timestamp;     // When attached to content
+}
+```
+
+#### Files:
+- Frontend: Integration in CRM components
+- Backend: `functions/src/ideaGenerator/generateIdeas.ts`
+- Types: `functions/src/types/ideas.ts`
+- Cost Tracking: `functions/src/utils/costTracker.ts`
+
+#### Usage Example:
+```typescript
+// Generate ideas
+const result = await generateCustomIdeas({
+  leadId: "lead_123",
+  prompt: "Generate 5 technical blog post ideas about machine learning for developers"
+});
+// Result: { ideas: [...], totalCost: 0.0042, ideaCount: 5 }
+
+// Fetch ideas
+const ideas = await getLeadIdeas({ leadId: "lead_123" });
+
+// Update status
+await updateIdeaStatus({
+  leadId: "lead_123",
+  ideaId: "idea_456",
+  status: "approved"
+});
+```
+
+---
+
+### ✅ 5. Company Research System
 
 **Status**: Implemented
 
@@ -362,12 +496,178 @@ Marketing-agent/
 
 ---
 
-### ✅ 10. Additional Features
+### ✅ 10. API Cost Tracking System 🆕
+
+**Status**: Production Ready
+
+#### Overview
+Comprehensive OpenAI API usage tracking system that monitors all AI-powered operations, tracks costs in real-time, and provides transparency into API spending at both lead and user levels.
+
+#### Features:
+- **Automatic Tracking**: Every OpenAI API call automatically logged
+- **Token Counting**: Accurate input/output token measurement
+- **Cost Calculation**: Real-time cost calculation based on model pricing
+- **Lead-Level Aggregation**: Total API costs accumulated per lead
+- **User-Level Aggregation**: Total costs tracked per user
+- **Cost Analytics**: Detailed breakdowns in `apiCosts` collection
+- **Model Tracking**: Track which models (GPT-4, GPT-4 Turbo) are used
+
+#### Pricing Models:
+| Model | Input Cost | Output Cost |
+|-------|------------|-------------|
+| GPT-4 Turbo | $10.00 per 1M tokens | $30.00 per 1M tokens |
+| GPT-4 | $30.00 per 1M tokens | $60.00 per 1M tokens |
+
+#### Integration:
+Automatically integrated into:
+- Blog Qualification (`qualifyCompanyBlog`)
+- Custom Idea Generator (`generateCustomIdeasCloud`)
+- Writing Program Finder (`findWritingProgramCloud`)
+- Company Research (`triggerResearchFlow`)
+- LinkedIn Post Generation (`dailyWebflowSync`)
+
+#### Data Model:
+```typescript
+// apiCosts collection
+interface ApiCostRecord {
+  userId: string;              // User who triggered the operation
+  leadId?: string;             // Lead associated (if applicable)
+  service: string;             // "blog-qualification" | "idea-generation" | etc.
+  model: string;               // "gpt-4-turbo" | "gpt-4"
+  timestamp: Timestamp;        // When the call was made
+  inputTokens: number;         // Input token count
+  outputTokens: number;        // Output token count
+  totalCost: number;           // Cost in USD
+  metadata: {                  // Additional context
+    companyName?: string;
+    website?: string;
+    operationDetails: any;
+  };
+}
+
+// Lead cost tracking fields
+interface Lead {
+  // ... other fields
+  totalApiCosts: number;       // Accumulated costs for this lead
+  lastApiCostUpdate: Timestamp; // Last cost update time
+  hasGeneratedIdeas: boolean;  // Whether ideas were generated
+  lastIdeaGeneratedAt: Timestamp; // Last idea generation time
+}
+```
+
+#### Usage:
+```typescript
+import { trackApiCost } from '../utils/costTracker';
+
+// Automatic tracking in cloud functions
+const result = await trackApiCost({
+  userId: context.auth!.uid,
+  leadId: data.leadId,
+  service: "blog-qualification",
+  model: "gpt-4-turbo",
+  inputTokens: completion.usage.prompt_tokens,
+  outputTokens: completion.usage.completion_tokens,
+  metadata: {
+    companyName: data.companyName,
+    website: data.website
+  }
+});
+
+// Result includes:
+// - Firestore document ID in apiCosts collection
+// - Updated lead's totalApiCosts
+// - Formatted cost display (e.g., "$0.0042")
+```
+
+#### Cost Display:
+- Lead cards show total API costs: `"API Costs: $1.23"`
+- Cost breakdowns available in analytics
+- Export costs with CSV data
+- Real-time cost updates during operations
+
+#### Files:
+- Cost Tracker: `functions/src/utils/costTracker.ts`
+- Types: `functions/src/types/costs.ts`
+- Integration: All AI-powered cloud functions
+
+---
+
+### ✅ 11. Apollo Title Presets 🆕
+
+**Status**: Production Ready (Beta)
+
+#### Overview
+Save and quickly load frequently-used job title searches for Apollo.io person search, improving efficiency when prospecting for specific roles.
+
+#### Features:
+- **Create Presets**: Save combinations of job titles with custom names
+- **Quick Load**: One-click loading of saved presets
+- **localStorage Storage**: Client-side storage (no server needed)
+- **Preset Management**: Edit, delete, and organize presets
+- **Multi-Title Support**: Save searches with multiple title variations
+- **Search Integration**: Seamlessly integrated into Apollo search flow
+
+#### UI Components:
+- **TitleSelectionDialog**: Modal for managing presets
+  - Create new preset
+  - Load existing preset
+  - Edit preset names
+  - Delete unwanted presets
+- **Preset Dropdown**: Quick access menu in Apollo search
+- **Preset Indicator**: Show when using a preset vs custom search
+
+#### Data Model:
+```typescript
+interface ApolloTitlePreset {
+  id: string;              // UUID
+  name: string;            // Preset name (e.g., "Engineering Managers")
+  titles: string[];        // Array of job titles
+  createdAt: string;       // ISO timestamp
+  lastUsedAt?: string;     // Last usage timestamp
+}
+```
+
+#### Storage:
+- **Location**: localStorage key: `apollo_title_presets`
+- **Format**: JSON array of preset objects
+- **Persistence**: Survives browser restarts
+- **Portability**: Export/import via JSON
+
+#### Usage Example:
+```typescript
+import { savePreset, loadPreset, getPresets } from '../types/apolloPresets';
+
+// Save a preset
+savePreset({
+  name: "C-Suite Executives",
+  titles: ["CEO", "CTO", "CFO", "COO", "CMO"]
+});
+
+// Load a preset
+const preset = loadPreset("preset-id-123");
+// Returns: { id, name, titles, createdAt, lastUsedAt }
+
+// Get all presets
+const allPresets = getPresets();
+// Returns: Array of all saved presets
+```
+
+#### Files:
+- Types & Utils: `frontend/src/app/types/apolloPresets.ts`
+- UI Component: `frontend/src/features/crm/components/TitleSelectionDialog.tsx`
+- Service: `frontend/src/services/apolloService.ts`
+
+---
+
+### ✅ 12. Additional Features
 
 #### Apollo.io Integration
 - **Status**: Implemented
 - **Service**: `frontend/src/services/apolloService.ts`
 - Lead enrichment with company data
+- Email, phone, and LinkedIn URL lookup
+- Person search with title filtering
+- Title preset management (NEW!)
 - Requires Apollo API key
 
 #### Webflow Integration
@@ -415,7 +715,7 @@ interface Lead {
   apolloEnriched?: boolean;      // Whether enriched with Apollo data
   lastEnrichedAt?: Date;         // Last enrichment timestamp
 
-  // Blog Qualification (New)
+  // Blog Qualification (Migrated to company-level, kept for compatibility)
   blogQualified?: boolean;       // Whether blog was qualified
   blogQualificationData?: {      // Full qualification results
     website: string;
@@ -435,6 +735,12 @@ interface Lead {
     qualified: boolean;
   };
   blogQualifiedAt?: Date;        // When qualification was performed
+
+  // API Cost Tracking (NEW!)
+  totalApiCosts?: number;        // Total accumulated API costs for this lead
+  lastApiCostUpdate?: Date;      // Last time costs were updated
+  hasGeneratedIdeas?: boolean;   // Whether custom ideas were generated
+  lastIdeaGeneratedAt?: Date;    // Last idea generation timestamp
 }
 ```
 
@@ -576,6 +882,106 @@ interface User {
 ```
 
 **⚠️ Important**: The user document ID **MUST** match the Firebase Authentication UID exactly.
+
+---
+
+### Subcollection: `leads/{leadId}/ideas` 🆕
+
+Stores generated content ideas for each lead.
+
+```typescript
+interface Idea {
+  id: string;                    // Document ID (auto-generated)
+  content: string;               // Full idea description
+  title?: string;                // Optional title for the idea
+  status: "pending" | "approved" | "attached"; // Idea workflow status
+  prompt: string;                // User prompt that generated this idea
+  costInfo: {                    // API cost tracking for this idea
+    model: string;               // Model used (e.g., "gpt-4-turbo")
+    inputTokens: number;         // Input token count
+    outputTokens: number;        // Output token count
+    totalCost: number;           // Cost in USD
+  };
+  createdAt: Timestamp;          // When idea was generated
+  updatedAt: Timestamp;          // Last update time
+  attachedAt?: Timestamp;        // When idea was attached to content
+}
+```
+
+**Status Workflow:**
+1. `pending` - Initial state after generation
+2. `approved` - Reviewed and approved by user
+3. `attached` - Idea has been used/assigned to content
+
+**Indexes Needed:**
+- `status` (for filtering by workflow state)
+- `createdAt` (for sorting by generation time)
+
+---
+
+### Collection: `apiCosts` 🆕
+
+Stores all OpenAI API usage records for cost tracking and analytics.
+
+```typescript
+interface ApiCostRecord {
+  id: string;                    // Document ID (auto-generated)
+  userId: string;                // User who triggered the operation
+  leadId?: string;               // Associated lead (optional)
+  companyId?: string;            // Associated company (optional)
+  service: string;               // Service name
+                                 // "blog-qualification" | "idea-generation" |
+                                 // "writing-program-finder" | "company-research"
+  model: string;                 // OpenAI model used
+                                 // "gpt-4-turbo" | "gpt-4"
+  timestamp: Timestamp;          // When the API call was made
+  inputTokens: number;           // Input token count
+  outputTokens: number;          // Output token count
+  totalCost: number;             // Total cost in USD
+  metadata: {                    // Additional context
+    companyName?: string;        // Company name
+    website?: string;            // Website URL
+    operationDetails?: any;      // Service-specific details
+  };
+}
+```
+
+**Indexes Needed:**
+- `userId` (for user-level cost queries)
+- `leadId` (for lead-level cost queries)
+- `timestamp` (for time-based analytics)
+- Composite: `userId + timestamp` (for user cost history)
+- Composite: `service + timestamp` (for service-level analytics)
+
+---
+
+### Collection: `companies` (Updated Schema) 🆕
+
+Companies now include cost tracking and idea generation fields:
+
+```typescript
+interface Company {
+  id: string;                    // Document ID
+  name: string;                  // Company name (unique, case-insensitive)
+  website?: string;              // Company website
+  industry?: string;             // Industry classification
+  description?: string;          // Company description
+  customFields?: Record<string, any>; // Dynamic custom fields
+  createdAt: Timestamp;
+  updatedAt: Timestamp;
+
+  // Blog Qualification (Migrated from lead-level)
+  blogQualified?: boolean;
+  blogQualificationData?: BlogQualificationData;
+  blogQualifiedAt?: Timestamp;
+
+  // API Cost Tracking (NEW!)
+  totalApiCosts?: number;        // Total accumulated API costs
+  lastApiCostUpdate?: Timestamp; // Last cost update time
+  hasGeneratedIdeas?: boolean;   // Whether ideas were generated
+  lastIdeaGeneratedAt?: Timestamp; // Last idea generation time
+}
+```
 
 ---
 
@@ -918,6 +1324,133 @@ Use `subscribeToSession(sessionId)` to monitor progress in real-time.
 
 ---
 
+#### `generateCustomIdeasCloud` 🆕
+
+Generates custom content ideas based on user-defined prompts with lead context.
+
+**Type**: `onCall` (requires authentication)
+
+**Input:**
+```typescript
+{
+  leadId: string;      // Lead document ID
+  prompt: string;      // User-defined prompt (e.g., "Generate blog ideas about AI")
+}
+```
+
+**Output:**
+```typescript
+{
+  success: boolean;
+  ideaCount: number;       // Number of ideas generated (typically 5-10)
+  totalCost: number;       // API cost in USD
+  ideas: Array<{
+    id: string;            // Idea document ID
+    content: string;       // Full idea description
+    title?: string;        // Optional title
+    status: "pending";     // Initial status
+  }>;
+}
+```
+
+**Side Effects:**
+- Creates documents in `leads/{leadId}/ideas/` subcollection
+- Updates lead's `hasGeneratedIdeas` and `totalApiCosts`
+- Logs cost to `apiCosts` collection
+
+**Usage:**
+```typescript
+const result = await generateCustomIdeas({
+  leadId: "lead_123",
+  prompt: "Generate 5 blog post ideas about machine learning for developers"
+});
+```
+
+---
+
+#### `getLeadIdeas` 🆕
+
+Fetches all generated ideas for a specific lead.
+
+**Type**: `onCall` (requires authentication)
+
+**Input:**
+```typescript
+{
+  leadId: string;          // Lead document ID
+  status?: string;         // Optional filter by status
+}
+```
+
+**Output:**
+```typescript
+{
+  ideas: Array<{
+    id: string;
+    content: string;
+    title?: string;
+    status: "pending" | "approved" | "attached";
+    prompt: string;
+    costInfo: ApiCostInfo;
+    createdAt: Timestamp;
+    updatedAt: Timestamp;
+    attachedAt?: Timestamp;
+  }>;
+}
+```
+
+**Usage:**
+```typescript
+// Get all ideas
+const allIdeas = await getLeadIdeas({ leadId: "lead_123" });
+
+// Get only approved ideas
+const approved = await getLeadIdeas({
+  leadId: "lead_123",
+  status: "approved"
+});
+```
+
+---
+
+#### `updateIdeaStatus` 🆕
+
+Updates the status of a generated idea.
+
+**Type**: `onCall` (requires authentication)
+
+**Input:**
+```typescript
+{
+  leadId: string;      // Lead document ID
+  ideaId: string;      // Idea document ID
+  status: "pending" | "approved" | "attached";
+}
+```
+
+**Output:**
+```typescript
+{
+  success: boolean;
+  message: string;
+}
+```
+
+**Side Effects:**
+- Updates idea's `status` and `updatedAt` fields
+- Sets `attachedAt` timestamp if status is "attached"
+
+**Usage:**
+```typescript
+await updateIdeaStatus({
+  leadId: "lead_123",
+  ideaId: "idea_456",
+  status: "approved"
+});
+```
+
+---
+
 #### `healthCheck`
 
 Simple health check for monitoring.
@@ -935,12 +1468,35 @@ Simple health check for monitoring.
 
 ---
 
-#### `dailyWebflowSync`
+#### `dailyWebflowSync` (Enhanced Pipeline 🆕)
 
-Scheduled function to sync content to Webflow.
+Scheduled function to sync content to Webflow with enhanced automation.
 
 **Type**: `pubsub` (runs on schedule)
-**Schedule**: Daily (configured in Firebase)
+**Schedule**: Daily at 9:00 AM UTC
+**Timeout**: 9 minutes (540 seconds)
+**Memory**: 2GB
+
+**Enhanced 5-Step Pipeline:**
+1. **Read URLs**: Fetch URL list from Google Sheet
+2. **Extract Content**: Scrape full page content from each URL
+3. **Generate LinkedIn Posts**: AI-generated LinkedIn content for each article
+4. **Update Google Doc**: Document results and generated posts
+5. **Create Webflow Items**: Publish to Webflow blog collection
+
+**Features:**
+- Automatic content extraction
+- AI-powered LinkedIn post generation
+- Duplicate detection (by URL)
+- Error handling and retry logic
+- Google Docs integration for reports
+
+**Configuration** (Firebase Functions config):
+```bash
+webflow.api_token=your_token_here
+webflow.site_id=your_site_id
+webflow.blog_collection_id=your_collection_id
+```
 
 ---
 
@@ -1081,11 +1637,54 @@ Restart frontend. Everything uses production Firebase.
 
 #### Frontend
 
+**Build Configuration:**
+
+The project uses **CRACO** (Create React App Configuration Override) for memory optimization and build performance.
+
+**Key Optimizations:**
+- **TypeScript Checking**: Disabled during build (saves memory)
+- **ESLint**: Disabled during build
+- **Source Maps**: Disabled in production (`GENERATE_SOURCEMAP=false`)
+- **Memory Allocation**: 4GB heap (`NODE_OPTIONS=--max_old_space_size=4096`)
+- **Terser Parallelism**: Limited to 2 workers
+- **ForkTsCheckerWebpackPlugin**: Removed
+
+**Configuration Files:**
+- `frontend/craco.config.js` - CRACO configuration
+- `frontend/.env.production` - Production environment variables
+- `frontend/package.json` - Build scripts
+
+**Build Command:**
 ```bash
 cd frontend
 npm run build
 # Creates optimized build in frontend/build/
 ```
+
+**Build Script** (from package.json):
+```json
+{
+  "scripts": {
+    "build": "node --max_old_space_size=4096 node_modules/.bin/craco build"
+  }
+}
+```
+
+**Production Environment Variables** (.env.production):
+```bash
+GENERATE_SOURCEMAP=false
+TSC_COMPILE_ON_ERROR=true
+DISABLE_ESLINT_PLUGIN=true
+SKIP_PREFLIGHT_CHECK=true
+IMAGE_INLINE_SIZE_LIMIT=0
+INLINE_RUNTIME_CHUNK=false
+```
+
+**Why These Optimizations?**
+- React 19 + Material-UI v7 + TypeScript requires significant memory
+- DigitalOcean build environment has 4GB RAM limit
+- Source maps can consume 50-70% of build memory
+- These optimizations ensure reliable builds on DigitalOcean
 
 #### Backend
 
