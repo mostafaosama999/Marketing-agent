@@ -1,4 +1,5 @@
 import * as functions from "firebase-functions";
+import {FieldValue} from "firebase-admin/firestore";
 import {
   readSheetData,
   extractSheetId,
@@ -69,7 +70,7 @@ async function performReportGeneration(triggerType: 'scheduled' | 'manual' = 'sc
 
     await db.collection("reports").add({
       type: "marketing_distribution",
-      timestamp: admin.firestore.FieldValue.serverTimestamp(),
+      timestamp: FieldValue.serverTimestamp(),
       triggerType,
       programDistribution,
       ideasDistribution,

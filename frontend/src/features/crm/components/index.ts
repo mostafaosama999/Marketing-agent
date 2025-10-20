@@ -13,3 +13,10 @@ export { BulkActionsToolbar } from './BulkActionsToolbar';
 export { BulkEditDialog } from './BulkEditDialog';
 export { TitleSelectionDialog } from './TitleSelectionDialog';
 export { LeadSearchResultsDialog } from './LeadSearchResultsDialog';
+export { ResizeHandle } from './ResizeHandle';
+export { StickyScrollbar } from './StickyScrollbar';
+// Company components
+export { CompanyDialog } from './CompanyDialog';
+export { CompanyCard } from './CompanyCard';
+export { CompanyTableView } from './CompanyTableView';
+export { CompanyFilterBar } from './CompanyFilterBar';

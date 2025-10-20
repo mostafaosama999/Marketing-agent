@@ -17,6 +17,11 @@ service cloud.firestore {
       allow read, write: if true;
     }
 
+    // CRM companies - allow all operations for development
+    match /companies/{companyId} {
+      allow read, write: if true;
+    }
+
     // CRM pipeline configuration - allow all operations for development
     match /pipeline_config/{configId} {
       allow read, write: if true;

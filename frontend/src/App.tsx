@@ -9,6 +9,7 @@ import { PipelinePage } from './features/pipeline';
 import { TasksPage } from './features/tasks';
 import { AnalyticsPage } from './features/analytics';
 import { CRMPage } from './features/crm';
+import { CompaniesManagementPage } from './features/crm/pages/CompaniesManagementPage';
 import { AuthProvider } from './contexts/AuthContext';
 import { ProtectedRoute } from './components/auth';
 
@@ -21,7 +22,8 @@ function App() {
             <AppLayout>
               <Routes>
                 <Route path="/" element={<DashboardPage />} />
-                <Route path="/companies" element={<CompaniesPage />} />
+                <Route path="/companies-research" element={<CompaniesPage />} />
+                <Route path="/companies" element={<CompaniesManagementPage />} />
                 <Route path="/ideas" element={<IdeasPage />} />
                 <Route path="/pipeline" element={<PipelinePage />} />
                 <Route path="/tasks" element={<TasksPage />} />

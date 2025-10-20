@@ -1,4 +1,5 @@
 import * as admin from "firebase-admin";
+import {FieldValue} from "firebase-admin/firestore";
 
 /**
  * OpenAI API Pricing (as of 2025)
@@ -40,7 +41,7 @@ export interface ApiCostRecord {
   leadId?: string;
   service: "blog-qualification" | "writing-program-finder" | "idea-generation";
   model: string;
-  timestamp: admin.firestore.FieldValue;
+  timestamp: FieldValue;
   inputTokens: number;
   outputTokens: number;
   totalCost: number;
@@ -91,7 +92,6 @@ export async function logApiCost(
 ): Promise<void> {
   try {
     const db = admin.firestore();
-    const FieldValue = admin.firestore.FieldValue;
 
     // Create cost record
     const costRecord: ApiCostRecord = {

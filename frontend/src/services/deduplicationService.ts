@@ -1,4 +1,4 @@
-import { Lead } from '../app/types/crm';
+import { Lead, Company } from '../app/types/crm';
 
 /**
  * Deduplication configuration
@@ -9,7 +9,7 @@ export interface DeduplicationConfig {
 }
 
 const DEFAULT_CONFIG: DeduplicationConfig = {
-  keys: ['name'],
+  keys: ['name', 'company'], // Updated: check name + company combination
   caseSensitive: false,
 };
 
@@ -97,4 +97,34 @@ export function saveDeduplicationConfig(config: DeduplicationConfig): void {
   } catch (error) {
     console.error('Error saving deduplication config:', error);
   }
+}
+
+/**
+ * Company Deduplication Functions
+ */
+
+/**
+ * Check if a company name already exists (case-insensitive)
+ */
+export function isCompanyNameDuplicate(
+  companyName: string,
+  existingCompanies: Company[]
+): boolean {
+  const normalizedName = companyName.trim().toLowerCase();
+  return existingCompanies.some(
+    company => company.name.toLowerCase() === normalizedName
+  );
+}
+
+/**
+ * Find duplicate companies by name (case-insensitive)
+ */
+export function findCompanyDuplicates(
+  companyName: string,
+  existingCompanies: Company[]
+): Company[] {
+  const normalizedName = companyName.trim().toLowerCase();
+  return existingCompanies.filter(
+    company => company.name.toLowerCase() === normalizedName
+  );
 }

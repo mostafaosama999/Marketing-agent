@@ -1,5 +1,6 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
+import {FieldValue} from "firebase-admin/firestore";
 import {qualifyCompany} from "../utils/blogQualifierService";
 import {CompanyInput, BlogQualificationResult} from "../types";
 import {logApiCost} from "../utils/costTracker";
@@ -84,8 +85,8 @@ export const qualifyCompanyBlog = functions.https.onCall(
       await leadRef.update({
         blogQualified: result.qualified,
         blogQualificationData: result,
-        blogQualifiedAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        blogQualifiedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       });
 
       console.log(`Saved qualification result to lead ${leadId}`);

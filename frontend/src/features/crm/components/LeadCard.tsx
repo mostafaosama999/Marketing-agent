@@ -14,9 +14,10 @@ interface LeadCardProps {
   customFields: CustomField[];
   onEdit: (lead: Lead) => void;
   isDragging?: boolean;
+  visibleFieldIds?: Set<string>;
 }
 
-export const LeadCard: React.FC<LeadCardProps> = ({ lead, customFields, onEdit, isDragging = false }) => {
+export const LeadCard: React.FC<LeadCardProps> = ({ lead, customFields, onEdit, isDragging = false, visibleFieldIds }) => {
   // State for blog qualification
   const [qualifyDialogOpen, setQualifyDialogOpen] = useState(false);
   const [website, setWebsite] = useState('');
@@ -49,11 +50,17 @@ export const LeadCard: React.FC<LeadCardProps> = ({ lead, customFields, onEdit, 
   const [approvedIdeaIds, setApprovedIdeaIds] = useState<Set<string>>(new Set());
   const [attachedIdeaId, setAttachedIdeaId] = useState<string | null>(null);
 
+  // Helper function to check if a field should be visible
+  const isFieldVisible = (fieldId: string): boolean => {
+    // If visibleFieldIds is provided, use it; otherwise show all fields (backward compatibility)
+    if (!visibleFieldIds) return true;
+    return visibleFieldIds.has(fieldId);
+  };
+
   // Filter custom fields that should be shown on cards
   const cardCustomFields = customFields
-    .filter(f => f.showInCard && f.visible)
-    .sort((a, b) => a.order - b.order)
-    .slice(0, 3); // Limit to 3 fields to avoid clutter
+    .filter(f => f.visible && isFieldVisible(`custom_${f.name}`))
+    .sort((a, b) => a.order - b.order);
 
   const formatCustomFieldValue = (field: CustomField, value: any) => {
     if (!value) return null;
@@ -442,7 +449,6 @@ export const LeadCard: React.FC<LeadCardProps> = ({ lead, customFields, onEdit, 
     <Card
       sx={{
         mb: 2,
-        cursor: 'grab',
         opacity: isDragging ? 0.5 : 1,
         '&:hover': {
           boxShadow: 3,
@@ -452,10 +458,12 @@ export const LeadCard: React.FC<LeadCardProps> = ({ lead, customFields, onEdit, 
       <CardContent>
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
           <Box sx={{ flex: 1 }}>
+            {/* Name is always visible (required field) */}
             <Typography variant="h6" sx={{ fontSize: '1rem', fontWeight: 600 }}>
               {lead.name}
             </Typography>
-            {lead.totalApiCosts !== undefined && lead.totalApiCosts > 0 && (
+            {/* API Costs - respect visibility settings */}
+            {isFieldVisible('api_costs') && lead.totalApiCosts !== undefined && lead.totalApiCosts > 0 && (
               <Chip
                 label={`API: $${lead.totalApiCosts < 0.01 ? lead.totalApiCosts.toFixed(4) : lead.totalApiCosts.toFixed(2)}`}
                 size="small"
@@ -464,11 +472,12 @@ export const LeadCard: React.FC<LeadCardProps> = ({ lead, customFields, onEdit, 
               />
             )}
           </Box>
-          <IconButton size="small" onClick={() => onEdit(lead)}>
+          <IconButton size="small" onClick={() => onEdit(lead)} onMouseDown={(e) => e.stopPropagation()}>
             <EditIcon fontSize="small" />
           </IconButton>
         </Box>
 
+        {/* Company is always visible (required field) */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
           <BusinessIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
           <Typography variant="body2" color="text.secondary">
@@ -476,15 +485,19 @@ export const LeadCard: React.FC<LeadCardProps> = ({ lead, customFields, onEdit, 
           </Typography>
         </Box>
 
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
-          <EmailIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
-          <Typography variant="body2" color="text.secondary" sx={{ wordBreak: 'break-word' }}>
-            {lead.email}
-          </Typography>
-        </Box>
+        {/* Email - respect visibility settings */}
+        {isFieldVisible('email') && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
+            <EmailIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
+            <Typography variant="body2" color="text.secondary" sx={{ wordBreak: 'break-word' }}>
+              {lead.email}
+            </Typography>
+          </Box>
+        )}
 
-        {lead.phone && (
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+        {/* Phone - respect visibility settings */}
+        {isFieldVisible('phone') && lead.phone && (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, mb: 1 }}>
             <PhoneIcon sx={{ fontSize: 16, color: 'text.secondary' }} />
             <Typography variant="body2" color="text.secondary">
               {lead.phone}
@@ -524,6 +537,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({ lead, customFields, onEdit, 
             variant={lead.blogQualified ? "contained" : "outlined"}
             size="small"
             onClick={handleQualifyClick}
+            onMouseDown={(e) => e.stopPropagation()}
             color={lead.blogQualified ? (lead.blogQualificationData?.qualified ? "success" : "error") : "primary"}
             startIcon={lead.blogQualified ? <CheckCircleIcon /> : null}
             sx={{ textTransform: 'none' }}
@@ -538,6 +552,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({ lead, customFields, onEdit, 
             variant="outlined"
             size="small"
             onClick={handleFindWritingProgramClick}
+            onMouseDown={(e) => e.stopPropagation()}
             startIcon={<ArticleIcon />}
             sx={{ textTransform: 'none' }}
           >
@@ -548,6 +563,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({ lead, customFields, onEdit, 
             variant={lead.hasGeneratedIdeas ? "contained" : "outlined"}
             size="small"
             onClick={handleGenerateIdeasClick}
+            onMouseDown={(e) => e.stopPropagation()}
             startIcon={<LightbulbIcon />}
             sx={{ textTransform: 'none' }}
             color={lead.hasGeneratedIdeas ? "secondary" : "primary"}
@@ -559,6 +575,7 @@ export const LeadCard: React.FC<LeadCardProps> = ({ lead, customFields, onEdit, 
             variant="outlined"
             size="small"
             onClick={handleFindLeadsByTitle}
+            onMouseDown={(e) => e.stopPropagation()}
             startIcon={<SearchIcon />}
             sx={{ textTransform: 'none' }}
           >

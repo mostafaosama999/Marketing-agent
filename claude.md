@@ -6,11 +6,12 @@ This document covers the tricky implementation details, common pitfalls, and sol
 
 1. [Architecture Overview](#architecture-overview)
 2. [Authentication System](#authentication-system)
-3. [Custom Fields System](#custom-fields-system)
-4. [CSV Import/Export](#csv-importexport)
-5. [Drag and Drop Implementation](#drag-and-drop-implementation)
-6. [Deployment Configuration](#deployment-configuration)
-7. [Common Errors and Solutions](#common-errors-and-solutions)
+3. [Companies and Leads Relationship](#companies-and-leads-relationship)
+4. [Custom Fields System](#custom-fields-system)
+5. [CSV Import/Export](#csv-importexport)
+6. [Drag and Drop Implementation](#drag-and-drop-implementation)
+7. [Deployment Configuration](#deployment-configuration)
+8. [Common Errors and Solutions](#common-errors-and-solutions)
 
 ---
 
@@ -171,6 +172,224 @@ Profile missing? → Sign out + error → Login fails
 3. User account is disabled
 
 **Solution**: Verify user exists in Firebase Console → Authentication → Users
+
+---
+
+## Companies and Leads Relationship
+
+### Overview
+
+The CRM uses a one-to-many relationship between Companies and Leads. Each company can have multiple leads, and leads are linked to companies through both a `companyId` (reference) and `companyName` (denormalized for performance).
+
+### Data Model
+
+**Companies Collection** (`companies`):
+```javascript
+{
+  id: string,              // Auto-generated document ID
+  name: string,            // Required, unique (case-insensitive)
+  website?: string,
+  industry?: string,
+  description?: string,
+  customFields?: Record<string, any>,
+  createdAt: Date,
+  updatedAt: Date,
+  blogQualified?: boolean,
+  blogQualificationData?: object,
+  hasGeneratedIdeas?: boolean,
+  // ... other fields
+}
+```
+
+**Leads Collection** (`leads`):
+```javascript
+{
+  id: string,              // Auto-generated document ID
+  name: string,            // Required
+  email: string,           // Required
+  phone?: string,
+  company: string,         // Legacy field - company name
+  companyId: string,       // Reference to Company document
+  companyName: string,     // Denormalized company name
+  status: string,
+  customFields?: Record<string, any>,
+  createdAt: Date,
+  updatedAt: Date,
+  // ... other fields
+}
+```
+
+### Key Features
+
+#### 1. Auto-Create Companies
+
+**Location**: `src/services/crmService.ts:89-108`, `src/services/companiesService.ts:189-210`
+
+When creating or updating a lead with a company name that doesn't exist, the system automatically creates the company record:
+
+```typescript
+export async function createLead(leadData: LeadFormData): Promise<string> {
+  // Get or create the company
+  const company = await getOrCreateCompany(leadData.company);
+
+  const leadsRef = collection(db, LEADS_COLLECTION);
+  const docRef = await addDoc(leadsRef, {
+    ...leadData,
+    companyId: company.id,       // Store reference
+    companyName: company.name,   // Denormalized for performance
+    customFields: leadData.customFields || {},
+    createdAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  });
+  return docRef.id;
+}
+```
+
+**How it works**:
+1. User types company name in lead form (with Autocomplete)
+2. System checks if company exists (case-insensitive)
+3. If exists: Use existing company
+4. If new: Create company automatically
+5. Link lead to company via `companyId` and `companyName`
+
+#### 2. Cascading Deletion
+
+**Location**: `src/services/companiesService.ts:175-197`
+
+When a company is deleted, **all associated leads are automatically deleted** to maintain referential integrity:
+
+```typescript
+export async function deleteCompany(companyId: string): Promise<void> {
+  try {
+    // First, find all leads associated with this company
+    const leadsRef = collection(db, 'leads');
+    const leadsQuery = query(leadsRef, where('companyId', '==', companyId));
+    const leadsSnapshot = await getDocs(leadsQuery);
+
+    // Delete all associated leads
+    const deletePromises = leadsSnapshot.docs.map((leadDoc) =>
+      deleteDoc(doc(db, 'leads', leadDoc.id))
+    );
+    await Promise.all(deletePromises);
+
+    console.log(`Deleted ${leadsSnapshot.size} leads associated with company ${companyId}`);
+
+    // Then delete the company
+    const companyRef = doc(db, COMPANIES_COLLECTION, companyId);
+    await deleteDoc(companyRef);
+  } catch (error) {
+    console.error('Error deleting company:', error);
+    throw error;
+  }
+}
+```
+
+**Important Notes**:
+- Cascading deletion happens for both single and bulk company deletion
+- Users are warned in confirmation dialogs that leads will also be deleted
+- Deletion is permanent and cannot be undone
+- Batch operations use `Promise.all()` for optimal performance
+
+**Location of warnings**: `src/features/crm/pages/CompaniesManagementPage.tsx:119`, `130`
+
+#### 3. Reverse Auto-Delete (Lead to Company)
+
+**Location**: `src/services/crmService.ts:177-208`
+
+When a lead is deleted, the system checks if it's the last lead for that company. If so, the company is automatically deleted:
+
+```typescript
+export async function deleteLead(leadId: string): Promise<void> {
+  try {
+    // Get the lead first to find its companyId
+    const leadRef = doc(db, LEADS_COLLECTION, leadId);
+    const leadDoc = await getDoc(leadRef);
+
+    if (!leadDoc.exists()) {
+      console.warn('Lead not found:', leadId);
+      return;
+    }
+
+    const leadData = leadDoc.data();
+    const companyId = leadData.companyId;
+
+    // Delete the lead
+    await deleteDoc(leadRef);
+
+    // If lead had a company, check if we should delete the company too
+    if (companyId) {
+      const remainingLeads = await countLeadsForCompany(companyId);
+
+      if (remainingLeads === 0) {
+        // This was the last lead for this company, delete the company
+        await deleteCompany(companyId);
+        console.log('Company auto-deleted (no remaining leads):', companyId);
+      }
+    }
+  } catch (error) {
+    console.error('Error deleting lead:', error);
+    throw error;
+  }
+}
+```
+
+**Why this matters**: Prevents orphaned companies with no associated leads, keeping the database clean.
+
+### Duplicate Prevention
+
+**Companies**: Unique by name (case-insensitive)
+- Check happens in `findCompanyByName()` before creation
+- Users cannot create companies with duplicate names
+
+**Leads**: Unique by name + company combination
+- Configurable in CRM settings
+- Can be disabled or adjusted based on business needs
+
+### Common Patterns
+
+**Creating a lead with new company**:
+```typescript
+const leadData = {
+  name: "John Doe",
+  email: "john@example.com",
+  company: "New Company Inc" // Company doesn't exist yet
+};
+
+// System automatically:
+// 1. Creates "New Company Inc" in companies collection
+// 2. Links lead to new company via companyId
+// 3. Stores denormalized companyName for performance
+await createLead(leadData);
+```
+
+**Updating lead's company**:
+```typescript
+const updatedData = {
+  company: "Different Company" // Changing to another company
+};
+
+// System automatically:
+// 1. Gets or creates "Different Company"
+// 2. Updates lead's companyId and companyName
+// 3. Checks if old company should be deleted (if no remaining leads)
+await updateLead(leadId, updatedData);
+```
+
+**Deleting a company**:
+```typescript
+// Deletes company AND all its leads
+await deleteCompany(companyId);
+
+// Example: Company has 5 leads
+// Result: 1 company deleted + 5 leads deleted = 6 deletions total
+```
+
+### Best Practices
+
+1. **Always use `getOrCreateCompany()`**: Don't manually create companies when creating/updating leads
+2. **Use cascading deletion**: Let the system handle lead cleanup when deleting companies
+3. **Warn users**: Always inform users about cascading operations in confirmation dialogs
+4. **Denormalize company name**: Store both `companyId` (reference) and `companyName` (denormalized) for performance
 
 ---
 

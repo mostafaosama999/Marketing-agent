@@ -356,6 +356,13 @@ export const CRMPage: React.FC = () => {
       {/* Filters */}
       <FilterBar filters={filters} stages={stages} onFiltersChange={setFilters} />
 
+      {/* Lead Count Summary */}
+      <Box sx={{ mb: 2, mt: 2 }}>
+        <Typography variant="h6" sx={{ fontWeight: 600, color: 'text.primary' }}>
+          Showing {filteredLeads.length} lead{filteredLeads.length !== 1 ? 's' : ''}
+        </Typography>
+      </Box>
+
       {/* View Content */}
       {viewMode === 'board' ? (
         <BoardView

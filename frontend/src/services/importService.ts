@@ -138,6 +138,89 @@ function mapRowToLead(row: CSVRow, mappings: FieldMapping[], defaultStatus: stri
 }
 
 /**
+ * Forward-fill empty cells in CSV data (for merged cells from Excel)
+ * Carries forward non-empty values to subsequent rows with empty cells
+ */
+function forwardFillCSVData(csvData: CSVRow[], mappings: FieldMapping[]): CSVRow[] {
+  if (csvData.length === 0) return [];
+
+  const filledData: CSVRow[] = [];
+  const lastValues: Record<string, string> = {};
+
+  // Analyze the data to find columns that should be forward-filled
+  // These are columns where:
+  // 1. The value appears in the first row of a group
+  // 2. Subsequent rows have empty values
+  // 3. The pattern repeats (indicating merged cells)
+
+  const headers = Object.keys(csvData[0]);
+  const columnsToFill = new Set<string>();
+
+  // Always forward-fill columns related to company data
+  const companyRelatedKeywords = [
+    'company', 'organization', 'business', 'industry', 'sector',
+    'website', 'url', 'link', 'site', 'homepage',
+    'description', 'about', 'overview', 'summary',
+    'category', 'type', 'vertical'
+  ];
+
+  mappings.forEach(m => {
+    const headerLower = m.csvField.toLowerCase();
+
+    // Check if it's explicitly mapped to company or related to company keywords
+    if (m.leadField === 'company' ||
+        companyRelatedKeywords.some(keyword => headerLower.includes(keyword))) {
+      columnsToFill.add(m.csvField);
+    }
+  });
+
+  // Also detect columns with repetitive empty patterns (likely merged cells)
+  for (const header of headers) {
+    let emptyCount = 0;
+    let nonEmptyCount = 0;
+    let hasPattern = false;
+
+    for (let i = 0; i < Math.min(csvData.length, 20); i++) {
+      const value = csvData[i][header];
+      if (!value || value.trim() === '') {
+        emptyCount++;
+      } else {
+        nonEmptyCount++;
+        // If we see a non-empty value after empties, it's a pattern
+        if (emptyCount > 0 && i > 0) {
+          hasPattern = true;
+        }
+      }
+    }
+
+    // If more than 30% of sampled rows are empty and we see a pattern, forward-fill
+    if (hasPattern && emptyCount > 0 && nonEmptyCount > 0 &&
+        emptyCount / (emptyCount + nonEmptyCount) > 0.3) {
+      columnsToFill.add(header);
+    }
+  }
+
+  // Forward-fill the identified columns
+  for (const row of csvData) {
+    const filledRow = { ...row };
+
+    for (const column of columnsToFill) {
+      if (row[column] && row[column].trim() !== '') {
+        // Update last known value
+        lastValues[column] = row[column];
+      } else if (lastValues[column]) {
+        // Use last known value if current cell is empty
+        filledRow[column] = lastValues[column];
+      }
+    }
+
+    filledData.push(filledRow);
+  }
+
+  return filledData;
+}
+
+/**
  * Import leads from CSV data
  */
 export async function importLeadsFromCSV(
@@ -201,10 +284,13 @@ export async function importLeadsFromCSV(
     }
   }
 
+  // Forward-fill merged cells (handles Excel merged cell exports)
+  const filledData = forwardFillCSVData(csvData, mappings);
+
   const config = getDeduplicationConfig();
 
-  for (let i = 0; i < csvData.length; i++) {
-    const row = csvData[i];
+  for (let i = 0; i < filledData.length; i++) {
+    const row = filledData[i];
     try {
       const leadData = mapRowToLead(row, mappings, defaultStatus);
 

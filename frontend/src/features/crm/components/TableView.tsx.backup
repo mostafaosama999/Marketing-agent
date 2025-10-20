@@ -25,9 +25,13 @@ import {
 import {
   Edit as EditIcon,
   Delete as DeleteIcon,
+  DragIndicator as DragIcon,
   EditOutlined as EditOutlinedIcon,
   Email as EmailIcon
 } from '@mui/icons-material';
+import { DndContext, DragEndEvent, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { SortableContext, verticalListSortingStrategy, useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 import { Lead, PipelineStage, CustomField } from '../../../app/types/crm';
 import { ConfirmDialog } from './ConfirmDialog';
 import { BulkActionsToolbar } from './BulkActionsToolbar';
@@ -35,10 +39,8 @@ import { ColumnVisibilityMenu } from './ColumnVisibilityMenu';
 import { FilterBuilder } from './FilterBuilder';
 import { FilterPresetManager } from './FilterPresetManager';
 import { ResizeHandle } from './ResizeHandle';
-import { StickyScrollbar } from './StickyScrollbar';
 import { useColumnVisibility } from '../hooks/useColumnVisibility';
 import { useColumnResize } from '../hooks/useColumnResize';
-import { useScrollSync } from '../hooks/useScrollSync';
 import { useFilters } from '../hooks/useFilters';
 import { FilterableField } from '../../../app/types/filters';
 import { updateCustomField } from '../../../services/customFieldsService';
@@ -192,14 +194,29 @@ interface SortableRowProps {
   lead: Lead;
   isSelected: boolean;
   onSelect: (leadId: string, checked: boolean) => void;
+  dragDisabled: boolean;
   children: React.ReactNode;
 }
 
-const LeadRow: React.FC<SortableRowProps> = ({ lead, isSelected, onSelect, children }) => {
+const SortableRow: React.FC<SortableRowProps> = ({ lead, isSelected, onSelect, dragDisabled, children }) => {
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id: lead.id,
+    disabled: dragDisabled,
+  });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.5 : 1,
+    backgroundColor: isSelected ? 'action.selected' : (isDragging ? 'action.hover' : 'inherit'),
+  };
+
   return (
     <TableRow
+      ref={setNodeRef}
+      style={style}
       sx={{
-        backgroundColor: isSelected ? 'action.selected' : 'inherit',
+        cursor: isDragging ? 'grabbing' : 'default',
         '&:hover': { backgroundColor: isSelected ? 'action.selected' : 'action.hover' },
       }}
     >
@@ -209,6 +226,20 @@ const LeadRow: React.FC<SortableRowProps> = ({ lead, isSelected, onSelect, child
           onChange={(e) => onSelect(lead.id, e.target.checked)}
           onClick={(e) => e.stopPropagation()}
         />
+      </TableCell>
+      <TableCell sx={{ width: 40, padding: '8px' }}>
+        <Box
+          {...attributes}
+          {...listeners}
+          sx={{
+            cursor: dragDisabled ? 'default' : 'grab',
+            display: 'flex',
+            alignItems: 'center',
+            opacity: dragDisabled ? 0.3 : 1,
+          }}
+        >
+          <DragIcon color="action" fontSize="small" />
+        </Box>
       </TableCell>
       {children}
     </TableRow>
@@ -246,31 +277,19 @@ export const TableView: React.FC<TableViewProps> = ({
     result: null,
   });
 
-  // Column visibility management - includes both standard and custom fields
-  const defaultColumnsWithCustomFields = useMemo(() => {
-    const standardColumns = [
+  const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 8 } }));
+
+  // Column visibility management
+  const { columns, setColumns, isColumnVisible } = useColumnVisibility({
+    storageKey: 'crm_leads_table_columns',
+    defaultColumns: [
       { id: 'name', label: 'Name', visible: true, required: true },
       { id: 'email', label: 'Email', visible: true },
       { id: 'company', label: 'Company', visible: true },
       { id: 'phone', label: 'Phone', visible: true },
       { id: 'status', label: 'Status', visible: true },
       { id: 'created', label: 'Created', visible: true },
-    ];
-
-    // Add custom fields as columns
-    const customFieldColumns = customFields.map(field => ({
-      id: `custom_${field.id}`,
-      label: field.label,
-      visible: field.showInTable && field.visible,
-      required: false,
-    }));
-
-    return [...standardColumns, ...customFieldColumns];
-  }, [customFields]);
-
-  const { columns, setColumns, isColumnVisible } = useColumnVisibility({
-    storageKey: 'crm_leads_table_columns',
-    defaultColumns: defaultColumnsWithCustomFields,
+    ],
   });
 
   // Define filterable fields (standard + custom fields)
@@ -318,9 +337,6 @@ export const TableView: React.FC<TableViewProps> = ({
     ...customFields.filter(f => f.showInTable).map(f => `custom_${f.id}`),
   ];
   const { getColumnWidth, handleMouseDown, resizingColumn } = useColumnResize(visibleColumnKeys);
-
-  // Scroll sync for sticky scrollbar
-  const { tableRef, scrollbarRef, hasHorizontalOverflow, scrollbarWidth } = useScrollSync();
 
 
   // Sync orderedLeads with filteredLeads changes
@@ -407,10 +423,24 @@ export const TableView: React.FC<TableViewProps> = ({
     }
   };
 
-  // Filter custom fields that should be shown in table (respect column visibility settings)
-  const tableCustomFields = customFields
-    .filter(f => f.showInTable && f.visible && isColumnVisible(`custom_${f.id}`))
-    .sort((a, b) => a.order - b.order);
+  // Handle drag end for reordering
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const oldIndex = orderedLeads.findIndex((lead) => lead.id === active.id);
+      const newIndex = orderedLeads.findIndex((lead) => lead.id === over.id);
+
+      const reordered = [...orderedLeads];
+      const [moved] = reordered.splice(oldIndex, 1);
+      reordered.splice(newIndex, 0, moved);
+
+      setOrderedLeads(reordered);
+    }
+  };
+
+  // Filter custom fields that should be shown in table
+  const tableCustomFields = customFields.filter(f => f.showInTable && f.visible).sort((a, b) => a.order - b.order);
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -620,23 +650,28 @@ export const TableView: React.FC<TableViewProps> = ({
     <>
     {/* Table Controls Toolbar */}
     {selectedIds.size === 0 && (
-      <Box sx={{ display: 'flex', gap: 1, alignItems: 'center', mb: 2 }}>
+      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+        {/* Left side - Filters */}
+        <Box sx={{ display: 'flex', gap: 1, alignItems: 'center' }}>
+          <FilterBuilder
+            conditions={conditions}
+            fields={filterableFields}
+            onAddFilter={addFilter}
+            onUpdateFilter={updateFilter}
+            onRemoveFilter={removeFilter}
+            onClearFilters={clearFilters}
+          />
+          <FilterPresetManager
+            presets={presets}
+            onLoadPreset={loadPreset}
+            onSavePreset={savePreset}
+            onDeletePreset={deletePreset}
+            hasActiveFilters={hasActiveFilters}
+          />
+        </Box>
+
+        {/* Right side - Column Visibility */}
         <ColumnVisibilityMenu columns={columns} onColumnsChange={setColumns} />
-        <FilterBuilder
-          conditions={conditions}
-          fields={filterableFields}
-          onAddFilter={addFilter}
-          onUpdateFilter={updateFilter}
-          onRemoveFilter={removeFilter}
-          onClearFilters={clearFilters}
-        />
-        <FilterPresetManager
-          presets={presets}
-          onLoadPreset={loadPreset}
-          onSavePreset={savePreset}
-          onDeletePreset={deletePreset}
-          hasActiveFilters={hasActiveFilters}
-        />
       </Box>
     )}
 
@@ -651,16 +686,16 @@ export const TableView: React.FC<TableViewProps> = ({
       onBulkEdit={onBulkEdit}
     />
 
+    <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={handleDragEnd}>
     <Box sx={{ position: 'relative', width: '100%' }}>
     <TableContainer
-      ref={tableRef}
       component={Paper}
       sx={{
         maxWidth: '100%',
         overflowX: 'scroll',
         overflowY: 'auto',
         position: 'relative',
-        maxHeight: 'calc(100vh - 450px)',
+        maxHeight: 'calc(100vh - 350px)',
         // Style the scrollbar
         '&::-webkit-scrollbar': {
           height: 14,
@@ -691,6 +726,7 @@ export const TableView: React.FC<TableViewProps> = ({
                 onChange={(e) => handleSelectAll(e.target.checked)}
               />
             </TableCell>
+            <TableCell sx={{ width: 40, padding: '8px' }} />
             {columns
               .filter((col) => col.visible)
               .map((col) => renderColumnHeader(col.id))}
@@ -709,6 +745,7 @@ export const TableView: React.FC<TableViewProps> = ({
           </TableRow>
         </TableHead>
         <TableBody>
+          <SortableContext items={sortedLeads.map((l) => l.id)} strategy={verticalListSortingStrategy}>
           {sortedLeads.length === 0 ? (
             <TableRow>
               <TableCell colSpan={2 + columns.filter(c => c.visible).length + tableCustomFields.length + 1} align="center" sx={{ py: 4 }}>
@@ -720,15 +757,143 @@ export const TableView: React.FC<TableViewProps> = ({
               const statusConfig = getStageConfig(lead.status);
               const isSelected = selectedIds.has(lead.id);
               return (
-                <LeadRow
+                <SortableRow
                   key={lead.id}
                   lead={lead}
                   isSelected={isSelected}
                   onSelect={handleSelectOne}
+                  dragDisabled={selectedIds.size > 0}
                 >
-                  {columns
-                    .filter((col) => col.visible)
-                    .map((col) => renderColumnCell(col.id, lead))}
+                  {isColumnVisible('name') && (
+                    <TableCell
+                      onClick={() => onEditLead(lead)}
+                      sx={{
+                        cursor: 'pointer',
+                        width: `${getColumnWidth('name')}px`,
+                        minWidth: `${getColumnWidth('name')}px`,
+                        maxWidth: `${getColumnWidth('name')}px`,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {lead.name}
+                    </TableCell>
+                  )}
+                  {isColumnVisible('email') && (
+                    <TableCell
+                      onClick={() => !isPlaceholderEmail(lead.email) && onEditLead(lead)}
+                      sx={{
+                        cursor: isPlaceholderEmail(lead.email) ? 'default' : 'pointer',
+                        width: `${getColumnWidth('email')}px`,
+                        minWidth: `${getColumnWidth('email')}px`,
+                        maxWidth: `${getColumnWidth('email')}px`,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {isPlaceholderEmail(lead.email) ? (
+                        <Tooltip
+                          title={
+                            enrichError?.leadId === lead.id
+                              ? enrichError.message
+                              : 'Get email from Apollo.io (costs 1 credit)'
+                          }
+                        >
+                          <IconButton
+                            size="small"
+                            color={enrichError?.leadId === lead.id ? 'error' : 'primary'}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              handleGetEmail(lead);
+                            }}
+                            disabled={enrichingLeadId === lead.id}
+                          >
+                            {enrichingLeadId === lead.id ? (
+                              <CircularProgress size={16} />
+                            ) : (
+                              <EmailIcon fontSize="small" />
+                            )}
+                          </IconButton>
+                        </Tooltip>
+                      ) : (
+                        lead.email
+                      )}
+                    </TableCell>
+                  )}
+                  {isColumnVisible('company') && (
+                    <TableCell
+                      onClick={() => onEditLead(lead)}
+                      sx={{
+                        cursor: 'pointer',
+                        width: `${getColumnWidth('company')}px`,
+                        minWidth: `${getColumnWidth('company')}px`,
+                        maxWidth: `${getColumnWidth('company')}px`,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {lead.company}
+                    </TableCell>
+                  )}
+                  {isColumnVisible('phone') && (
+                    <TableCell
+                      onClick={() => onEditLead(lead)}
+                      sx={{
+                        cursor: 'pointer',
+                        width: `${getColumnWidth('phone')}px`,
+                        minWidth: `${getColumnWidth('phone')}px`,
+                        maxWidth: `${getColumnWidth('phone')}px`,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {lead.phone || '-'}
+                    </TableCell>
+                  )}
+                  {isColumnVisible('status') && (
+                    <TableCell
+                      onClick={() => onEditLead(lead)}
+                      sx={{
+                        cursor: 'pointer',
+                        width: `${getColumnWidth('status')}px`,
+                        minWidth: `${getColumnWidth('status')}px`,
+                        maxWidth: `${getColumnWidth('status')}px`,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                    <Chip
+                      label={statusConfig?.label || lead.status}
+                      size="small"
+                      sx={{
+                        backgroundColor: statusConfig?.color || '#9e9e9e',
+                        color: 'white',
+                        fontWeight: 500,
+                      }}
+                    />
+                  </TableCell>
+                  )}
+                  {isColumnVisible('created') && (
+                    <TableCell
+                      onClick={() => onEditLead(lead)}
+                      sx={{
+                        cursor: 'pointer',
+                        width: `${getColumnWidth('created')}px`,
+                        minWidth: `${getColumnWidth('created')}px`,
+                        maxWidth: `${getColumnWidth('created')}px`,
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                        whiteSpace: 'nowrap',
+                      }}
+                    >
+                      {formatDate(lead.createdAt)}
+                    </TableCell>
+                  )}
                   {tableCustomFields.map((field) => (
                     <TableCell
                       key={field.id}
@@ -769,21 +934,17 @@ export const TableView: React.FC<TableViewProps> = ({
                       </IconButton>
                     </Box>
                   </TableCell>
-                </LeadRow>
+                </SortableRow>
               );
             })
           )}
+          </SortableContext>
         </TableBody>
       </Table>
     </TableContainer>
 
-    {/* Sticky horizontal scrollbar */}
-    <StickyScrollbar
-      scrollbarRef={scrollbarRef}
-      scrollbarWidth={scrollbarWidth}
-      visible={hasHorizontalOverflow}
-    />
     </Box>
+    </DndContext>
 
     <ConfirmDialog
       open={confirmDelete.open}

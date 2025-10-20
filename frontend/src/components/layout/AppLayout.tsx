@@ -49,7 +49,7 @@ const navigationItems: NavigationItem[] = [
   },
   {
     label: 'Companies Research',
-    path: '/companies',
+    path: '/companies-research',
     icon: <BusinessIcon />,
     badge: 'beta',
   },
@@ -81,6 +81,12 @@ const navigationItems: NavigationItem[] = [
     label: 'CRM',
     path: '/crm',
     icon: <PeopleIcon />,
+    badge: 'alpha',
+  },
+  {
+    label: 'Companies',
+    path: '/companies',
+    icon: <BusinessIcon />,
     badge: 'alpha',
   },
 ];

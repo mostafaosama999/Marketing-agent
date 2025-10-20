@@ -1,5 +1,6 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
+import {FieldValue} from "firebase-admin/firestore";
 import {generateCustomIdeas} from "../utils/ideaGeneratorService";
 import {CustomIdeaRequest, CustomIdeaResponse, GeneratedIdea} from "../types";
 import {logApiCost} from "../utils/costTracker";
@@ -86,8 +87,8 @@ export const generateCustomIdeasCloud = functions.https.onCall(
 
         batch.set(ideaRef, {
           ...ideaData,
-          createdAt: admin.firestore.FieldValue.serverTimestamp(),
-          updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+          createdAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
         });
       });
 
@@ -116,8 +117,8 @@ export const generateCustomIdeasCloud = functions.https.onCall(
       const leadRef = db.collection("leads").doc(leadId);
       await leadRef.update({
         hasGeneratedIdeas: true,
-        lastIdeaGeneratedAt: admin.firestore.FieldValue.serverTimestamp(),
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        lastIdeaGeneratedAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       });
 
       return {
@@ -232,11 +233,11 @@ export const updateIdeaStatus = functions.https.onCall(
 
       const updateData: any = {
         status,
-        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
       };
 
       if (status === "attached") {
-        updateData.attachedAt = admin.firestore.FieldValue.serverTimestamp();
+        updateData.attachedAt = FieldValue.serverTimestamp();
       }
 
       await ideaRef.update(updateData);

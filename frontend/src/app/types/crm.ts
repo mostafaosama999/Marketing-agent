@@ -4,7 +4,9 @@ export interface Lead {
   id: string;
   name: string;
   email: string;
-  company: string;
+  company: string; // Legacy field - kept for backward compatibility
+  companyId?: string; // Reference to Company document (new leads will have this)
+  companyName?: string; // Denormalized company name for performance
   phone: string;
   status: string; // Now flexible to support custom pipeline stages
   customFields: Record<string, any>; // Dynamic custom field values
@@ -22,6 +24,36 @@ export interface Lead {
   // Idea Generation
   hasGeneratedIdeas?: boolean; // Whether ideas have been generated for this lead
   lastIdeaGeneratedAt?: Date; // Last time ideas were generated
+}
+
+// Company management types
+export interface Company {
+  id: string;
+  name: string; // Required, unique (case-insensitive)
+  website?: string;
+  industry?: string;
+  description?: string;
+  customFields?: Record<string, any>; // Dynamic custom field values
+  createdAt: Date;
+  updatedAt: Date;
+  // Blog Qualification (moved from leads - company-level data)
+  blogQualified?: boolean;
+  blogQualificationData?: BlogQualificationData;
+  blogQualifiedAt?: Date;
+  // API Cost Tracking
+  totalApiCosts?: number;
+  lastApiCostUpdate?: Date;
+  // Idea Generation
+  hasGeneratedIdeas?: boolean;
+  lastIdeaGeneratedAt?: Date;
+}
+
+export interface CompanyFormData {
+  name: string;
+  website?: string;
+  industry?: string;
+  description?: string;
+  customFields?: Record<string, any>;
 }
 
 export interface BlogQualificationData {

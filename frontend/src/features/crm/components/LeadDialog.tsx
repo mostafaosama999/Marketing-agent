@@ -10,9 +10,11 @@ import {
   Box,
   Typography,
   Divider,
+  Autocomplete,
 } from '@mui/material';
-import { Lead, LeadFormData, PipelineStage, CustomField } from '../../../app/types/crm';
+import { Lead, LeadFormData, PipelineStage, CustomField, Company } from '../../../app/types/crm';
 import { CustomFieldRenderer } from './CustomFieldRenderer';
+import { subscribeToCompanies } from '../../../services/companiesService';
 
 interface LeadDialogProps {
   open: boolean;
@@ -37,6 +39,15 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({ open, lead, stages, cust
   });
   const [loading, setLoading] = useState(false);
   const [errors, setErrors] = useState<Partial<Record<string, string>>>({});
+  const [companies, setCompanies] = useState<Company[]>([]);
+
+  // Subscribe to companies for autocomplete
+  useEffect(() => {
+    const unsubscribe = subscribeToCompanies((updatedCompanies) => {
+      setCompanies(updatedCompanies);
+    });
+    return () => unsubscribe();
+  }, []);
 
   useEffect(() => {
     if (lead) {
@@ -155,14 +166,22 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({ open, lead, stages, cust
             fullWidth
           />
 
-          <TextField
-            label="Company"
+          <Autocomplete
+            freeSolo
+            options={companies.map(c => c.name)}
             value={formData.company}
-            onChange={(e) => handleChange('company', e.target.value)}
-            error={!!errors.company}
-            helperText={errors.company}
+            onChange={(_, newValue) => handleChange('company', newValue || '')}
+            onInputChange={(_, newInputValue) => handleChange('company', newInputValue)}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Company"
+                error={!!errors.company}
+                helperText={errors.company || 'Type to search or create new company'}
+                required
+              />
+            )}
             fullWidth
-            required
           />
 
           <TextField
