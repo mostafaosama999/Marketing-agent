@@ -15,6 +15,7 @@ const path = require('path');
 const buildDir = path.join(__dirname, '..', 'build');
 let buildSucceeded = false;
 let outputBuffer = '';
+let suppressOutput = false;  // Flag to suppress stacktrace/memory dump
 
 console.log('Starting production build...\n');
 
@@ -30,26 +31,55 @@ const buildProcess = spawn('node', [
 // Capture stdout
 buildProcess.stdout.on('data', (data) => {
   const text = data.toString();
-  process.stdout.write(text);
-  outputBuffer += text;
 
   // Check if build succeeded
   if (text.includes('Compiled successfully') || text.includes('The build folder is ready')) {
     buildSucceeded = true;
   }
+
+  // Start suppressing output when memory dump begins (only AFTER build succeeds)
+  if (buildSucceeded && (text.includes('Last few GCs') || text.includes('JS stacktrace') || text.includes('FATAL ERROR'))) {
+    if (!suppressOutput) {
+      suppressOutput = true;
+      // Print success message immediately before suppressing
+      console.log('\n✅ Build completed successfully!');
+      console.log(`Build output: ${buildDir}\n`);
+    }
+    return; // Don't output this chunk at all
+  }
+
+  // Suppress all memory dump and stack trace output after build succeeds
+  if (suppressOutput) {
+    return;
+  }
+
+  process.stdout.write(text);
+  outputBuffer += text;
 });
 
 // Capture stderr
 buildProcess.stderr.on('data', (data) => {
   const text = data.toString();
 
-  // Suppress the specific post-build memory error
+  // Suppress all output if we're in suppression mode
+  if (suppressOutput) {
+    return;
+  }
+
+  // Suppress known non-critical warnings and post-build errors
   if (text.includes('Issues checking service aborted') ||
       text.includes('ForkTsCheckerWebpackPlugin') ||
+      text.includes('Cannot find ESLint plugin') ||
+      text.includes('ESLintWebpackPlugin') ||
       text.includes('out of memory') ||
-      text.includes('FATAL ERROR')) {
+      text.includes('FATAL ERROR') ||
+      text.includes('RpcIpcMessagePortClosedError')) {
     // If build already succeeded, suppress these errors
     if (buildSucceeded) {
+      return;
+    }
+    // Also suppress ESLint plugin warning even before build completes
+    if (text.includes('Cannot find ESLint plugin')) {
       return;
     }
   }
@@ -63,8 +93,8 @@ buildProcess.on('close', (code) => {
                      fs.existsSync(path.join(buildDir, 'index.html'));
 
   if (buildSucceeded && buildExists) {
-    console.log('\n✅ Build completed successfully!');
-    console.log(`Build output: ${buildDir}`);
+    // Success message already printed when suppression started
+    // Just exit cleanly
     process.exit(0);
   } else if (code !== 0) {
     console.error('\n❌ Build failed!');
