@@ -461,3 +461,4 @@ export const CRMPage: React.FC = () => {
     </Box>
   );
 };
+export default CRMPage;

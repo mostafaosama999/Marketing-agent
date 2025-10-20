@@ -12,4 +12,4 @@ export const TasksPage: React.FC = () => {
       </Typography>
     </Box>
   );
-};
+};export default TasksPage;

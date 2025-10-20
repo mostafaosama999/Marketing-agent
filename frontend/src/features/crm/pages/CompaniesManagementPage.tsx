@@ -282,3 +282,4 @@ export const CompaniesManagementPage: React.FC = () => {
     </Box>
   );
 };
+export default CompaniesManagementPage;

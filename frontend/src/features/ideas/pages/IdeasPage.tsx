@@ -12,4 +12,4 @@ export const IdeasPage: React.FC = () => {
       </Typography>
     </Box>
   );
-};
+};export default IdeasPage;

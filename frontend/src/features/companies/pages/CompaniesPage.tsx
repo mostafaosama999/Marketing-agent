@@ -188,4 +188,4 @@ export const CompaniesPage: React.FC = () => {
       </Box>
     </Box>
   );
-};
+};export default CompaniesPage;

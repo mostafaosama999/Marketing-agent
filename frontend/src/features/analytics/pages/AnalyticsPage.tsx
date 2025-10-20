@@ -12,4 +12,4 @@ export const AnalyticsPage: React.FC = () => {
       </Typography>
     </Box>
   );
-};
+};export default AnalyticsPage;
