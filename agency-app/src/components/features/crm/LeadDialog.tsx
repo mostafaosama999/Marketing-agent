@@ -17,11 +17,15 @@ import {
   ListItemText,
   Chip,
   CircularProgress,
+  InputAdornment,
+  Alert,
 } from '@mui/material';
+import { Email as EmailIcon } from '@mui/icons-material';
 import { Lead, LeadFormData, LeadStatusChange } from '../../../types/lead';
-import { LEAD_STATUS_TO_LABEL } from '../../../types/crm';
 import { leadTimelineService } from '../../../services/api/leadSubcollections';
 import { useAuth } from '../../../contexts/AuthContext';
+import { usePipelineConfigContext } from '../../../contexts/PipelineConfigContext';
+import { fetchEmail } from '../../../services/api/apolloService';
 
 interface LeadDialogProps {
   open: boolean;
@@ -60,10 +64,16 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
   mode,
 }) => {
   const { user } = useAuth();
+  const { stages, getLabel } = usePipelineConfigContext();
   const [tabValue, setTabValue] = useState(0);
   const [loading, setLoading] = useState(false);
   const [activityLoading, setActivityLoading] = useState(false);
   const [statusChanges, setStatusChanges] = useState<LeadStatusChange[]>([]);
+
+  // Apollo email enrichment state
+  const [apolloLoading, setApolloLoading] = useState(false);
+  const [apolloError, setApolloError] = useState<string | null>(null);
+  const [apolloSuccess, setApolloSuccess] = useState<string | null>(null);
 
   // Form state
   const [formData, setFormData] = useState<LeadFormData>({
@@ -141,6 +151,66 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
     setTabValue(newValue);
   };
 
+  // Handle Apollo email enrichment
+  const handleFetchEmail = async () => {
+    // Clear previous messages
+    setApolloError(null);
+    setApolloSuccess(null);
+
+    // Validate required fields
+    if (!formData.name || !formData.company) {
+      setApolloError('Name and Company are required to fetch email from Apollo.io');
+      return;
+    }
+
+    // Parse name into first and last name
+    const nameParts = formData.name.trim().split(' ');
+    const firstName = nameParts[0] || '';
+    const lastName = nameParts.slice(1).join(' ') || nameParts[0]; // Fallback to first name if no last name
+
+    if (!firstName) {
+      setApolloError('Please provide a valid name');
+      return;
+    }
+
+    setApolloLoading(true);
+
+    try {
+      const apiKey = process.env.REACT_APP_APOLLO_API_KEY;
+      if (!apiKey) {
+        setApolloError('Apollo API key not configured');
+        setApolloLoading(false);
+        return;
+      }
+
+      const result = await fetchEmail(
+        {
+          firstName,
+          lastName,
+          companyName: formData.company,
+        },
+        apiKey
+      );
+
+      if (result.matched && result.email) {
+        // Update email field with fetched email
+        setFormData((prev) => ({
+          ...prev,
+          email: result.email || '',
+          phone: result.phone || prev.phone, // Also update phone if available
+        }));
+        setApolloSuccess(`Email found: ${result.email} (1 credit used)`);
+      } else {
+        setApolloError(result.error || 'No email found for this person');
+      }
+    } catch (error) {
+      console.error('Error fetching email from Apollo:', error);
+      setApolloError('Failed to fetch email. Please try again.');
+    } finally {
+      setApolloLoading(false);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleString('en-US', {
@@ -181,13 +251,57 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
             />
 
             {/* Email */}
-            <TextField
-              label="Email"
-              type="email"
-              value={formData.email}
-              onChange={(e) => handleChange('email', e.target.value)}
-              fullWidth
-            />
+            <Box>
+              <TextField
+                label="Email"
+                type="email"
+                value={formData.email}
+                onChange={(e) => handleChange('email', e.target.value)}
+                fullWidth
+                InputProps={{
+                  endAdornment: formData.email ? (
+                    <InputAdornment position="end">
+                      <EmailIcon color="action" />
+                    </InputAdornment>
+                  ) : undefined,
+                }}
+              />
+
+              {/* Apollo Email Fetch Button - Only show when email is empty */}
+              {!formData.email && (
+                <Button
+                  variant="outlined"
+                  size="small"
+                  onClick={handleFetchEmail}
+                  disabled={apolloLoading || !formData.name || !formData.company}
+                  startIcon={apolloLoading ? <CircularProgress size={16} /> : <EmailIcon />}
+                  sx={{
+                    mt: 1,
+                    textTransform: 'none',
+                    borderColor: '#2196f3',
+                    color: '#2196f3',
+                    '&:hover': {
+                      borderColor: '#1976d2',
+                      bgcolor: 'rgba(33, 150, 243, 0.04)',
+                    },
+                  }}
+                >
+                  {apolloLoading ? 'Fetching...' : 'Get email from Apollo.io (costs 1 credit)'}
+                </Button>
+              )}
+
+              {/* Success/Error Messages */}
+              {apolloSuccess && (
+                <Alert severity="success" sx={{ mt: 1 }} onClose={() => setApolloSuccess(null)}>
+                  {apolloSuccess}
+                </Alert>
+              )}
+              {apolloError && (
+                <Alert severity="error" sx={{ mt: 1 }} onClose={() => setApolloError(null)}>
+                  {apolloError}
+                </Alert>
+              )}
+            </Box>
 
             {/* Phone */}
             <TextField
@@ -216,9 +330,9 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
               required
               fullWidth
             >
-              {Object.entries(LEAD_STATUS_TO_LABEL).map(([value, label]) => (
-                <MenuItem key={value} value={value}>
-                  {label}
+              {stages.map((stage) => (
+                <MenuItem key={stage.id} value={stage.id}>
+                  {stage.label}
                 </MenuItem>
               ))}
             </TextField>
@@ -275,7 +389,7 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
                     sx={{ display: 'flex', justifyContent: 'space-between', mt: 0.5 }}
                   >
                     <Typography variant="body2" color="text.secondary">
-                      {LEAD_STATUS_TO_LABEL[status as keyof typeof LEAD_STATUS_TO_LABEL]}:
+                      {getLabel(status as any)}:
                     </Typography>
                     <Typography variant="body2" fontWeight={500}>
                       {days} {days === 1 ? 'day' : 'days'}
@@ -316,11 +430,7 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
                       {change.fromStatus ? (
                         <>
                           <Chip
-                            label={
-                              LEAD_STATUS_TO_LABEL[
-                                change.fromStatus as keyof typeof LEAD_STATUS_TO_LABEL
-                              ]
-                            }
+                            label={getLabel(change.fromStatus as any)}
                             size="small"
                             variant="outlined"
                           />
@@ -332,11 +442,7 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
                         <Chip label="Created" size="small" color="success" />
                       )}
                       <Chip
-                        label={
-                          LEAD_STATUS_TO_LABEL[
-                            change.toStatus as keyof typeof LEAD_STATUS_TO_LABEL
-                          ]
-                        }
+                        label={getLabel(change.toStatus as any)}
                         size="small"
                         color="primary"
                       />

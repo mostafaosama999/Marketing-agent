@@ -24,10 +24,11 @@ import {
   Error as ErrorIcon,
   Info as InfoIcon,
 } from '@mui/icons-material';
-import { CSVRow, FieldMapping, LEAD_STATUS_TO_LABEL } from '../../../types/crm';
+import { CSVRow, FieldMapping } from '../../../types/crm';
 import { LeadStatus } from '../../../types/lead';
 import { importLeadsFromCSV, ImportResult } from '../../../services/api/csvImportService';
 import { useAuth } from '../../../contexts/AuthContext';
+import { usePipelineConfigContext } from '../../../contexts/PipelineConfigContext';
 
 interface CSVFieldMappingDialogProps {
   open: boolean;
@@ -45,15 +46,6 @@ const STANDARD_FIELDS = [
   { value: 'status', label: 'Pipeline Stage' },
 ];
 
-const LEAD_STAGES: { value: LeadStatus; label: string }[] = [
-  { value: 'new_lead', label: LEAD_STATUS_TO_LABEL.new_lead },
-  { value: 'qualified', label: LEAD_STATUS_TO_LABEL.qualified },
-  { value: 'contacted', label: LEAD_STATUS_TO_LABEL.contacted },
-  { value: 'follow_up', label: LEAD_STATUS_TO_LABEL.follow_up },
-  { value: 'won', label: LEAD_STATUS_TO_LABEL.won },
-  { value: 'lost', label: LEAD_STATUS_TO_LABEL.lost },
-];
-
 export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
   open,
   onClose,
@@ -62,6 +54,7 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
   headers,
 }) => {
   const { user } = useAuth();
+  const { stages } = usePipelineConfigContext();
   const [mappings, setMappings] = useState<FieldMapping[]>([]);
   const [defaultStatus, setDefaultStatus] = useState<LeadStatus>('new_lead');
   const [autoCreateFields, setAutoCreateFields] = useState(true);
@@ -288,8 +281,8 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
                   onChange={(e) => setDefaultStatus(e.target.value as LeadStatus)}
                   sx={{ bgcolor: 'white' }}
                 >
-                  {LEAD_STAGES.map((stage) => (
-                    <MenuItem key={stage.value} value={stage.value}>
+                  {stages.map((stage) => (
+                    <MenuItem key={stage.id} value={stage.id}>
                       {stage.label}
                     </MenuItem>
                   ))}

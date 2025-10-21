@@ -188,8 +188,8 @@ const Navbar: React.FC = () => {
 
     const items = [];
 
-    // All roles can see Projects
-    items.push({ label: 'PROJECTS', path: '/', icon: Dashboard });
+    // All roles can see Leads
+    items.push({ label: 'LEADS', path: '/', icon: Dashboard });
 
     // CEOs and Managers can see Clients
     if (userProfile.role === 'CEO' || userProfile.role === 'Manager') {

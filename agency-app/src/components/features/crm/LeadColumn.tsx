@@ -1,7 +1,8 @@
 // src/components/features/crm/LeadColumn.tsx
-import React from 'react';
-import { Box, Typography } from '@mui/material';
-import { Lead } from '../../../types/lead';
+import React, { useState } from 'react';
+import { Box, Typography, IconButton, TextField, Tooltip } from '@mui/material';
+import { Edit as EditIcon, Check as CheckIcon, Close as CloseIcon, DragIndicator as DragIcon } from '@mui/icons-material';
+import { Lead, LeadStatus } from '../../../types/lead';
 import { LeadCard } from './LeadCard';
 
 interface Column {
@@ -22,6 +23,12 @@ interface LeadColumnProps {
   onLeadClick: (lead: Lead) => void;
   onAddLead: () => void;
   userProfile: any;
+  onUpdateLabel?: (stageId: LeadStatus, newLabel: string) => Promise<void>;
+  onColumnDragStart?: (e: any, columnId: string) => void;
+  onColumnDragOver?: (e: any, columnId: string) => void;
+  onColumnDragLeave?: () => void;
+  onColumnDrop?: (e: any, columnId: string) => void;
+  isDraggedOver?: boolean;
 }
 
 export const LeadColumn: React.FC<LeadColumnProps> = ({
@@ -33,7 +40,53 @@ export const LeadColumn: React.FC<LeadColumnProps> = ({
   onLeadClick,
   onAddLead,
   userProfile,
+  onUpdateLabel,
+  onColumnDragStart,
+  onColumnDragOver,
+  onColumnDragLeave,
+  onColumnDrop,
+  isDraggedOver,
 }) => {
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedLabel, setEditedLabel] = useState(column.title);
+  const [isSaving, setIsSaving] = useState(false);
+  const [showDragHandle, setShowDragHandle] = useState(false);
+
+  const handleStartEdit = () => {
+    setEditedLabel(column.title);
+    setIsEditing(true);
+  };
+
+  const handleCancelEdit = () => {
+    setEditedLabel(column.title);
+    setIsEditing(false);
+  };
+
+  const handleSaveEdit = async () => {
+    if (!editedLabel.trim() || editedLabel === column.title || !onUpdateLabel) {
+      handleCancelEdit();
+      return;
+    }
+
+    setIsSaving(true);
+    try {
+      await onUpdateLabel(column.id as LeadStatus, editedLabel.trim());
+      setIsEditing(false);
+    } catch (error) {
+      console.error('Error updating column label:', error);
+      setEditedLabel(column.title); // Revert on error
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const handleKeyDown = (e: React.KeyboardEvent) => {
+    if (e.key === 'Enter') {
+      handleSaveEdit();
+    } else if (e.key === 'Escape') {
+      handleCancelEdit();
+    }
+  };
   return (
     <Box
       sx={{
@@ -45,14 +98,32 @@ export const LeadColumn: React.FC<LeadColumnProps> = ({
         height: '100%',
         display: 'flex',
         flexDirection: 'column',
-        border: '1px solid rgba(255, 255, 255, 0.2)',
-        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08)',
+        border: isDraggedOver ? '3px solid #2196f3' : '1px solid rgba(255, 255, 255, 0.2)',
+        boxShadow: isDraggedOver ? '0 12px 48px rgba(33, 150, 243, 0.3)' : '0 8px 32px rgba(0, 0, 0, 0.08)',
+        transition: 'all 0.2s ease',
       }}
       onDragOver={onDragOver}
       onDrop={(e) => onDrop(e, column.id)}
     >
       {/* Column Header */}
       <Box
+        draggable={onColumnDragStart && !isEditing}
+        onDragStart={(e) => onColumnDragStart && onColumnDragStart(e, column.id)}
+        onDragOver={(e) => {
+          if (onColumnDragOver) {
+            e.stopPropagation();
+            onColumnDragOver(e, column.id);
+          }
+        }}
+        onDragLeave={onColumnDragLeave}
+        onDrop={(e) => {
+          if (onColumnDrop) {
+            e.stopPropagation();
+            onColumnDrop(e, column.id);
+          }
+        }}
+        onMouseEnter={() => setShowDragHandle(true)}
+        onMouseLeave={() => setShowDragHandle(false)}
         sx={{
           background: column.headerColor,
           color: 'white',
@@ -64,6 +135,10 @@ export const LeadColumn: React.FC<LeadColumnProps> = ({
           position: 'relative',
           overflow: 'hidden',
           flexShrink: 0,
+          cursor: onColumnDragStart && !isEditing ? 'grab' : 'default',
+          '&:active': {
+            cursor: onColumnDragStart && !isEditing ? 'grabbing' : 'default',
+          },
           '&::before': {
             content: '""',
             position: 'absolute',
@@ -76,17 +151,109 @@ export const LeadColumn: React.FC<LeadColumnProps> = ({
           }
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, zIndex: 1 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, zIndex: 1, flex: 1 }}>
+          {/* Drag Handle Indicator */}
+          {onColumnDragStart && !isEditing && (
+            <Box
+              sx={{
+                opacity: showDragHandle ? 1 : 0,
+                transition: 'opacity 0.2s',
+                display: 'flex',
+                alignItems: 'center',
+              }}
+            >
+              <DragIcon sx={{ fontSize: 18, color: 'rgba(255, 255, 255, 0.8)' }} />
+            </Box>
+          )}
+
           <Typography sx={{ fontSize: '18px' }}>
             {column.icon}
           </Typography>
-          <Typography variant="h6" sx={{
-            fontWeight: 600,
-            color: 'white',
-            textShadow: '0 1px 2px rgba(0, 0, 0, 0.2)'
-          }}>
-            {column.title}
-          </Typography>
+
+          {isEditing ? (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, flex: 1 }}>
+              <TextField
+                value={editedLabel}
+                onChange={(e) => setEditedLabel(e.target.value)}
+                onKeyDown={handleKeyDown}
+                autoFocus
+                size="small"
+                disabled={isSaving}
+                sx={{
+                  flex: 1,
+                  '& .MuiInputBase-root': {
+                    color: 'white',
+                    fontSize: '16px',
+                    fontWeight: 600,
+                  },
+                  '& .MuiOutlinedInput-notchedOutline': {
+                    borderColor: 'rgba(255, 255, 255, 0.5)',
+                  },
+                  '& .MuiInputBase-root:hover .MuiOutlinedInput-notchedOutline': {
+                    borderColor: 'rgba(255, 255, 255, 0.8)',
+                  },
+                  '& .MuiInputBase-root.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                    borderColor: 'white',
+                  },
+                }}
+              />
+              <IconButton
+                size="small"
+                onClick={handleSaveEdit}
+                disabled={isSaving}
+                sx={{
+                  color: '#4caf50',
+                  bgcolor: 'rgba(255, 255, 255, 0.9)',
+                  '&:hover': { bgcolor: 'white' },
+                }}
+              >
+                <CheckIcon fontSize="small" />
+              </IconButton>
+              <IconButton
+                size="small"
+                onClick={handleCancelEdit}
+                disabled={isSaving}
+                sx={{
+                  color: '#f44336',
+                  bgcolor: 'rgba(255, 255, 255, 0.9)',
+                  '&:hover': { bgcolor: 'white' },
+                }}
+              >
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            </Box>
+          ) : (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="h6" sx={{
+                fontWeight: 600,
+                color: 'white',
+                textShadow: '0 1px 2px rgba(0, 0, 0, 0.2)'
+              }}>
+                {column.title}
+              </Typography>
+              {onUpdateLabel && (
+                <Tooltip title="Edit column name">
+                  <IconButton
+                    size="small"
+                    onClick={handleStartEdit}
+                    sx={{
+                      color: 'white',
+                      opacity: 0,
+                      transition: 'opacity 0.2s',
+                      '&:hover': {
+                        bgcolor: 'rgba(255, 255, 255, 0.2)',
+                      },
+                      '.MuiBox-root:hover &': {
+                        opacity: 1,
+                      },
+                    }}
+                  >
+                    <EditIcon sx={{ fontSize: 16 }} />
+                  </IconButton>
+                </Tooltip>
+              )}
+            </Box>
+          )}
         </Box>
 
         <Box sx={{

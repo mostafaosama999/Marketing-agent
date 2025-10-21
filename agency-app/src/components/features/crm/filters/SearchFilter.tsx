@@ -53,7 +53,7 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({
         InputProps={{
           startAdornment: (
             <InputAdornment position="start">
-              <SearchIcon sx={{ color: '#64748b', fontSize: '20px' }} />
+              <SearchIcon sx={{ color: '#667eea', fontSize: '20px' }} />
             </InputAdornment>
           ),
           endAdornment: localValue && (
@@ -77,23 +77,31 @@ export const SearchFilter: React.FC<SearchFilterProps> = ({
         }}
         sx={{
           '& .MuiOutlinedInput-root': {
-            background: 'rgba(255, 255, 255, 0.95)',
-            backdropFilter: 'blur(20px)',
+            background: 'white',
+            borderRadius: '8px',
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
             '& fieldset': {
-              borderColor: 'rgba(255, 255, 255, 0.3)',
+              borderColor: '#e2e8f0',
+              borderWidth: '1.5px',
             },
             '&:hover fieldset': {
               borderColor: '#667eea',
+              borderWidth: '1.5px',
             },
             '&.Mui-focused fieldset': {
               borderColor: '#667eea',
+              borderWidth: '2px',
+              boxShadow: '0 0 0 3px rgba(102, 126, 234, 0.1)',
             },
           },
           '& .MuiInputBase-input': {
             fontSize: '14px',
+            fontWeight: 500,
+            color: '#1e293b',
             '&::placeholder': {
               color: '#94a3b8',
               opacity: 1,
+              fontWeight: 400,
             },
           },
         }}

@@ -139,7 +139,8 @@ export const STATUS_TO_LEAD_STATUS: Record<string, LeadStatus> = {
   'Lost': 'lost',
 };
 
-// LeadStatus to display label mapping
+// LeadStatus to display label mapping (default/fallback values)
+// Note: Use usePipelineConfigContext().getLabel() for dynamic labels from Firestore
 export const LEAD_STATUS_TO_LABEL: Record<LeadStatus, string> = {
   'new_lead': 'New Lead',
   'qualified': 'Qualified',
@@ -148,3 +149,17 @@ export const LEAD_STATUS_TO_LABEL: Record<LeadStatus, string> = {
   'won': 'Won',
   'lost': 'Lost',
 };
+
+/**
+ * Get label for a status with fallback to default
+ * This is a helper for components that can't use the context
+ */
+export function getStatusLabel(
+  status: LeadStatus,
+  labelMap?: Record<LeadStatus, string>
+): string {
+  if (labelMap) {
+    return labelMap[status] || LEAD_STATUS_TO_LABEL[status];
+  }
+  return LEAD_STATUS_TO_LABEL[status];
+}

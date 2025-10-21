@@ -1,40 +1,65 @@
 // src/components/features/crm/filters/FilterPanel.tsx
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { Box, Typography, Button, Collapse, Paper } from '@mui/material';
 import { LeadStatus } from '../../../../types/lead';
 import { Lead } from '../../../../types/lead';
+import { FilterState } from '../../../../types/filter';
 import { StatusFilter } from './StatusFilter';
 import { LeadOwnerFilter } from './LeadOwnerFilter';
 import { CompanyFilter } from './CompanyFilter';
 import { MonthFilter } from './MonthFilter';
+import { DynamicFieldFilter } from './DynamicFieldFilter';
+import { getCustomFieldsConfig } from '../../../../services/api/customFieldsService';
+import { getFilterableFields, FilterConfig } from '../../../../services/api/dynamicFilterService';
+import { CustomField } from '../../../../types/crm';
 
 interface FilterPanelProps {
   isExpanded: boolean;
-  selectedStatuses: LeadStatus[];
-  selectedOwner: string;
-  selectedCompany: string;
-  selectedMonth: string;
-  onStatusesChange: (statuses: LeadStatus[]) => void;
-  onOwnerChange: (owner: string) => void;
-  onCompanyChange: (company: string) => void;
-  onMonthChange: (month: string) => void;
+  filters: FilterState;
+  onFiltersChange: (filters: Partial<FilterState>) => void;
   onClearAll: () => void;
   leads: Lead[];
 }
 
 export const FilterPanel: React.FC<FilterPanelProps> = ({
   isExpanded,
-  selectedStatuses,
-  selectedOwner,
-  selectedCompany,
-  selectedMonth,
-  onStatusesChange,
-  onOwnerChange,
-  onCompanyChange,
-  onMonthChange,
+  filters,
+  onFiltersChange,
   onClearAll,
   leads,
 }) => {
+  const [customFieldConfigs, setCustomFieldConfigs] = useState<FilterConfig[]>([]);
+  const [loading, setLoading] = useState(false);
+
+  // Fetch custom fields configuration on mount
+  useEffect(() => {
+    async function loadCustomFields() {
+      if (!isExpanded || leads.length === 0) return;
+
+      setLoading(true);
+      try {
+        const config = await getCustomFieldsConfig();
+        const filterableFields = getFilterableFields(config.fields, leads);
+        setCustomFieldConfigs(filterableFields);
+      } catch (error) {
+        console.error('Error loading custom fields:', error);
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadCustomFields();
+  }, [isExpanded, leads.length]);
+
+  const labelStyle = {
+    color: '#64748b',
+    fontWeight: 600,
+    textTransform: 'uppercase' as const,
+    letterSpacing: '0.5px',
+    display: 'block',
+    mb: 1,
+  };
+
   return (
     <Collapse in={isExpanded} timeout={200}>
       <Paper
@@ -61,90 +86,54 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
         >
           {/* Status Filter */}
           <Box>
-            <Typography
-              variant="caption"
-              sx={{
-                color: '#64748b',
-                fontWeight: 600,
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px',
-                display: 'block',
-                mb: 1,
-              }}
-            >
+            <Typography variant="caption" sx={labelStyle}>
               Status
             </Typography>
             <StatusFilter
-              selectedStatuses={selectedStatuses}
-              onStatusesChange={onStatusesChange}
-            />
-          </Box>
-
-          {/* Owner Filter */}
-          <Box>
-            <Typography
-              variant="caption"
-              sx={{
-                color: '#64748b',
-                fontWeight: 600,
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px',
-                display: 'block',
-                mb: 1,
-              }}
-            >
-              Owner
-            </Typography>
-            <LeadOwnerFilter
-              selectedOwner={selectedOwner}
-              onOwnerChange={onOwnerChange}
-              leads={leads}
+              selectedStatuses={filters.statuses}
+              onStatusesChange={(statuses) => onFiltersChange({ statuses })}
             />
           </Box>
 
           {/* Company Filter */}
           <Box>
-            <Typography
-              variant="caption"
-              sx={{
-                color: '#64748b',
-                fontWeight: 600,
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px',
-                display: 'block',
-                mb: 1,
-              }}
-            >
+            <Typography variant="caption" sx={labelStyle}>
               Company
             </Typography>
             <CompanyFilter
-              selectedCompany={selectedCompany}
-              onCompanyChange={onCompanyChange}
+              selectedCompany={filters.company}
+              onCompanyChange={(company) => onFiltersChange({ company })}
               leads={leads}
             />
           </Box>
 
           {/* Month Filter */}
           <Box>
-            <Typography
-              variant="caption"
-              sx={{
-                color: '#64748b',
-                fontWeight: 600,
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px',
-                display: 'block',
-                mb: 1,
-              }}
-            >
+            <Typography variant="caption" sx={labelStyle}>
               Month
             </Typography>
             <MonthFilter
-              selectedMonth={selectedMonth}
-              onMonthChange={onMonthChange}
+              selectedMonth={filters.month}
+              onMonthChange={(month) => onFiltersChange({ month })}
               leads={leads}
             />
           </Box>
+
+          {/* Dynamic Custom Field Filters */}
+          {customFieldConfigs.map((config) => (
+            <Box key={config.fieldName}>
+              <Typography variant="caption" sx={labelStyle}>
+                {config.label}
+              </Typography>
+              <DynamicFieldFilter
+                config={config}
+                value={filters[config.fieldName]}
+                onChange={(value) =>
+                  onFiltersChange({ [config.fieldName]: value })
+                }
+              />
+            </Box>
+          ))}
         </Box>
 
         {/* Clear All Button */}

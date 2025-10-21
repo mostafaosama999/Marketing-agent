@@ -2,43 +2,30 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Box } from '@mui/material';
 import { LeadStatus, Lead } from '../../../../types/lead';
+import { FilterState, FilterRule } from '../../../../types/filter';
 import { FilterButton } from './FilterButton';
-import { FilterPanel } from './FilterPanel';
+import { AdvancedFilterBuilder } from './AdvancedFilterBuilder';
 import { SearchFilter } from './SearchFilter';
 import { ActiveFiltersBar } from './ActiveFiltersBar';
 
 interface CollapsibleFilterBarProps {
-  // Filter states
-  searchTerm: string;
-  selectedStatuses: LeadStatus[];
-  selectedOwner: string;
-  selectedCompany: string;
-  selectedMonth: string;
+  // Filter state (unified object)
+  filters: FilterState;
 
   // Filter handlers
-  onSearchChange: (term: string) => void;
-  onStatusesChange: (statuses: LeadStatus[]) => void;
-  onOwnerChange: (owner: string) => void;
-  onCompanyChange: (company: string) => void;
-  onMonthChange: (month: string) => void;
+  onFiltersChange: (updates: Partial<FilterState>) => void;
   onClearAll: () => void;
+  onApplyAdvancedFilters: (rules: FilterRule[]) => void;
 
   // Data for dropdowns
   leads: Lead[];
 }
 
 export const CollapsibleFilterBar: React.FC<CollapsibleFilterBarProps> = ({
-  searchTerm,
-  selectedStatuses,
-  selectedOwner,
-  selectedCompany,
-  selectedMonth,
-  onSearchChange,
-  onStatusesChange,
-  onOwnerChange,
-  onCompanyChange,
-  onMonthChange,
+  filters,
+  onFiltersChange,
   onClearAll,
+  onApplyAdvancedFilters,
   leads,
 }) => {
   const [isExpanded, setIsExpanded] = useState(false);
@@ -46,18 +33,27 @@ export const CollapsibleFilterBar: React.FC<CollapsibleFilterBarProps> = ({
 
   // Calculate active filter count (excluding search)
   const activeCount =
-    selectedStatuses.length +
-    (selectedOwner ? 1 : 0) +
-    (selectedCompany ? 1 : 0) +
-    (selectedMonth ? 1 : 0);
+    filters.statuses.length +
+    (filters.company ? 1 : 0) +
+    (filters.month ? 1 : 0) +
+    // Count custom field filters
+    Object.keys(filters).filter(
+      key => !['search', 'statuses', 'company', 'month'].includes(key) && filters[key]
+    ).length;
 
   // Handle click outside to close panel
   useEffect(() => {
     const handleClickOutside = (event: MouseEvent) => {
+      const target = event.target as Node;
+
+      // Check if click is on a MUI portal element (dropdown menus)
+      const isMuiPortal = (target as HTMLElement).closest?.('.MuiPopover-root, .MuiModal-root, .MuiPaper-root');
+
       if (
         isExpanded &&
         panelRef.current &&
-        !panelRef.current.contains(event.target as Node)
+        !panelRef.current.contains(target) &&
+        !isMuiPortal
       ) {
         setIsExpanded(false);
       }
@@ -71,7 +67,9 @@ export const CollapsibleFilterBar: React.FC<CollapsibleFilterBarProps> = ({
 
   // Handler for removing individual status
   const handleRemoveStatus = (status: LeadStatus) => {
-    onStatusesChange(selectedStatuses.filter(s => s !== status));
+    onFiltersChange({
+      statuses: filters.statuses.filter(s => s !== status),
+    });
   };
 
   return (
@@ -79,8 +77,8 @@ export const CollapsibleFilterBar: React.FC<CollapsibleFilterBarProps> = ({
       {/* Top row: Search + Filter Button */}
       <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
         <SearchFilter
-          value={searchTerm}
-          onChange={onSearchChange}
+          value={filters.search}
+          onChange={(search) => onFiltersChange({ search })}
           placeholder="Search leads..."
         />
 
@@ -91,53 +89,48 @@ export const CollapsibleFilterBar: React.FC<CollapsibleFilterBarProps> = ({
             onToggle={() => setIsExpanded(!isExpanded)}
           />
 
-          {/* Collapsible Filter Panel */}
+          {/* Collapsible Advanced Filter Builder */}
           <Box
             sx={{
               position: 'absolute',
               top: 'calc(100% + 4px)',
               right: 0,
               width: {
-                xs: '340px',
-                sm: '400px',
-                md: '500px',
+                xs: '600px',
+                sm: '700px',
+                md: '800px',
               },
               zIndex: 1000,
             }}
           >
-            <FilterPanel
+            <AdvancedFilterBuilder
               isExpanded={isExpanded}
-              selectedStatuses={selectedStatuses}
-              selectedOwner={selectedOwner}
-              selectedCompany={selectedCompany}
-              selectedMonth={selectedMonth}
-              onStatusesChange={onStatusesChange}
-              onOwnerChange={onOwnerChange}
-              onCompanyChange={onCompanyChange}
-              onMonthChange={onMonthChange}
-              onClearAll={() => {
+              onApplyFilters={(rules) => {
+                onApplyAdvancedFilters(rules);
+                setIsExpanded(false);
+              }}
+              onClearFilters={() => {
                 onClearAll();
                 setIsExpanded(false);
               }}
-              leads={leads}
             />
           </Box>
         </Box>
       </Box>
 
       {/* Active Filters Chips Row */}
-      {(searchTerm || activeCount > 0) && (
+      {(filters.search || activeCount > 0) && (
         <ActiveFiltersBar
-          search={searchTerm}
-          statuses={selectedStatuses}
-          owner={selectedOwner}
-          company={selectedCompany}
-          month={selectedMonth}
-          onRemoveSearch={() => onSearchChange('')}
+          search={filters.search}
+          statuses={filters.statuses}
+          owner={filters.lead_owner || ''}
+          company={filters.company}
+          month={filters.month}
+          onRemoveSearch={() => onFiltersChange({ search: '' })}
           onRemoveStatus={handleRemoveStatus}
-          onRemoveOwner={() => onOwnerChange('')}
-          onRemoveCompany={() => onCompanyChange('')}
-          onRemoveMonth={() => onMonthChange('')}
+          onRemoveOwner={() => onFiltersChange({ lead_owner: '' })}
+          onRemoveCompany={() => onFiltersChange({ company: '' })}
+          onRemoveMonth={() => onFiltersChange({ month: '' })}
           onClearAll={onClearAll}
         />
       )}

@@ -1,10 +1,12 @@
 // src/components/features/crm/CRMBoard.tsx
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Fab, Button, ThemeProvider, createTheme, Alert, Snackbar } from '@mui/material';
-import { Add as AddIcon, UploadFile as UploadFileIcon } from '@mui/icons-material';
+import { Box, Typography, Fab, Button, ThemeProvider, createTheme, Alert, Snackbar, Menu, MenuItem, Checkbox, ListItemIcon, ListItemText } from '@mui/material';
+import { Add as AddIcon, UploadFile as UploadFileIcon, ViewColumn as ViewColumnIcon } from '@mui/icons-material';
 import { useAuth } from '../../../contexts/AuthContext';
 import { Lead, LeadStatus } from '../../../types/lead';
 import { CSVRow } from '../../../types/crm';
+import { FilterState, FilterRule } from '../../../types/filter';
+import { applyAdvancedFilters } from '../../../services/api/advancedFilterService';
 import { LeadDialog } from './LeadDialog';
 import { LeadColumn } from './LeadColumn';
 import { ViewToggle } from './ViewToggle';
@@ -20,6 +22,7 @@ import {
   updateLeadStatus,
   deleteLead,
 } from '../../../services/api/leads';
+import { usePipelineConfig } from '../../../hooks/usePipelineConfig';
 
 // Modern theme matching KanbanBoard
 const modernTheme = createTheme({
@@ -34,74 +37,31 @@ const modernTheme = createTheme({
   },
 });
 
-// Lead pipeline columns (matching KanbanBoard structure)
-const LEAD_COLUMNS = [
-  {
-    id: 'new_lead',
-    title: 'New Lead',
-    icon: '📋',
-    color: 'linear-gradient(135deg, #f8f9fa 0%, #e9ecef 100%)',
-    headerColor: 'linear-gradient(135deg, #6c757d 0%, #495057 100%)',
-    count: 0
-  },
-  {
-    id: 'qualified',
-    title: 'Qualified',
-    icon: '🎯',
-    color: 'linear-gradient(135deg, #fff3e0 0%, #ffcc80 100%)',
-    headerColor: 'linear-gradient(135deg, #ff9800 0%, #f57c00 100%)',
-    count: 0
-  },
-  {
-    id: 'contacted',
-    title: 'Contacted',
-    icon: '📞',
-    color: 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)',
-    headerColor: 'linear-gradient(135deg, #2196f3 0%, #1976d2 100%)',
-    count: 0
-  },
-  {
-    id: 'follow_up',
-    title: 'Follow up',
-    icon: '🔄',
-    color: 'linear-gradient(135deg, #f3e5f5 0%, #e1bee7 100%)',
-    headerColor: 'linear-gradient(135deg, #9c27b0 0%, #7b1fa2 100%)',
-    count: 0
-  },
-  {
-    id: 'won',
-    title: 'Won',
-    icon: '✅',
-    color: 'linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%)',
-    headerColor: 'linear-gradient(135deg, #4caf50 0%, #388e3c 100%)',
-    count: 0
-  },
-  {
-    id: 'lost',
-    title: 'Lost',
-    icon: '❌',
-    color: 'linear-gradient(135deg, #fce4ec 0%, #f8bbd0 100%)',
-    headerColor: 'linear-gradient(135deg, #607d8b 0%, #455a64 100%)',
-    count: 0
-  }
-];
-
 function CRMBoard() {
   const { userProfile, user } = useAuth();
+  const { stages, updateLabel, updateOrder } = usePipelineConfig(); // Load dynamic pipeline config
   const [leads, setLeads] = useState<Lead[]>([]);
   const [draggedLead, setDraggedLead] = useState<Lead | null>(null);
+  const [draggedColumn, setDraggedColumn] = useState<string | null>(null); // Column being dragged
+  const [dragOverColumn, setDragOverColumn] = useState<string | null>(null); // Column being dragged over
   const [openDialog, setOpenDialog] = useState(false);
   const [openLeadDetail, setOpenLeadDetail] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [dialogMode, setDialogMode] = useState<'create' | 'edit'>('create');
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertMessage, setAlertMessage] = useState('');
-  // Filter states
-  const [selectedOwner, setSelectedOwner] = useState<string>('');
-  const [selectedCompany, setSelectedCompany] = useState<string>('');
-  const [selectedMonth, setSelectedMonth] = useState<string>('');
-  const [selectedStatuses, setSelectedStatuses] = useState<LeadStatus[]>([]);
-  const [searchTerm, setSearchTerm] = useState<string>('');
+
+  // Unified filter state
+  const [filters, setFilters] = useState<FilterState>({
+    search: '',
+    statuses: [],
+    company: '',
+    month: '',
+  });
+
+  // Advanced filter rules
+  const [advancedFilterRules, setAdvancedFilterRules] = useState<FilterRule[]>([]);
+
   // CSV Import states
   const [showCSVUpload, setShowCSVUpload] = useState(false);
   const [showCSVMapping, setShowCSVMapping] = useState(false);
@@ -114,12 +74,47 @@ function CRMBoard() {
     return (savedView === 'table' || savedView === 'board') ? savedView : 'board';
   });
 
-  // Get columns with counts
+  // Column visibility state for table view
+  const defaultColumns = [
+    { id: 'name', label: 'Name', required: true },
+    { id: 'email', label: 'Email', required: false },
+    { id: 'phone', label: 'Phone', required: false },
+    { id: 'company', label: 'Company', required: false },
+    { id: 'status', label: 'Status', required: false },
+    { id: 'created', label: 'Created', required: false },
+    { id: 'actions', label: 'Actions', required: true },
+  ];
+
+  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>(() => {
+    const saved = localStorage.getItem('crmTableColumns');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Error parsing saved column visibility:', e);
+      }
+    }
+    return defaultColumns.reduce((acc, col) => {
+      acc[col.id] = true;
+      return acc;
+    }, {} as Record<string, boolean>);
+  });
+
+  const [columnMenuAnchor, setColumnMenuAnchor] = useState<null | HTMLElement>(null);
+
+  // Get columns with counts from dynamic pipeline stages
   const getColumns = () => {
-    return LEAD_COLUMNS.map(col => ({
-      ...col,
-      count: getLeadsForColumn(col.id as LeadStatus).length
-    }));
+    return stages
+      .sort((a, b) => a.order - b.order)
+      .filter((stage) => stage.visible)
+      .map((stage) => ({
+        id: stage.id,
+        title: stage.label,
+        icon: stage.icon,
+        color: stage.color,
+        headerColor: stage.headerColor,
+        count: getLeadsForColumn(stage.id as LeadStatus).length,
+      }));
   };
 
   // Subscribe to leads in real-time
@@ -198,6 +193,64 @@ function CRMBoard() {
     }
   };
 
+  // Column drag handlers
+  const handleColumnDragStart = (e: any, columnId: string) => {
+    setDraggedColumn(columnId);
+    e.dataTransfer.effectAllowed = 'move';
+    // Prevent dragging leads while dragging columns
+    e.stopPropagation();
+  };
+
+  const handleColumnDragOver = (e: any, columnId: string) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    if (draggedColumn && draggedColumn !== columnId) {
+      setDragOverColumn(columnId);
+    }
+  };
+
+  const handleColumnDragLeave = () => {
+    setDragOverColumn(null);
+  };
+
+  const handleColumnDrop = async (e: any, targetColumnId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+
+    if (!draggedColumn || draggedColumn === targetColumnId) {
+      setDraggedColumn(null);
+      setDragOverColumn(null);
+      return;
+    }
+
+    try {
+      // Find source and target indices
+      const sourceIndex = stages.findIndex((s) => s.id === draggedColumn);
+      const targetIndex = stages.findIndex((s) => s.id === targetColumnId);
+
+      if (sourceIndex === -1 || targetIndex === -1) {
+        console.error('Invalid column indices');
+        return;
+      }
+
+      // Create new array with swapped positions
+      const newStages = [...stages];
+      const [movedStage] = newStages.splice(sourceIndex, 1);
+      newStages.splice(targetIndex, 0, movedStage);
+
+      // Update order in Firestore
+      await updateOrder(newStages);
+
+      setDraggedColumn(null);
+      setDragOverColumn(null);
+    } catch (error) {
+      console.error('Error reordering columns:', error);
+      showAlert('Failed to reorder columns. Please try again.');
+      setDraggedColumn(null);
+      setDragOverColumn(null);
+    }
+  };
+
   const handleLeadClick = (lead: Lead) => {
     setSelectedLead(lead);
     setDialogMode('edit');
@@ -253,31 +306,31 @@ function CRMBoard() {
     let filteredLeads = leads.filter(lead => lead.status === columnId);
 
     // Apply search filter
-    if (searchTerm) {
-      filteredLeads = filteredLeads.filter(lead => matchesSearch(lead, searchTerm));
+    if (filters.search) {
+      filteredLeads = filteredLeads.filter(lead => matchesSearch(lead, filters.search));
     }
 
     // Apply status filter (for board view, if specific statuses are selected)
-    if (selectedStatuses.length > 0 && !selectedStatuses.includes(columnId)) {
+    if (filters.statuses.length > 0 && !filters.statuses.includes(columnId)) {
       return []; // Don't show this column if its status is not selected
     }
 
     // Apply owner filter if selected
-    if (selectedOwner) {
+    if (filters.lead_owner) {
       filteredLeads = filteredLeads.filter(lead =>
-        lead.customFields?.lead_owner === selectedOwner
+        lead.customFields?.lead_owner === filters.lead_owner
       );
     }
 
     // Apply company filter if selected
-    if (selectedCompany) {
+    if (filters.company) {
       filteredLeads = filteredLeads.filter(lead =>
-        lead.company === selectedCompany
+        lead.company === filters.company
       );
     }
 
     // Apply month filter if selected
-    if (selectedMonth) {
+    if (filters.month) {
       filteredLeads = filteredLeads.filter(lead => {
         const lastUpdateDate = getLastUpdateDate(lead);
 
@@ -289,8 +342,13 @@ function CRMBoard() {
         const leadMonth = String(lastUpdateDate.getMonth() + 1).padStart(2, '0');
         const leadYearMonth = `${leadYear}-${leadMonth}`;
 
-        return leadYearMonth === selectedMonth;
+        return leadYearMonth === filters.month;
       });
+    }
+
+    // Apply advanced filters if any rules are set
+    if (advancedFilterRules.length > 0) {
+      filteredLeads = applyAdvancedFilters(filteredLeads, advancedFilterRules);
     }
 
     return filteredLeads;
@@ -301,33 +359,33 @@ function CRMBoard() {
     let filteredLeads = [...leads];
 
     // Apply search filter
-    if (searchTerm) {
-      filteredLeads = filteredLeads.filter(lead => matchesSearch(lead, searchTerm));
+    if (filters.search) {
+      filteredLeads = filteredLeads.filter(lead => matchesSearch(lead, filters.search));
     }
 
     // Apply status filter
-    if (selectedStatuses.length > 0) {
+    if (filters.statuses.length > 0) {
       filteredLeads = filteredLeads.filter(lead =>
-        selectedStatuses.includes(lead.status)
+        filters.statuses.includes(lead.status)
       );
     }
 
     // Apply owner filter
-    if (selectedOwner) {
+    if (filters.lead_owner) {
       filteredLeads = filteredLeads.filter(lead =>
-        lead.customFields?.lead_owner === selectedOwner
+        lead.customFields?.lead_owner === filters.lead_owner
       );
     }
 
     // Apply company filter
-    if (selectedCompany) {
+    if (filters.company) {
       filteredLeads = filteredLeads.filter(lead =>
-        lead.company === selectedCompany
+        lead.company === filters.company
       );
     }
 
     // Apply month filter
-    if (selectedMonth) {
+    if (filters.month) {
       filteredLeads = filteredLeads.filter(lead => {
         const lastUpdateDate = getLastUpdateDate(lead);
         if (!lastUpdateDate) return false;
@@ -336,8 +394,13 @@ function CRMBoard() {
         const leadMonth = String(lastUpdateDate.getMonth() + 1).padStart(2, '0');
         const leadYearMonth = `${leadYear}-${leadMonth}`;
 
-        return leadYearMonth === selectedMonth;
+        return leadYearMonth === filters.month;
       });
+    }
+
+    // Apply advanced filters if any rules are set
+    if (advancedFilterRules.length > 0) {
+      filteredLeads = applyAdvancedFilters(filteredLeads, advancedFilterRules);
     }
 
     return filteredLeads;
@@ -346,6 +409,26 @@ function CRMBoard() {
   const handleViewChange = (view: 'board' | 'table') => {
     setCurrentView(view);
     localStorage.setItem('crmViewMode', view);
+  };
+
+  // Column visibility handler
+  const toggleColumnVisibility = (columnId: string) => {
+    const column = defaultColumns.find((c) => c.id === columnId);
+    if (column?.required) return;
+
+    const visibleCount = Object.values(columnVisibility).filter((v) => v).length;
+    if (visibleCount === 1 && columnVisibility[columnId]) {
+      alert('At least one column must remain visible');
+      return;
+    }
+
+    const newVisibility = {
+      ...columnVisibility,
+      [columnId]: !columnVisibility[columnId],
+    };
+
+    setColumnVisibility(newVisibility);
+    localStorage.setItem('crmTableColumns', JSON.stringify(newVisibility));
   };
 
   const handleUpdateStatus = async (leadId: string, newStatus: LeadStatus) => {
@@ -361,12 +444,22 @@ function CRMBoard() {
   };
 
   // Filter handlers
+  const handleFiltersChange = (updates: Partial<FilterState>) => {
+    setFilters(prev => ({ ...prev, ...updates }));
+  };
+
   const handleClearAllFilters = () => {
-    setSearchTerm('');
-    setSelectedStatuses([]);
-    setSelectedOwner('');
-    setSelectedCompany('');
-    setSelectedMonth('');
+    setFilters({
+      search: '',
+      statuses: [],
+      company: '',
+      month: '',
+    });
+    setAdvancedFilterRules([]);
+  };
+
+  const handleApplyAdvancedFilters = (rules: FilterRule[]) => {
+    setAdvancedFilterRules(rules);
   };
 
   // CSV Import handlers
@@ -407,6 +500,8 @@ function CRMBoard() {
       }}>
         {/* Header */}
         <Box sx={{
+          position: 'relative',
+          zIndex: 10,
           background: 'rgba(255, 255, 255, 0.95)',
           backdropFilter: 'blur(20px)',
           borderBottom: '1px solid rgba(255, 255, 255, 0.2)',
@@ -459,22 +554,39 @@ function CRMBoard() {
                   view={currentView}
                   onViewChange={handleViewChange}
                 />
+                {currentView === 'table' && (
+                  <>
+                    <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      startIcon={<ViewColumnIcon />}
+                      onClick={(e) => setColumnMenuAnchor(e.currentTarget)}
+                      sx={{
+                        textTransform: 'none',
+                        borderColor: '#e2e8f0',
+                        color: '#64748b',
+                        fontWeight: 500,
+                        '&:hover': {
+                          borderColor: '#667eea',
+                          bgcolor: 'rgba(102, 126, 234, 0.04)',
+                          color: '#667eea',
+                        },
+                      }}
+                    >
+                      Columns
+                    </Button>
+                  </>
+                )}
                 <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
               </Box>
 
               {/* Collapsible Filter Bar */}
               <CollapsibleFilterBar
-                searchTerm={searchTerm}
-                selectedStatuses={selectedStatuses}
-                selectedOwner={selectedOwner}
-                selectedCompany={selectedCompany}
-                selectedMonth={selectedMonth}
-                onSearchChange={setSearchTerm}
-                onStatusesChange={setSelectedStatuses}
-                onOwnerChange={setSelectedOwner}
-                onCompanyChange={setSelectedCompany}
-                onMonthChange={setSelectedMonth}
+                filters={filters}
+                onFiltersChange={handleFiltersChange}
                 onClearAll={handleClearAllFilters}
+                onApplyAdvancedFilters={handleApplyAdvancedFilters}
                 leads={leads}
               />
             </Box>
@@ -503,6 +615,12 @@ function CRMBoard() {
                 onLeadClick={handleLeadClick}
                 onAddLead={() => setOpenDialog(true)}
                 userProfile={userProfile}
+                onUpdateLabel={updateLabel}
+                onColumnDragStart={handleColumnDragStart}
+                onColumnDragOver={handleColumnDragOver}
+                onColumnDragLeave={handleColumnDragLeave}
+                onColumnDrop={handleColumnDrop}
+                isDraggedOver={dragOverColumn === column.id}
               />
             ))}
           </Box>
@@ -518,6 +636,8 @@ function CRMBoard() {
               onLeadClick={handleLeadClick}
               onDeleteLead={handleDeleteLead}
               onUpdateStatus={handleUpdateStatus}
+              columnVisibility={columnVisibility}
+              onToggleColumnVisibility={toggleColumnVisibility}
             />
           </Box>
         )}
@@ -580,6 +700,68 @@ function CRMBoard() {
           data={parsedCSVData}
           headers={csvHeaders}
         />
+
+        {/* Column Visibility Menu */}
+        <Menu
+          anchorEl={columnMenuAnchor}
+          open={Boolean(columnMenuAnchor)}
+          onClose={() => setColumnMenuAnchor(null)}
+          PaperProps={{
+            sx: {
+              minWidth: 200,
+              maxHeight: 400,
+            },
+          }}
+        >
+          <Box sx={{ px: 2, py: 1, borderBottom: '1px solid #e2e8f0' }}>
+            <Typography variant="caption" fontWeight={600} color="#64748b">
+              SHOW/HIDE COLUMNS
+            </Typography>
+          </Box>
+          {defaultColumns.map((column) => (
+            <MenuItem
+              key={column.id}
+              onClick={() => {
+                if (!column.required) {
+                  toggleColumnVisibility(column.id);
+                }
+              }}
+              disabled={column.required}
+              sx={{
+                py: 1,
+                '&.Mui-disabled': {
+                  opacity: 0.5,
+                },
+              }}
+            >
+              <ListItemIcon>
+                <Checkbox
+                  checked={columnVisibility[column.id] ?? true}
+                  disabled={column.required}
+                  size="small"
+                  sx={{
+                    color: '#64748b',
+                    '&.Mui-checked': {
+                      color: '#667eea',
+                    },
+                  }}
+                />
+              </ListItemIcon>
+              <ListItemText
+                primary={column.label}
+                primaryTypographyProps={{
+                  fontSize: '14px',
+                  fontWeight: columnVisibility[column.id] ? 500 : 400,
+                }}
+              />
+              {column.required && (
+                <Typography variant="caption" color="#94a3b8" sx={{ ml: 1 }}>
+                  Required
+                </Typography>
+              )}
+            </MenuItem>
+          ))}
+        </Menu>
       </Box>
     </ThemeProvider>
   );

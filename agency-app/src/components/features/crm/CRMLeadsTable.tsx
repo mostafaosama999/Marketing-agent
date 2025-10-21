@@ -15,26 +15,54 @@ import {
   Typography,
   Menu,
   MenuItem,
-  TextField,
-  InputAdornment,
+  Button,
+  Checkbox,
+  ListItemIcon,
+  ListItemText,
 } from '@mui/material';
 import {
   Edit as EditIcon,
   Delete as DeleteIcon,
-  Search as SearchIcon,
+  Visibility as VisibilityIcon,
+  ViewColumn as ViewColumnIcon,
+  ArrowBack as ArrowLeftIcon,
+  ArrowForward as ArrowRightIcon,
 } from '@mui/icons-material';
 import { Lead, LeadStatus } from '../../../types/lead';
-import { LEAD_STATUS_TO_LABEL } from '../../../types/crm';
+import { usePipelineConfigContext } from '../../../contexts/PipelineConfigContext';
 
 interface CRMLeadsTableProps {
   leads: Lead[];
   onLeadClick: (lead: Lead) => void;
   onDeleteLead: (leadId: string) => void;
   onUpdateStatus: (leadId: string, status: LeadStatus) => void;
+  columnVisibility: Record<string, boolean>;
+  onToggleColumnVisibility: (columnId: string) => void;
 }
 
 type SortDirection = 'asc' | 'desc';
 type SortableField = 'name' | 'email' | 'company' | 'phone' | 'status' | 'createdAt';
+
+// Column configuration
+interface ColumnConfig {
+  id: string;
+  label: string;
+  field: SortableField | 'actions';
+  visible: boolean;
+  required: boolean; // Can't be hidden
+  sortable: boolean;
+  order: number; // Position in table
+}
+
+const getDefaultColumns = (): ColumnConfig[] => [
+  { id: 'name', label: 'Name', field: 'name', visible: true, required: true, sortable: true, order: 0 },
+  { id: 'email', label: 'Email', field: 'email', visible: true, required: false, sortable: true, order: 1 },
+  { id: 'phone', label: 'Phone', field: 'phone', visible: true, required: false, sortable: true, order: 2 },
+  { id: 'company', label: 'Company', field: 'company', visible: true, required: false, sortable: true, order: 3 },
+  { id: 'status', label: 'Status', field: 'status', visible: true, required: false, sortable: true, order: 4 },
+  { id: 'created', label: 'Created', field: 'createdAt', visible: true, required: false, sortable: true, order: 5 },
+  { id: 'actions', label: 'Actions', field: 'actions', visible: true, required: true, sortable: false, order: 6 },
+];
 
 // Status color mapping
 const getStatusColor = (status: LeadStatus): string => {
@@ -63,12 +91,27 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
   onLeadClick,
   onDeleteLead,
   onUpdateStatus,
+  columnVisibility,
+  onToggleColumnVisibility,
 }) => {
+  const { stages, getLabel } = usePipelineConfigContext();
   const [orderBy, setOrderBy] = useState<SortableField>('createdAt');
   const [order, setOrder] = useState<SortDirection>('desc');
-  const [searchTerm, setSearchTerm] = useState('');
   const [statusMenuAnchor, setStatusMenuAnchor] = useState<null | HTMLElement>(null);
   const [selectedLeadForStatus, setSelectedLeadForStatus] = useState<Lead | null>(null);
+
+  // Column order and visibility state
+  const [columns, setColumns] = useState<ColumnConfig[]>(() => {
+    const saved = localStorage.getItem('crmTableColumnOrder');
+    if (saved) {
+      try {
+        return JSON.parse(saved);
+      } catch (e) {
+        console.error('Error parsing saved column order:', e);
+      }
+    }
+    return getDefaultColumns();
+  });
 
   // Sorting handler
   const handleRequestSort = (property: SortableField) => {
@@ -96,24 +139,42 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
     handleStatusMenuClose();
   };
 
-  // Filter and sort leads
-  const filteredAndSortedLeads = useMemo(() => {
-    let filtered = leads;
+  // Column reordering
+  const moveColumn = (columnId: string, direction: 'left' | 'right') => {
+    const visibleColumns = columns.filter((c) => columnVisibility[c.id]);
+    const currentIndex = visibleColumns.findIndex((c) => c.id === columnId);
 
-    // Apply search filter
-    if (searchTerm) {
-      const searchLower = searchTerm.toLowerCase();
-      filtered = leads.filter(
-        (lead) =>
-          lead.name.toLowerCase().includes(searchLower) ||
-          lead.email.toLowerCase().includes(searchLower) ||
-          lead.company.toLowerCase().includes(searchLower) ||
-          lead.phone.toLowerCase().includes(searchLower)
-      );
-    }
+    if (currentIndex === -1) return;
 
-    // Apply sorting
-    return filtered.sort((a, b) => {
+    // Check bounds
+    if (direction === 'left' && currentIndex === 0) return;
+    if (direction === 'right' && currentIndex === visibleColumns.length - 1) return;
+
+    const newIndex = direction === 'left' ? currentIndex - 1 : currentIndex + 1;
+
+    // Swap positions in the full columns array
+    const fullCurrentIndex = columns.findIndex((c) => c.id === columnId);
+    const fullTargetIndex = columns.findIndex((c) => c.id === visibleColumns[newIndex].id);
+
+    const newColumns = [...columns];
+    [newColumns[fullCurrentIndex], newColumns[fullTargetIndex]] = [
+      newColumns[fullTargetIndex],
+      newColumns[fullCurrentIndex],
+    ];
+
+    // Recalculate order values
+    const reorderedColumns = newColumns.map((col, index) => ({
+      ...col,
+      order: index,
+    }));
+
+    setColumns(reorderedColumns);
+    localStorage.setItem('crmTableColumnOrder', JSON.stringify(reorderedColumns));
+  };
+
+  // Sort leads (filtering is now handled by parent CRMBoard component)
+  const sortedLeads = useMemo(() => {
+    return [...leads].sort((a, b) => {
       let aValue: any = a[orderBy];
       let bValue: any = b[orderBy];
 
@@ -137,152 +198,165 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
       }
       return 0;
     });
-  }, [leads, orderBy, order, searchTerm]);
+  }, [leads, orderBy, order]);
 
   return (
     <Box>
-      {/* Search Bar */}
-      <Box sx={{ mb: 3 }}>
-        <TextField
-          fullWidth
-          placeholder="Search leads by name, email, company, or phone..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon />
-              </InputAdornment>
-            ),
-          }}
-        />
-      </Box>
-
       {/* Table */}
       <TableContainer component={Paper} sx={{ maxHeight: '100%' }}>
         <Table>
           <TableHead>
             <TableRow>
-              <TableCell>
-                <TableSortLabel
-                  active={orderBy === 'name'}
-                  direction={orderBy === 'name' ? order : 'asc'}
-                  onClick={() => handleRequestSort('name')}
-                >
-                  Name
-                </TableSortLabel>
-              </TableCell>
-              <TableCell>
-                <TableSortLabel
-                  active={orderBy === 'email'}
-                  direction={orderBy === 'email' ? order : 'asc'}
-                  onClick={() => handleRequestSort('email')}
-                >
-                  Email
-                </TableSortLabel>
-              </TableCell>
-              <TableCell>
-                <TableSortLabel
-                  active={orderBy === 'phone'}
-                  direction={orderBy === 'phone' ? order : 'asc'}
-                  onClick={() => handleRequestSort('phone')}
-                >
-                  Phone
-                </TableSortLabel>
-              </TableCell>
-              <TableCell>
-                <TableSortLabel
-                  active={orderBy === 'company'}
-                  direction={orderBy === 'company' ? order : 'asc'}
-                  onClick={() => handleRequestSort('company')}
-                >
-                  Company
-                </TableSortLabel>
-              </TableCell>
-              <TableCell>
-                <TableSortLabel
-                  active={orderBy === 'status'}
-                  direction={orderBy === 'status' ? order : 'asc'}
-                  onClick={() => handleRequestSort('status')}
-                >
-                  Status
-                </TableSortLabel>
-              </TableCell>
-              <TableCell>
-                <TableSortLabel
-                  active={orderBy === 'createdAt'}
-                  direction={orderBy === 'createdAt' ? order : 'asc'}
-                  onClick={() => handleRequestSort('createdAt')}
-                >
-                  Created
-                </TableSortLabel>
-              </TableCell>
-              <TableCell align="right">Actions</TableCell>
+              {columns
+                .filter((column) => columnVisibility[column.id])
+                .sort((a, b) => a.order - b.order)
+                .map((column, index, visibleColumns) => (
+                  <TableCell key={column.id} align={column.id === 'actions' ? 'right' : 'left'}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, justifyContent: column.id === 'actions' ? 'flex-end' : 'flex-start' }}>
+                      {column.sortable ? (
+                        <TableSortLabel
+                          active={orderBy === column.field}
+                          direction={orderBy === column.field ? order : 'asc'}
+                          onClick={() => handleRequestSort(column.field as SortableField)}
+                        >
+                          {column.label}
+                        </TableSortLabel>
+                      ) : (
+                        <Typography variant="body2" fontWeight={600}>
+                          {column.label}
+                        </Typography>
+                      )}
+
+                      {/* Column reordering arrows */}
+                      {!column.required && (
+                        <Box sx={{ display: 'flex', gap: 0.25 }}>
+                          <IconButton
+                            size="small"
+                            disabled={index === 0}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              moveColumn(column.id, 'left');
+                            }}
+                            sx={{
+                              padding: '2px',
+                              opacity: index === 0 ? 0.3 : 0.6,
+                              '&:hover': { opacity: 1 },
+                            }}
+                          >
+                            <ArrowLeftIcon sx={{ fontSize: 16, color: '#64748b' }} />
+                          </IconButton>
+                          <IconButton
+                            size="small"
+                            disabled={index === visibleColumns.length - 1}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              moveColumn(column.id, 'right');
+                            }}
+                            sx={{
+                              padding: '2px',
+                              opacity: index === visibleColumns.length - 1 ? 0.3 : 0.6,
+                              '&:hover': { opacity: 1 },
+                            }}
+                          >
+                            <ArrowRightIcon sx={{ fontSize: 16, color: '#64748b' }} />
+                          </IconButton>
+                        </Box>
+                      )}
+
+                      {/* Visibility toggle */}
+                      {!column.required && (
+                        <IconButton
+                          size="small"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onToggleColumnVisibility(column.id);
+                          }}
+                          sx={{
+                            ml: 0.5,
+                            opacity: 0.6,
+                            transition: 'opacity 0.2s',
+                            '&:hover': {
+                              opacity: 1,
+                            },
+                          }}
+                        >
+                          <VisibilityIcon sx={{ fontSize: 18, color: '#64748b' }} />
+                        </IconButton>
+                      )}
+                    </Box>
+                  </TableCell>
+                ))}
             </TableRow>
           </TableHead>
           <TableBody>
-            {filteredAndSortedLeads.length === 0 ? (
+            {sortedLeads.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={7} align="center" sx={{ py: 4 }}>
+                <TableCell colSpan={Object.values(columnVisibility).filter((v) => v).length} align="center" sx={{ py: 4 }}>
                   <Typography color="text.secondary">
-                    {searchTerm ? 'No leads found matching your search' : 'No leads yet'}
+                    No leads found
                   </Typography>
                 </TableCell>
               </TableRow>
             ) : (
-              filteredAndSortedLeads.map((lead) => (
+              sortedLeads.map((lead) => (
                 <TableRow
                   key={lead.id}
                   hover
                   onClick={() => onLeadClick(lead)}
                   sx={{ cursor: 'pointer' }}
                 >
-                  <TableCell>
-                    <Typography variant="body2" fontWeight={500}>
-                      {lead.name}
-                    </Typography>
-                  </TableCell>
-                  <TableCell>{lead.email}</TableCell>
-                  <TableCell>{lead.phone}</TableCell>
-                  <TableCell>{lead.company}</TableCell>
-                  <TableCell>
-                    <Chip
-                      label={LEAD_STATUS_TO_LABEL[lead.status]}
-                      size="small"
-                      onClick={(e) => handleStatusClick(e, lead)}
-                      sx={{
-                        bgcolor: `${getStatusColor(lead.status)}22`,
-                        color: getStatusColor(lead.status),
-                        fontWeight: 500,
-                        cursor: 'pointer',
-                        '&:hover': {
-                          bgcolor: `${getStatusColor(lead.status)}33`,
-                        },
-                      }}
-                    />
-                  </TableCell>
-                  <TableCell>{formatDate(lead.createdAt)}</TableCell>
-                  <TableCell align="right">
-                    <IconButton
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onLeadClick(lead);
-                      }}
-                    >
-                      <EditIcon fontSize="small" />
-                    </IconButton>
-                    <IconButton
-                      size="small"
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onDeleteLead(lead.id);
-                      }}
-                      color="error"
-                    >
-                      <DeleteIcon fontSize="small" />
-                    </IconButton>
-                  </TableCell>
+                  {columnVisibility.name && (
+                    <TableCell>
+                      <Typography variant="body2" fontWeight={500}>
+                        {lead.name}
+                      </Typography>
+                    </TableCell>
+                  )}
+                  {columnVisibility.email && <TableCell>{lead.email}</TableCell>}
+                  {columnVisibility.phone && <TableCell>{lead.phone}</TableCell>}
+                  {columnVisibility.company && <TableCell>{lead.company}</TableCell>}
+                  {columnVisibility.status && (
+                    <TableCell>
+                      <Chip
+                        label={getLabel(lead.status)}
+                        size="small"
+                        onClick={(e) => handleStatusClick(e, lead)}
+                        sx={{
+                          bgcolor: `${getStatusColor(lead.status)}22`,
+                          color: getStatusColor(lead.status),
+                          fontWeight: 500,
+                          cursor: 'pointer',
+                          '&:hover': {
+                            bgcolor: `${getStatusColor(lead.status)}33`,
+                          },
+                        }}
+                      />
+                    </TableCell>
+                  )}
+                  {columnVisibility.created && <TableCell>{formatDate(lead.createdAt)}</TableCell>}
+                  {columnVisibility.actions && (
+                    <TableCell align="right">
+                      <IconButton
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onLeadClick(lead);
+                        }}
+                      >
+                        <EditIcon fontSize="small" />
+                      </IconButton>
+                      <IconButton
+                        size="small"
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onDeleteLead(lead.id);
+                        }}
+                        color="error"
+                      >
+                        <DeleteIcon fontSize="small" />
+                      </IconButton>
+                    </TableCell>
+                  )}
                 </TableRow>
               ))
             )}
@@ -296,18 +370,18 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
         open={Boolean(statusMenuAnchor)}
         onClose={handleStatusMenuClose}
       >
-        {Object.entries(LEAD_STATUS_TO_LABEL).map(([status, label]) => (
+        {stages.map((stage) => (
           <MenuItem
-            key={status}
-            onClick={() => handleStatusChange(status as LeadStatus)}
-            selected={selectedLeadForStatus?.status === status}
+            key={stage.id}
+            onClick={() => handleStatusChange(stage.id)}
+            selected={selectedLeadForStatus?.status === stage.id}
           >
             <Chip
-              label={label}
+              label={stage.label}
               size="small"
               sx={{
-                bgcolor: `${getStatusColor(status as LeadStatus)}22`,
-                color: getStatusColor(status as LeadStatus),
+                bgcolor: `${getStatusColor(stage.id)}22`,
+                color: getStatusColor(stage.id),
                 fontWeight: 500,
               }}
             />
