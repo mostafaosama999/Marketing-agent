@@ -159,7 +159,7 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
       </Box>
 
       {/* Table */}
-      <TableContainer component={Paper}>
+      <TableContainer component={Paper} sx={{ maxHeight: '100%' }}>
         <Table>
           <TableHead>
             <TableRow>

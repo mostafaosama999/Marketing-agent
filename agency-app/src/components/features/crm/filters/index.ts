@@ -7,3 +7,6 @@ export { MonthFilter } from './MonthFilter';
 export { StatusFilter } from './StatusFilter';
 export { SearchFilter } from './SearchFilter';
 export { ActiveFiltersBar } from './ActiveFiltersBar';
+export { FilterButton } from './FilterButton';
+export { FilterPanel } from './FilterPanel';
+export { CollapsibleFilterBar } from './CollapsibleFilterBar';

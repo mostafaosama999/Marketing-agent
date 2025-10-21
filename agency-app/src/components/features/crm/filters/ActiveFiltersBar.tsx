@@ -1,6 +1,6 @@
 // src/components/features/crm/filters/ActiveFiltersBar.tsx
 import React from 'react';
-import { Box, Chip, Button, Typography } from '@mui/material';
+import { Box, Chip } from '@mui/material';
 import { Close as CloseIcon } from '@mui/icons-material';
 import { LeadStatus } from '../../../../types/lead';
 
@@ -61,25 +61,8 @@ export const ActiveFiltersBar: React.FC<ActiveFiltersBarProps> = ({
         alignItems: 'center',
         gap: 1,
         flexWrap: 'wrap',
-        mt: 1.5,
-        py: 1,
-        px: 2,
-        bgcolor: 'rgba(103, 126, 234, 0.05)',
-        borderRadius: '8px',
-        border: '1px solid rgba(103, 126, 234, 0.15)',
       }}
     >
-      <Typography
-        variant="caption"
-        sx={{
-          color: '#667eea',
-          fontWeight: 600,
-          textTransform: 'uppercase',
-          letterSpacing: '0.5px',
-        }}
-      >
-        Active Filters ({activeFilterCount}):
-      </Typography>
 
       {/* Search filter chip */}
       {search && (
@@ -182,23 +165,6 @@ export const ActiveFiltersBar: React.FC<ActiveFiltersBarProps> = ({
         />
       )}
 
-      {/* Clear all button */}
-      <Button
-        size="small"
-        onClick={onClearAll}
-        sx={{
-          ml: 'auto',
-          textTransform: 'none',
-          fontSize: '12px',
-          color: '#f44336',
-          fontWeight: 600,
-          '&:hover': {
-            bgcolor: 'rgba(244, 67, 54, 0.08)',
-          },
-        }}
-      >
-        Clear All
-      </Button>
     </Box>
   );
 };

@@ -232,32 +232,47 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
                       bgcolor: '#f8fafc',
                     }}
                   >
-                    <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
-                      CSV Column: <Chip label={mapping.csvField} size="small" sx={{ ml: 1 }} />
-                    </Typography>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        flexDirection: { xs: 'column', md: 'row' },
+                        gap: 2,
+                        alignItems: { xs: 'stretch', md: 'center' },
+                      }}
+                    >
+                      {/* Left column: CSV field info */}
+                      <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 60%' } }}>
+                        <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                          CSV Column: <Chip label={mapping.csvField} size="small" sx={{ ml: 1 }} />
+                        </Typography>
 
-                    {samples.length > 0 && (
-                      <Typography variant="caption" sx={{ color: '#64748b', mb: 1, display: 'block' }}>
-                        Sample values: {samples.join(', ')}
-                      </Typography>
-                    )}
+                        {samples.length > 0 && (
+                          <Typography variant="caption" sx={{ color: '#64748b', display: 'block' }}>
+                            Sample values: {samples.join(', ')}
+                          </Typography>
+                        )}
+                      </Box>
 
-                    <FormControl fullWidth size="small">
-                      <Select
-                        value={mapping.leadField || 'skip'}
-                        onChange={(e) => handleMappingChange(mapping.csvField, e.target.value)}
-                        sx={{ bgcolor: 'white' }}
-                      >
-                        <MenuItem value="skip">
-                          <em>Skip this field</em>
-                        </MenuItem>
-                        {STANDARD_FIELDS.map((field) => (
-                          <MenuItem key={field.value} value={field.value}>
-                            {field.label}
-                          </MenuItem>
-                        ))}
-                      </Select>
-                    </FormControl>
+                      {/* Right column: Mapping dropdown */}
+                      <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 40%' } }}>
+                        <FormControl fullWidth size="small">
+                          <Select
+                            value={mapping.leadField || 'skip'}
+                            onChange={(e) => handleMappingChange(mapping.csvField, e.target.value)}
+                            sx={{ bgcolor: 'white' }}
+                          >
+                            <MenuItem value="skip">
+                              <em>Skip this field</em>
+                            </MenuItem>
+                            {STANDARD_FIELDS.map((field) => (
+                              <MenuItem key={field.value} value={field.value}>
+                                {field.label}
+                              </MenuItem>
+                            ))}
+                          </Select>
+                        </FormControl>
+                      </Box>
+                    </Box>
                   </Box>
                 );
               })}

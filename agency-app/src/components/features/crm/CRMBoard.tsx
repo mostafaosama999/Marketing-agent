@@ -12,12 +12,7 @@ import { CRMLeadsTable } from './CRMLeadsTable';
 import { CSVUploadDialog } from './CSVUploadDialog';
 import { CSVFieldMappingDialog } from './CSVFieldMappingDialog';
 import {
-  LeadOwnerFilter,
-  CompanyFilter,
-  MonthFilter,
-  StatusFilter,
-  SearchFilter,
-  ActiveFiltersBar,
+  CollapsibleFilterBar,
 } from './filters';
 import {
   subscribeToLeads,
@@ -348,18 +343,6 @@ function CRMBoard() {
     return filteredLeads;
   };
 
-  const handleOwnerChange = (owner: string) => {
-    setSelectedOwner(owner);
-  };
-
-  const handleCompanyChange = (company: string) => {
-    setSelectedCompany(company);
-  };
-
-  const handleMonthChange = (month: string) => {
-    setSelectedMonth(month);
-  };
-
   const handleViewChange = (view: 'board' | 'table') => {
     setCurrentView(view);
     localStorage.setItem('crmViewMode', view);
@@ -384,10 +367,6 @@ function CRMBoard() {
     setSelectedOwner('');
     setSelectedCompany('');
     setSelectedMonth('');
-  };
-
-  const handleRemoveStatus = (status: LeadStatus) => {
-    setSelectedStatuses(prev => prev.filter(s => s !== status));
   };
 
   // CSV Import handlers
@@ -455,72 +434,51 @@ function CRMBoard() {
               </Typography>
             </Box>
 
-            {/* View Toggle and Filters */}
-            <Box sx={{ display: 'flex', gap: 2, flexWrap: 'wrap', alignItems: 'center' }}>
-              <Button
-                variant="contained"
-                startIcon={<UploadFileIcon />}
-                onClick={() => setShowCSVUpload(true)}
-                sx={{
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  color: 'white',
-                  textTransform: 'none',
-                  fontWeight: 500,
-                  px: 2,
-                  '&:hover': {
-                    background: 'linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%)',
-                  },
-                }}
-              >
-                Import CSV
-              </Button>
-              <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
-              <ViewToggle
-                view={currentView}
-                onViewChange={handleViewChange}
-              />
-              <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
-              <SearchFilter
-                value={searchTerm}
-                onChange={setSearchTerm}
-                placeholder="Search leads..."
-              />
-              <StatusFilter
+            {/* View Toggle and Smart Filters */}
+            <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', flex: 1 }}>
+              <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+                <Button
+                  variant="contained"
+                  startIcon={<UploadFileIcon />}
+                  onClick={() => setShowCSVUpload(true)}
+                  sx={{
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    color: 'white',
+                    textTransform: 'none',
+                    fontWeight: 500,
+                    px: 2,
+                    '&:hover': {
+                      background: 'linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%)',
+                    },
+                  }}
+                >
+                  Import CSV
+                </Button>
+                <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
+                <ViewToggle
+                  view={currentView}
+                  onViewChange={handleViewChange}
+                />
+                <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
+              </Box>
+
+              {/* Collapsible Filter Bar */}
+              <CollapsibleFilterBar
+                searchTerm={searchTerm}
                 selectedStatuses={selectedStatuses}
-                onStatusesChange={setSelectedStatuses}
-              />
-              <LeadOwnerFilter
                 selectedOwner={selectedOwner}
-                onOwnerChange={handleOwnerChange}
-                leads={leads}
-              />
-              <CompanyFilter
                 selectedCompany={selectedCompany}
-                onCompanyChange={handleCompanyChange}
-                leads={leads}
-              />
-              <MonthFilter
                 selectedMonth={selectedMonth}
-                onMonthChange={handleMonthChange}
+                onSearchChange={setSearchTerm}
+                onStatusesChange={setSelectedStatuses}
+                onOwnerChange={setSelectedOwner}
+                onCompanyChange={setSelectedCompany}
+                onMonthChange={setSelectedMonth}
+                onClearAll={handleClearAllFilters}
                 leads={leads}
               />
             </Box>
           </Box>
-
-          {/* Active Filters Bar */}
-          <ActiveFiltersBar
-            search={searchTerm}
-            statuses={selectedStatuses}
-            owner={selectedOwner}
-            company={selectedCompany}
-            month={selectedMonth}
-            onRemoveSearch={() => setSearchTerm('')}
-            onRemoveStatus={handleRemoveStatus}
-            onRemoveOwner={() => setSelectedOwner('')}
-            onRemoveCompany={() => setSelectedCompany('')}
-            onRemoveMonth={() => setSelectedMonth('')}
-            onClearAll={handleClearAllFilters}
-          />
         </Box>
 
         {/* Content Area - Board or Table View */}
@@ -553,7 +511,7 @@ function CRMBoard() {
             flex: 1,
             px: 3,
             py: 1.5,
-            overflow: 'hidden',
+            overflow: 'auto',
           }}>
             <CRMLeadsTable
               leads={getFilteredLeads()}
