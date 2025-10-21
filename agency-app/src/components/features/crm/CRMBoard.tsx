@@ -5,7 +5,7 @@ import { Add as AddIcon, UploadFile as UploadFileIcon, ViewColumn as ViewColumnI
 import { useAuth } from '../../../contexts/AuthContext';
 import { Lead, LeadStatus } from '../../../types/lead';
 import { CSVRow } from '../../../types/crm';
-import { FilterState, FilterRule } from '../../../types/filter';
+import { FilterState, FilterRule, SavePresetRequest } from '../../../types/filter';
 import { applyAdvancedFilters } from '../../../services/api/advancedFilterService';
 import { LeadDialog } from './LeadDialog';
 import { LeadColumn } from './LeadColumn';
@@ -16,6 +16,8 @@ import { CSVFieldMappingDialog } from './CSVFieldMappingDialog';
 import {
   CollapsibleFilterBar,
 } from './filters';
+import { FilterPresetsMenu } from './filters/FilterPresetsMenu';
+import { SavePresetDialog } from './filters/SavePresetDialog';
 import {
   subscribeToLeads,
   createLead,
@@ -23,6 +25,11 @@ import {
   deleteLead,
 } from '../../../services/api/leads';
 import { usePipelineConfig } from '../../../hooks/usePipelineConfig';
+import {
+  loadPreset,
+  getDefaultPreset,
+  migrateLocalStorageToFirestore,
+} from '../../../services/api/filterPresetsService';
 
 // Modern theme matching KanbanBoard
 const modernTheme = createTheme({
@@ -68,11 +75,10 @@ function CRMBoard() {
   const [parsedCSVData, setParsedCSVData] = useState<CSVRow[]>([]);
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
 
-  const [currentView, setCurrentView] = useState<'board' | 'table'>(() => {
-    // Load view preference from localStorage
-    const savedView = localStorage.getItem('crmViewMode');
-    return (savedView === 'table' || savedView === 'board') ? savedView : 'board';
-  });
+  const [currentView, setCurrentView] = useState<'board' | 'table'>('board');
+
+  // Preset dialog state
+  const [showSavePresetDialog, setShowSavePresetDialog] = useState(false);
 
   // Column visibility state for table view
   const defaultColumns = [
@@ -85,20 +91,12 @@ function CRMBoard() {
     { id: 'actions', label: 'Actions', required: true },
   ];
 
-  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>(() => {
-    const saved = localStorage.getItem('crmTableColumns');
-    if (saved) {
-      try {
-        return JSON.parse(saved);
-      } catch (e) {
-        console.error('Error parsing saved column visibility:', e);
-      }
-    }
-    return defaultColumns.reduce((acc, col) => {
+  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>(() =>
+    defaultColumns.reduce((acc, col) => {
       acc[col.id] = true;
       return acc;
-    }, {} as Record<string, boolean>);
-  });
+    }, {} as Record<string, boolean>)
+  );
 
   const [columnMenuAnchor, setColumnMenuAnchor] = useState<null | HTMLElement>(null);
 
@@ -125,6 +123,34 @@ function CRMBoard() {
 
     return () => unsubscribe();
   }, []);
+
+  // Migrate localStorage data and load default preset on mount
+  useEffect(() => {
+    async function initializePresets() {
+      if (!user) return;
+
+      try {
+        // First, migrate any existing localStorage data
+        await migrateLocalStorageToFirestore(user.uid);
+
+        // Then, load the default preset if one exists
+        const defaultPreset = await getDefaultPreset(user.uid);
+        if (defaultPreset) {
+          // Apply the default preset
+          setAdvancedFilterRules(defaultPreset.advancedRules);
+          setFilters(defaultPreset.basicFilters);
+          setCurrentView(defaultPreset.viewMode);
+          if (defaultPreset.tableColumns) {
+            setColumnVisibility(defaultPreset.tableColumns);
+          }
+        }
+      } catch (error) {
+        console.error('Error initializing presets:', error);
+      }
+    }
+
+    initializePresets();
+  }, [user]);
 
   // Helper functions
   const showAlert = (message: string) => {
@@ -408,7 +434,6 @@ function CRMBoard() {
 
   const handleViewChange = (view: 'board' | 'table') => {
     setCurrentView(view);
-    localStorage.setItem('crmViewMode', view);
   };
 
   // Column visibility handler
@@ -428,7 +453,6 @@ function CRMBoard() {
     };
 
     setColumnVisibility(newVisibility);
-    localStorage.setItem('crmTableColumns', JSON.stringify(newVisibility));
   };
 
   const handleUpdateStatus = async (leadId: string, newStatus: LeadStatus) => {
@@ -460,6 +484,41 @@ function CRMBoard() {
 
   const handleApplyAdvancedFilters = (rules: FilterRule[]) => {
     setAdvancedFilterRules(rules);
+  };
+
+  // Preset handlers
+  const handleLoadPreset = async (presetId: string) => {
+    if (!user) return;
+
+    try {
+      const preset = await loadPreset(user.uid, presetId);
+      if (preset) {
+        setAdvancedFilterRules(preset.advancedRules);
+        setFilters(preset.basicFilters);
+        setCurrentView(preset.viewMode);
+        if (preset.tableColumns) {
+          setColumnVisibility(preset.tableColumns);
+        }
+        showAlert(`Preset "${preset.name}" loaded successfully`);
+      }
+    } catch (error) {
+      console.error('Error loading preset:', error);
+      showAlert('Failed to load preset. Please try again.');
+    }
+  };
+
+  const handleSaveNewPreset = () => {
+    setShowSavePresetDialog(true);
+  };
+
+  const getCurrentPresetData = (): SavePresetRequest => {
+    return {
+      name: '', // Will be filled by dialog
+      advancedRules: advancedFilterRules,
+      basicFilters: filters,
+      viewMode: currentView,
+      tableColumns: columnVisibility,
+    };
   };
 
   // CSV Import handlers
@@ -550,6 +609,16 @@ function CRMBoard() {
                   Import CSV
                 </Button>
                 <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
+                {user && (
+                  <>
+                    <FilterPresetsMenu
+                      userId={user.uid}
+                      onLoadPreset={handleLoadPreset}
+                      onSaveNew={handleSaveNewPreset}
+                    />
+                    <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
+                  </>
+                )}
                 <ViewToggle
                   view={currentView}
                   onViewChange={handleViewChange}
@@ -700,6 +769,16 @@ function CRMBoard() {
           data={parsedCSVData}
           headers={csvHeaders}
         />
+
+        {/* Save Preset Dialog */}
+        {user && (
+          <SavePresetDialog
+            open={showSavePresetDialog}
+            onClose={() => setShowSavePresetDialog(false)}
+            userId={user.uid}
+            currentPreset={getCurrentPresetData()}
+          />
+        )}
 
         {/* Column Visibility Menu */}
         <Menu

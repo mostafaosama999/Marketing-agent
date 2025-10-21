@@ -44,7 +44,6 @@ export const FilterRuleRow: React.FC<FilterRuleRowProps> = ({
     type: 'text' | 'number' | 'date' | 'select' | 'boolean',
     options?: string[]
   ) => {
-    console.log('[FilterRuleRow] Field changed:', { fieldName, fieldLabel, type });
     setFieldType(type);
     setFieldOptions(options || []);
 
@@ -52,15 +51,13 @@ export const FilterRuleRow: React.FC<FilterRuleRowProps> = ({
     const operators = getOperatorsForFieldType(type);
     const defaultOperator = operators[0]?.value || 'equals';
 
-    const updatedRule = {
+    onUpdate({
       ...rule,
       field: fieldName,
       fieldLabel: fieldLabel,
       operator: defaultOperator,
       value: null, // Reset value when field changes
-    };
-    console.log('[FilterRuleRow] Calling onUpdate with:', updatedRule);
-    onUpdate(updatedRule);
+    });
   };
 
   const handleOperatorChange = (operator: FilterOperator) => {

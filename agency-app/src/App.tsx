@@ -8,13 +8,12 @@ import ProtectedRoute from './ProtectedRoute';
 
 // Pages
 import Login from './pages/auth/Login';
-import ClientManagement from './pages/clients/ClientManagement';
-import ClientDetail from './pages/clients/ClientDetail';
 import TaskReview from './pages/tasks/TaskReview';
 import TeamManagement from './pages/team/TeamManagement';
-import WriterPerformance from './pages/team/WriterPerformance';
+import TeamMemberPerformance from './pages/team/TeamMemberPerformance';
 import ProjectMonitoring from './pages/analytics/ProjectMonitoring';
-import WeeklyRevenue from './pages/analytics/WeeklyRevenue';
+import LeadAnalytics from './pages/analytics/LeadAnalytics';
+import CompaniesPage from './pages/companies/CompaniesPage';
 
 // Components
 import Navbar from './components/layout/Navbar';
@@ -74,17 +73,16 @@ function AppContent() {
       flexDirection: 'column'
     }}>
       <Navbar />
-      <Box sx={{ 
+      <Box sx={{
         flex: 1,
         overflow: 'auto'
       }}>
         <Routes>
-          <Route path="/clients" element={<ClientManagement />} />
-          <Route path="/clients/:clientId" element={<ClientDetail />} />
           <Route path="/review/:taskId" element={<TaskReview />} />
+          <Route path="/companies" element={<CompaniesPage />} />
           <Route path="/team" element={<TeamManagement />} />
-          <Route path="/writer/:userId" element={<WriterPerformance />} />
-          <Route path="/analytics" element={<WeeklyRevenue />} />
+          <Route path="/team-member/:userId" element={<TeamMemberPerformance />} />
+          <Route path="/analytics" element={<LeadAnalytics />} />
           <Route path="/monitoring" element={<ProjectMonitoring />} />
         </Routes>
       </Box>

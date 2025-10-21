@@ -85,3 +85,54 @@ export interface ActiveFilter {
   displayValue: string;
   onRemove: () => void;
 }
+
+/**
+ * Filter Preset - Saved filter configuration
+ */
+export interface FilterPreset {
+  id: string;
+  name: string;
+  description?: string;
+
+  // Filter data
+  advancedRules: FilterRule[];
+  basicFilters: FilterState;
+
+  // View preferences
+  viewMode: 'board' | 'table';
+  tableColumns?: Record<string, boolean>;
+
+  // Metadata
+  createdAt: string; // ISO string
+  updatedAt: string; // ISO string
+  userId: string;
+  isDefault?: boolean;
+
+  // Optional: Team sharing (future enhancement)
+  shared?: boolean;
+  sharedWith?: string[]; // User IDs
+}
+
+/**
+ * Request to save a filter preset
+ */
+export interface SavePresetRequest {
+  name: string;
+  description?: string;
+  advancedRules: FilterRule[];
+  basicFilters: FilterState;
+  viewMode: 'board' | 'table';
+  tableColumns?: Record<string, boolean>;
+  isDefault?: boolean;
+}
+
+/**
+ * Preset list item for dropdown display
+ */
+export interface PresetListItem {
+  id: string;
+  name: string;
+  description?: string;
+  isDefault: boolean;
+  createdAt: string;
+}

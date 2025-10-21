@@ -8,819 +8,343 @@ import {
   Grid,
   Paper,
   CircularProgress,
-  FormControl,
-  InputLabel,
-  Select,
-  MenuItem,
-  Button,
-  Switch,
   Chip,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Alert,
-  Snackbar,
-  Stack,
-  Avatar,
-  CardHeader,
-  IconButton
+  ThemeProvider,
+  createTheme,
+  List,
+  ListItem,
+  ListItemText,
 } from '@mui/material';
 import {
-  Assessment as AssessmentIcon,
-  Schedule as ScheduleIcon,
-  Add as AddIcon,
-  Edit as EditIcon,
-  Delete as DeleteIcon,
-  Notifications as AlertIcon,
-  Person as PersonIcon,
+  Dashboard as DashboardIcon,
+  TrendingUp as TrendingUpIcon,
   Warning as WarningIcon,
-  CheckCircle as CheckIcon
+  CheckCircle as CheckCircleIcon,
+  Business as BusinessIcon,
+  Schedule as ScheduleIcon,
+  ContactMail as ContactMailIcon,
 } from '@mui/icons-material';
-import { alertRulesService } from '../../services/api/alertRules';
-import AlertRuleForm from '../../components/forms/AlertRuleForm';
-import { AlertRule } from '../../types';
-import { useMonitoringDashboard } from '../../hooks/useMonitoringMetrics';
+import { subscribeToLeads } from '../../services/api/leads';
+import { Lead, LeadStatus } from '../../types/lead';
 
+// Modern theme matching CRM board
+const modernTheme = createTheme({
+  typography: {
+    fontFamily: '"Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+    h4: { fontWeight: 700, fontSize: '28px', lineHeight: 1.2 },
+    h6: { fontWeight: 600, fontSize: '16px' },
+    body1: { fontWeight: 500, fontSize: '14px' },
+    body2: { fontWeight: 400, fontSize: '13px' },
+  },
+});
+
+const STATUS_LABELS: Record<LeadStatus, string> = {
+  new_lead: 'New Lead',
+  qualified: 'Qualified',
+  contacted: 'Contacted',
+  follow_up: 'Follow Up',
+  won: 'Won',
+  lost: 'Lost',
+};
 
 const ProjectMonitoring: React.FC = () => {
-  const [selectedDuration, setSelectedDuration] = useState<number>(30);
-  const [alertRules, setAlertRules] = useState<AlertRule[]>([]);
-  const [alertLoading, setAlertLoading] = useState(false);
+  const [leads, setLeads] = useState<Lead[]>([]);
+  const [loading, setLoading] = useState(true);
 
-  // Use optimized monitoring hook
-  const {
-    taskMetrics,
-    writerMetrics,
-    loading: monitoringLoading,
-    error: monitoringError
-  } = useMonitoringDashboard(selectedDuration);
-  const [openDialog, setOpenDialog] = useState(false);
-  const [editingRule, setEditingRule] = useState<AlertRule | null>(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [ruleToDelete, setRuleToDelete] = useState<string | null>(null);
-  const [alert, setAlert] = useState({ show: false, message: '', severity: 'info' as 'info' | 'error' | 'success' });
-  const [liveAlertResults, setLiveAlertResults] = useState<Record<string, any[]>>({});
-  const [liveResultsLoading, setLiveResultsLoading] = useState<Record<string, boolean>>({});
-
-  // Form state for alert rule creation
-  const [formData, setFormData] = useState({
-    name: '',
-    description: '',
-    type: 'ticket-based' as 'ticket-based' | 'writer-based' | 'client-based',
-    enabled: true,
-    slackChannel: '',
-    // Task-based conditions
-    statuses: [] as string[],
-    daysInState: 3,
-    clientName: '',
-    taskType: '',
-    // Writer-based and client-based conditions
-    alertType: 'no-tasks-assigned' as 'no-tasks-assigned' | 'overloaded' | 'inactive' | 'no-recent-tickets' | 'no-new-tickets',
-    thresholdDays: 7,
-    maxTasks: 5,
-    writerName: ''
-  });
-  const [formErrors, setFormErrors] = useState<Record<string, string>>({});
-
-
-  // Handle monitoring errors
+  // Subscribe to leads
   useEffect(() => {
-    if (monitoringError) {
-      setAlert({ show: true, message: monitoringError, severity: 'error' });
-    }
-  }, [monitoringError]);
-
-  // Load alert rules
-  const loadAlertRules = async () => {
-    try {
-      setAlertLoading(true);
-      const rules = await alertRulesService.getAllAlertRules();
-      setAlertRules(rules);
-      await runLiveAlertTests(rules);
-    } catch (error) {
-      console.error('Error loading alert rules:', error);
-      setAlert({ show: true, message: 'Error loading alert rules', severity: 'error' });
-    } finally {
-      setAlertLoading(false);
-    }
-  };
-
-  // Run live alert tests
-  const runLiveAlertTests = async (rules?: AlertRule[]) => {
-    const rulesToTest = rules || alertRules;
-    const enabledRules = rulesToTest.filter(rule => rule.enabled);
-    
-    const results: Record<string, any[]> = {};
-    for (const rule of enabledRules) {
-      setLiveResultsLoading(prev => ({ ...prev, [rule.id]: true }));
-      try {
-        const ruleResults = await alertRulesService.testAlertRule(rule);
-        results[rule.id] = ruleResults;
-      } catch (error) {
-        console.error(`Error testing rule ${rule.name}:`, error);
-        results[rule.id] = [];
-      }
-      setLiveResultsLoading(prev => ({ ...prev, [rule.id]: false }));
-    }
-    
-    setLiveAlertResults(results);
-  };
-
-  // Form handling functions
-  const resetForm = () => {
-    setFormData({
-      name: '',
-      description: '',
-      type: 'ticket-based',
-      enabled: true,
-      slackChannel: '',
-      statuses: [],
-      daysInState: 3,
-      clientName: '',
-      taskType: '',
-      alertType: 'no-tasks-assigned',
-      thresholdDays: 7,
-      maxTasks: 5,
-      writerName: ''
+    const unsubscribe = subscribeToLeads((leadsData) => {
+      setLeads(leadsData);
+      setLoading(false);
     });
-    setFormErrors({});
-  };
 
-  const validateForm = () => {
-    const errors: Record<string, string> = {};
-
-    if (!formData.name.trim()) {
-      errors.name = 'Rule name is required';
-    }
-
-    if (!formData.slackChannel.trim()) {
-      errors.slackChannel = 'Slack channel is required';
-    }
-
-    if (formData.type === 'ticket-based') {
-      const checkType = (formData as any).checkType || 'status-duration';
-
-      // Only require status selection for status-duration mode
-      if (checkType === 'status-duration' && formData.statuses.length === 0) {
-        errors.statuses = 'At least one status must be selected';
-      }
-
-      if (formData.daysInState < 1) {
-        errors.daysInState = 'Days threshold must be at least 1';
-      }
-    } else {
-      if (formData.alertType === 'inactive' && formData.thresholdDays < 1) {
-        errors.thresholdDays = 'Threshold days must be at least 1';
-      }
-      if (formData.alertType === 'overloaded' && formData.maxTasks < 1) {
-        errors.maxTasks = 'Max tasks must be at least 1';
-      }
-    }
-
-    setFormErrors(errors);
-    return Object.keys(errors).length === 0;
-  };
-
-  // Alert rule handlers
-  const handleSaveRule = async () => {
-    if (!validateForm()) {
-      return;
-    }
-
-    try {
-      const now = new Date().toISOString();
-      const ruleData: any = {
-        name: formData.name,
-        description: formData.description,
-        type: formData.type,
-        enabled: formData.enabled,
-        slackChannel: formData.slackChannel,
-        createdAt: editingRule?.createdAt || now,
-        updatedAt: now,
-        conditions: formData.type === 'ticket-based' ? (() => {
-          const conditions: any = {
-            statuses: formData.statuses,
-            daysInState: formData.daysInState
-          };
-          // Include checkType if specified (defaults to 'status-duration' in backend)
-          if ((formData as any).checkType) {
-            conditions.checkType = (formData as any).checkType;
-          }
-          if (formData.clientName) conditions.clientName = formData.clientName;
-          if (formData.taskType) conditions.taskType = formData.taskType;
-          return conditions;
-        })() : formData.type === 'writer-based' ? (() => {
-          const conditions: any = {
-            alertType: formData.alertType
-          };
-          if (formData.alertType === 'inactive' && formData.thresholdDays) {
-            conditions.thresholdDays = formData.thresholdDays;
-          }
-          if (formData.alertType === 'overloaded' && formData.maxTasks) {
-            conditions.maxTasks = formData.maxTasks;
-          }
-          if (formData.writerName) conditions.writerName = formData.writerName;
-          return conditions;
-        })() : (() => {
-          // Client-based conditions
-          const conditions: any = {
-            alertType: formData.alertType,
-            thresholdDays: formData.thresholdDays
-          };
-          if (formData.clientName) conditions.clientName = formData.clientName;
-          return conditions;
-        })()
-      };
-
-      if (editingRule) {
-        await alertRulesService.updateAlertRule(editingRule.id, ruleData);
-        setAlert({ show: true, message: 'Alert rule updated successfully', severity: 'success' });
-      } else {
-        await alertRulesService.createAlertRule(ruleData);
-        setAlert({ show: true, message: 'Alert rule created successfully', severity: 'success' });
-      }
-      
-      loadAlertRules(); // Refresh the list
-      setOpenDialog(false);
-      setEditingRule(null);
-      resetForm();
-    } catch (error) {
-      console.error('Error saving alert rule:', error);
-      setAlert({ 
-        show: true, 
-        message: `Error ${editingRule ? 'updating' : 'creating'} alert rule`, 
-        severity: 'error' 
-      });
-    }
-  };
-
-  const handleDeleteRule = async (ruleId: string) => {
-    try {
-      await alertRulesService.deleteAlertRule(ruleId);
-      setAlertRules(prev => prev.filter(rule => rule.id !== ruleId));
-      setAlert({ show: true, message: 'Alert rule deleted', severity: 'success' });
-    } catch (error) {
-      setAlert({ show: true, message: 'Error deleting alert rule', severity: 'error' });
-    }
-  };
-
-
-  const handleToggleAlert = async (ruleId: string, enabled: boolean) => {
-    try {
-      await alertRulesService.updateAlertRule(ruleId, { enabled });
-      setAlertRules(prev => prev.map(rule => 
-        rule.id === ruleId ? { ...rule, enabled } : rule
-      ));
-      setAlert({ show: true, message: 'Alert rule updated', severity: 'success' });
-    } catch (error) {
-      setAlert({ show: true, message: 'Error updating alert rule', severity: 'error' });
-    }
-  };
-
-  const handleCreateAlert = () => {
-    resetForm();
-    setEditingRule(null);
-    setOpenDialog(true);
-  };
-
-  const handleEditAlert = (rule: AlertRule) => {
-    setEditingRule(rule);
-    // Populate form with rule data
-    setFormData({
-      name: rule.name,
-      description: rule.description,
-      type: rule.type,
-      enabled: rule.enabled,
-      slackChannel: rule.slackChannel,
-      // Ticket-based conditions
-      statuses: rule.type === 'ticket-based' ? (rule as any).conditions.statuses : [],
-      daysInState: rule.type === 'ticket-based' ? (rule as any).conditions.daysInState : 3,
-      clientName: rule.type === 'ticket-based' ? (rule as any).conditions.clientName || '' :
-                  rule.type === 'client-based' ? (rule as any).conditions.clientName || '' : '',
-      taskType: rule.type === 'ticket-based' ? (rule as any).conditions.taskType || '' : '',
-      // Writer-based and client-based conditions
-      alertType: rule.type === 'writer-based' ? (rule as any).conditions.alertType : 
-                 rule.type === 'client-based' ? (rule as any).conditions.alertType : 'no-tasks-assigned',
-      thresholdDays: rule.type === 'writer-based' ? (rule as any).conditions.thresholdDays || 7 :
-                     rule.type === 'client-based' ? (rule as any).conditions.thresholdDays || 7 : 7,
-      maxTasks: rule.type === 'writer-based' ? (rule as any).conditions.maxTasks || 5 : 5,
-      writerName: rule.type === 'writer-based' ? (rule as any).conditions.writerName || '' : ''
-    });
-    setOpenDialog(true);
-  };
-
-  const handleDialogClose = () => {
-    setOpenDialog(false);
-    setEditingRule(null);
-    resetForm();
-  };
-
-  const handleDeleteAlert = (ruleId: string) => {
-    setRuleToDelete(ruleId);
-    setDeleteDialogOpen(true);
-  };
-
-  const confirmDelete = async () => {
-    if (ruleToDelete) {
-      await handleDeleteRule(ruleToDelete);
-      setDeleteDialogOpen(false);
-      setRuleToDelete(null);
-    }
-  };
-
-  const cancelDelete = () => {
-    setDeleteDialogOpen(false);
-    setRuleToDelete(null);
-  };
-
-  useEffect(() => {
-    loadAlertRules();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    return () => unsubscribe();
   }, []);
 
-  const getStatusColor = (status: string) => {
-    switch (status) {
-      case 'active': return '#4caf50';
-      case 'available': return '#2196f3';
-      case 'overloaded': return '#ff9800';
-      case 'inactive': return '#f44336';
-      default: return '#757575';
-    }
-  };
+  // Calculate metrics
+  const recentActivity = leads.filter(lead => {
+    const updatedAt = lead.updatedAt ? new Date(lead.updatedAt) : null;
+    if (!updatedAt) return false;
+    const daysSinceUpdate = (Date.now() - updatedAt.getTime()) / (1000 * 60 * 60 * 24);
+    return daysSinceUpdate <= 7;
+  }).length;
 
-  const getStatusIcon = (status: string) => {
-    switch (status) {
-      case 'active': return <CheckIcon />;
-      case 'available': return <PersonIcon />;
-      case 'overloaded': return <WarningIcon />;
-      case 'inactive': return <ScheduleIcon />;
-      default: return <PersonIcon />;
-    }
-  };
+  const stuckLeads = leads.filter(lead => {
+    const stateHistory = lead.stateHistory || {};
+    const currentStatusTimestamp = stateHistory[lead.status];
+    if (!currentStatusTimestamp) return false;
+
+    const daysSinceChange = (Date.now() - new Date(currentStatusTimestamp).getTime()) / (1000 * 60 * 60 * 24);
+    return daysSinceChange >= 7;
+  });
+
+  const missingData = leads.filter(lead => !lead.email || !lead.phone);
+
+  const companiesWithMultipleLeads = Object.entries(
+    leads.reduce((acc, lead) => {
+      if (lead.company) {
+        acc[lead.company] = (acc[lead.company] || 0) + 1;
+      }
+      return acc;
+    }, {} as Record<string, number>)
+  )
+    .filter(([_, count]) => count > 1)
+    .sort(([_, a], [__, b]) => b - a)
+    .slice(0, 5);
+
+  const stuckByStatus = stuckLeads.reduce((acc, lead) => {
+    acc[lead.status] = (acc[lead.status] || 0) + 1;
+    return acc;
+  }, {} as Record<LeadStatus, number>);
 
   return (
-    <Box sx={{ width: '100%' }}>
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="h4" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-          <AssessmentIcon fontSize="large" />
-          Task Performance Analytics
-        </Typography>
-        <Typography variant="body1" color="text.secondary">
-          Monitor task creation and completion metrics to optimize team performance
-        </Typography>
-      </Box>
-
-      {/* Task Analytics Section */}
-      <Paper sx={{ width: '100%', mb: 4, p: 3 }}>
-        <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <AssessmentIcon />
-            Analysis Period
+    <ThemeProvider theme={modernTheme}>
+      <Box sx={{ width: '100%', p: 3 }}>
+        {/* Header */}
+        <Box sx={{ mb: 4 }}>
+          <Typography
+            variant="h4"
+            gutterBottom
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2,
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              backgroundClip: 'text',
+              WebkitBackgroundClip: 'text',
+              color: 'transparent',
+            }}
+          >
+            <DashboardIcon fontSize="large" sx={{ color: '#667eea' }} />
+            CRM Health Monitor
           </Typography>
-          <FormControl sx={{ minWidth: 200 }}>
-            <InputLabel>Duration</InputLabel>
-            <Select
-              value={selectedDuration}
-              onChange={(e) => setSelectedDuration(e.target.value as number)}
-              label="Duration"
-              size="small"
-            >
-              <MenuItem value={7}>Last 7 days</MenuItem>
-              <MenuItem value={14}>Last 14 days</MenuItem>
-              <MenuItem value={30}>Last 30 days</MenuItem>
-              <MenuItem value={90}>Last 90 days</MenuItem>
-            </Select>
-          </FormControl>
+          <Typography variant="body1" color="text.secondary">
+            Quick insights into pipeline health and lead activity
+          </Typography>
         </Box>
 
-        {monitoringLoading ? (
-          <Box display="flex" justifyContent="center" my={4}>
-            <CircularProgress />
+        {loading ? (
+          <Box display="flex" justifyContent="center" my={8}>
+            <CircularProgress sx={{ color: '#667eea' }} />
           </Box>
-        ) : taskMetrics && (
-          <Grid container spacing={3}>
-            <Grid size={{ xs: 12, md: 3 }}>
-              <Card sx={{ 
-                background: 'linear-gradient(135deg, #e8f5e8 0%, #c8e6c9 100%)',
-                border: '1px solid #4caf50'
-              }}>
-                <CardContent>
-                  <Box display="flex" alignItems="center">
-                    <AssessmentIcon color="success" sx={{ mr: 2, fontSize: 40 }} />
-                    <Box>
-                      <Typography color="textSecondary" gutterBottom>
-                        Tasks Created
-                      </Typography>
-                      <Typography variant="h4">
-                        {taskMetrics.totalTasksCreated}
-                      </Typography>
-                    </Box>
-                  </Box>
-                </CardContent>
-              </Card>
-            </Grid>
-
-            <Grid size={{ xs: 12, md: 3 }}>
-              <Card sx={{ 
-                background: 'linear-gradient(135deg, #e3f2fd 0%, #bbdefb 100%)',
-                border: '1px solid #2196f3'
-              }}>
-                <CardContent>
-                  <Box display="flex" alignItems="center">
-                    <CheckIcon color="primary" sx={{ mr: 2, fontSize: 40 }} />
-                    <Box>
-                      <Typography color="textSecondary" gutterBottom>
-                        Tasks Completed
-                      </Typography>
-                      <Typography variant="h4">
-                        {taskMetrics.totalTasksCompleted}
-                      </Typography>
-                    </Box>
-                  </Box>
-                </CardContent>
-              </Card>
-            </Grid>
-
-            <Grid size={{ xs: 12, md: 3 }}>
-              <Card sx={{ 
-                background: 'linear-gradient(135deg, #fff3e0 0%, #ffcc02 100%)',
-                border: '1px solid #ff9800'
-              }}>
-                <CardContent>
-                  <Box display="flex" alignItems="center">
-                    <ScheduleIcon color="warning" sx={{ mr: 2, fontSize: 40 }} />
-                    <Box>
-                      <Typography color="textSecondary" gutterBottom>
-                        Avg. Completion Time
-                      </Typography>
-                      <Typography variant="h4">
-                        {taskMetrics.averageTimeToComplete.toFixed(1)} days
-                      </Typography>
-                    </Box>
-                  </Box>
-                </CardContent>
-              </Card>
-            </Grid>
-
-            <Grid size={{ xs: 12, md: 3 }}>
-              <Card sx={{ 
-                background: 'linear-gradient(135deg, #ffebee 0%, #ffcdd2 100%)',
-                border: '1px solid #f44336'
-              }}>
-                <CardContent>
-                  <Box display="flex" alignItems="center">
-                    <WarningIcon color="error" sx={{ mr: 2, fontSize: 40 }} />
-                    <Box>
-                      <Typography color="textSecondary" gutterBottom>
-                        Stuck Tasks
-                      </Typography>
-                      <Typography variant="h4">
-                        {taskMetrics.stuckTasks.length}
-                      </Typography>
-                    </Box>
-                  </Box>
-                </CardContent>
-              </Card>
-            </Grid>
-
-            {taskMetrics.stuckTasks.length > 0 && (
-              <Grid size={{ xs: 12 }}>
-                <Card>
+        ) : (
+          <>
+            {/* Summary Cards */}
+            <Grid container spacing={3} sx={{ mb: 4 }}>
+              {/* Total Leads */}
+              <Grid size={{ xs: 12, md: 3 }}>
+                <Card sx={{
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white',
+                }}>
                   <CardContent>
-                    <Typography variant="h6" gutterBottom>
-                      Stuck Tasks (7+ days in current state)
+                    <Box display="flex" alignItems="center" justifyContent="space-between">
+                      <Box>
+                        <Typography color="rgba(255,255,255,0.8)" gutterBottom variant="body2">
+                          Total Leads
+                        </Typography>
+                        <Typography variant="h4" fontWeight={700}>
+                          {leads.length}
+                        </Typography>
+                      </Box>
+                      <TrendingUpIcon sx={{ fontSize: 48, opacity: 0.3 }} />
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {/* Recent Activity */}
+              <Grid size={{ xs: 12, md: 3 }}>
+                <Card sx={{
+                  background: 'linear-gradient(135deg, #4caf50 0%, #66bb6a 100%)',
+                  color: 'white',
+                }}>
+                  <CardContent>
+                    <Box display="flex" alignItems="center" justifyContent="space-between">
+                      <Box>
+                        <Typography color="rgba(255,255,255,0.8)" gutterBottom variant="body2">
+                          Active (7 days)
+                        </Typography>
+                        <Typography variant="h4" fontWeight={700}>
+                          {recentActivity}
+                        </Typography>
+                      </Box>
+                      <CheckCircleIcon sx={{ fontSize: 48, opacity: 0.3 }} />
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {/* Stuck Leads */}
+              <Grid size={{ xs: 12, md: 3 }}>
+                <Card sx={{
+                  background: 'linear-gradient(135deg, #ff9800 0%, #ffa726 100%)',
+                  color: 'white',
+                }}>
+                  <CardContent>
+                    <Box display="flex" alignItems="center" justifyContent="space-between">
+                      <Box>
+                        <Typography color="rgba(255,255,255,0.8)" gutterBottom variant="body2">
+                          Stuck (7+ days)
+                        </Typography>
+                        <Typography variant="h4" fontWeight={700}>
+                          {stuckLeads.length}
+                        </Typography>
+                      </Box>
+                      <ScheduleIcon sx={{ fontSize: 48, opacity: 0.3 }} />
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {/* Missing Data */}
+              <Grid size={{ xs: 12, md: 3 }}>
+                <Card sx={{
+                  background: 'linear-gradient(135deg, #ef4444 0%, #f87171 100%)',
+                  color: 'white',
+                }}>
+                  <CardContent>
+                    <Box display="flex" alignItems="center" justifyContent="space-between">
+                      <Box>
+                        <Typography color="rgba(255,255,255,0.8)" gutterBottom variant="body2">
+                          Missing Data
+                        </Typography>
+                        <Typography variant="h4" fontWeight={700}>
+                          {missingData.length}
+                        </Typography>
+                      </Box>
+                      <WarningIcon sx={{ fontSize: 48, opacity: 0.3 }} />
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
+
+            {/* Detailed Sections */}
+            <Grid container spacing={3}>
+              {/* Stuck Leads by Status */}
+              <Grid size={{ xs: 12, md: 6 }}>
+                <Paper sx={{ p: 3, height: '100%' }}>
+                  <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <ScheduleIcon sx={{ color: '#ff9800' }} />
+                    Leads Stuck by Stage
+                  </Typography>
+                  {Object.keys(stuckByStatus).length === 0 ? (
+                    <Box sx={{ py: 4, textAlign: 'center' }}>
+                      <CheckCircleIcon sx={{ fontSize: 48, color: '#4caf50', mb: 1 }} />
+                      <Typography variant="body2" color="text.secondary">
+                        No stuck leads! Pipeline is healthy.
+                      </Typography>
+                    </Box>
+                  ) : (
+                    <List>
+                      {Object.entries(stuckByStatus).map(([status, count]) => (
+                        <ListItem key={status} sx={{ px: 0 }}>
+                          <ListItemText
+                            primary={STATUS_LABELS[status as LeadStatus]}
+                            secondary={`${count} lead${count > 1 ? 's' : ''} stuck for 7+ days`}
+                          />
+                          <Chip
+                            label={count}
+                            size="small"
+                            sx={{
+                              bgcolor: '#ff9800',
+                              color: 'white',
+                              fontWeight: 600,
+                            }}
+                          />
+                        </ListItem>
+                      ))}
+                    </List>
+                  )}
+                </Paper>
+              </Grid>
+
+              {/* Companies with Multiple Leads */}
+              <Grid size={{ xs: 12, md: 6 }}>
+                <Paper sx={{ p: 3, height: '100%' }}>
+                  <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <BusinessIcon sx={{ color: '#667eea' }} />
+                    Top Companies
+                  </Typography>
+                  {companiesWithMultipleLeads.length === 0 ? (
+                    <Box sx={{ py: 4, textAlign: 'center' }}>
+                      <Typography variant="body2" color="text.secondary">
+                        No companies with multiple leads yet
+                      </Typography>
+                    </Box>
+                  ) : (
+                    <List>
+                      {companiesWithMultipleLeads.map(([company, count]) => (
+                        <ListItem key={company} sx={{ px: 0 }}>
+                          <ListItemText
+                            primary={company}
+                            secondary={`${count} leads`}
+                          />
+                          <Chip
+                            label={count}
+                            size="small"
+                            sx={{
+                              bgcolor: '#667eea',
+                              color: 'white',
+                              fontWeight: 600,
+                            }}
+                          />
+                        </ListItem>
+                      ))}
+                    </List>
+                  )}
+                </Paper>
+              </Grid>
+
+              {/* Data Quality Issues */}
+              {missingData.length > 0 && (
+                <Grid size={{ xs: 12 }}>
+                  <Paper sx={{ p: 3 }}>
+                    <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <ContactMailIcon sx={{ color: '#ef4444' }} />
+                      Leads Missing Contact Information
+                    </Typography>
+                    <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                      {missingData.length} lead{missingData.length > 1 ? 's are' : ' is'} missing email or phone
                     </Typography>
                     <Grid container spacing={2}>
-                      {taskMetrics.stuckTasks.map(task => (
-                        <Grid size={{ xs: 12, md: 6 }} key={task.id}>
+                      {missingData.slice(0, 6).map(lead => (
+                        <Grid size={{ xs: 12, md: 4 }} key={lead.id}>
                           <Card variant="outlined">
-                            <CardContent>
-                              <Typography variant="subtitle1" fontWeight="bold">
-                                {task.title}
+                            <CardContent sx={{ py: 1.5 }}>
+                              <Typography variant="body1" fontWeight={600}>
+                                {lead.name}
                               </Typography>
                               <Typography variant="body2" color="text.secondary">
-                                Status: {task.status} | Client: {task.clientName}
+                                {lead.company}
                               </Typography>
+                              <Box sx={{ mt: 0.5, display: 'flex', gap: 0.5 }}>
+                                {!lead.email && (
+                                  <Chip label="No Email" size="small" color="error" variant="outlined" sx={{ fontSize: '0.7rem', height: 20 }} />
+                                )}
+                                {!lead.phone && (
+                                  <Chip label="No Phone" size="small" color="error" variant="outlined" sx={{ fontSize: '0.7rem', height: 20 }} />
+                                )}
+                              </Box>
                             </CardContent>
                           </Card>
                         </Grid>
                       ))}
                     </Grid>
-                  </CardContent>
-                </Card>
-              </Grid>
-            )}
-          </Grid>
-        )}
-      </Paper>
-
-      {/* Alert Rules Section */}
-      <Paper sx={{ width: '100%', mb: 4, p: 3 }}>
-        <Box sx={{ mb: 3, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <AlertIcon />
-            Alert Rules Management
-          </Typography>
-          <Button
-            variant="contained"
-            startIcon={<AddIcon />}
-            onClick={handleCreateAlert}
-          >
-            Create Alert Rule
-          </Button>
-        </Box>
-
-        {alertLoading ? (
-          <Box display="flex" justifyContent="center" my={4}>
-            <CircularProgress />
-          </Box>
-        ) : (
-          <Grid container spacing={2}>
-            {alertRules.map((rule) => (
-              <Grid size={{ xs: 12, md: 6 }} key={rule.id}>
-                <Card sx={{ height: 'fit-content' }}>
-                  <CardHeader
-                    sx={{ pb: 1 }}
-                    title={
-                      <Box display="flex" alignItems="center" justifyContent="space-between">
-                        <Box display="flex" alignItems="center" gap={1}>
-                          <Switch
-                            checked={rule.enabled}
-                            onChange={(e) => handleToggleAlert(rule.id, e.target.checked)}
-                            size="small"
-                          />
-                          <Typography variant="subtitle1" fontWeight="medium">
-                            {rule.name}
-                          </Typography>
-                          <Chip 
-                            label={rule.type} 
-                            size="small" 
-                            variant="outlined"
-                            sx={{ fontSize: '0.7rem', height: '20px' }}
-                          />
-                        </Box>
-                        <Box display="flex" gap={0.5}>
-                          <IconButton onClick={() => handleEditAlert(rule)} size="small">
-                            <EditIcon fontSize="small" />
-                          </IconButton>
-                          <IconButton onClick={() => handleDeleteAlert(rule.id)} size="small">
-                            <DeleteIcon fontSize="small" />
-                          </IconButton>
-                        </Box>
-                      </Box>
-                    }
-                  />
-                  <CardContent sx={{ pt: 1, pb: 2 }}>
-                    {rule.description && (
-                      <Typography variant="body2" color="text.secondary" sx={{ mb: 1.5, fontSize: '0.875rem' }}>
-                        {rule.description}
+                    {missingData.length > 6 && (
+                      <Typography variant="caption" color="text.secondary" sx={{ mt: 2, display: 'block' }}>
+                        +{missingData.length - 6} more leads with missing data
                       </Typography>
                     )}
-                    
-                    <Box sx={{ mb: 1.5 }}>
-                      {rule.type === 'ticket-based' ? (
-                        <Typography variant="body2" color="text.primary" sx={{ fontSize: '0.85rem', lineHeight: 1.4 }}>
-                          🎯 Alert when{' '}
-                          <strong>
-                            {(rule as any).conditions?.taskType 
-                              ? `${(rule as any).conditions.taskType} posts` 
-                              : 'any tasks'}
-                          </strong>
-                          {' from '}
-                          <strong>
-                            {(rule as any).conditions?.clientName || 'any client'}
-                          </strong>
-                          {(rule as any).conditions?.statuses?.length > 0 && (
-                            <>
-                              {' stuck in '}
-                              <strong>
-                                {(rule as any).conditions.statuses[0].replace('_', ' ').toLowerCase()}
-                              </strong>
-                            </>
-                          )}
-                          {(rule as any).conditions?.daysInState && (
-                            <>
-                              {' for '}
-                              <strong>{(rule as any).conditions.daysInState}+ days</strong>
-                            </>
-                          )}
-                        </Typography>
-                      ) : rule.type === 'writer-based' ? (
-                        <Typography variant="body2" color="text.primary" sx={{ fontSize: '0.85rem', lineHeight: 1.4 }}>
-                          👤 Alert for{' '}
-                          <strong>
-                            {(rule as any).conditions?.alertType === 'no-tasks-assigned' ? 'writers with no tasks' :
-                             (rule as any).conditions?.alertType === 'overloaded' ? `writers with ${(rule as any).conditions?.maxTasks || 5}+ active tasks` :
-                             (rule as any).conditions?.alertType === 'inactive' ? `writers inactive for ${(rule as any).conditions?.thresholdDays || 7}+ days` :
-                             'writers'}
-                          </strong>
-                          {(rule as any).conditions?.writerName && (
-                            <> • Filter: <strong>{(rule as any).conditions.writerName}</strong></>
-                          )}
-                        </Typography>
-                      ) : rule.type === 'client-based' ? (
-                        <Typography variant="body2" color="text.primary" sx={{ fontSize: '0.85rem', lineHeight: 1.4 }}>
-                          🏢 Alert when{' '}
-                          <strong>
-                            {(rule as any).conditions?.clientName || 'any client'}
-                          </strong>
-                          {' has '}
-                          <strong>
-                            {(rule as any).conditions?.alertType === 'no-recent-tickets' ? 'no recent tickets' : 'no ticket activity'}
-                          </strong>
-                          {' for '}
-                          <strong>{(rule as any).conditions?.thresholdDays || 'N/A'}+ days</strong>
-                        </Typography>
-                      ) : (
-                        <Typography variant="body2" color="error" sx={{ fontSize: '0.85rem' }}>
-                          ⚠️ Unknown alert type: {(rule as any).type}
-                        </Typography>
-                      )}
-                    </Box>
-
-                    {/* Live Results */}
-                    {liveResultsLoading[rule.id] ? (
-                      <Box display="flex" alignItems="center" gap={1} sx={{ mt: 1 }}>
-                        <CircularProgress size={14} />
-                        <Typography variant="caption" color="text.secondary">Testing...</Typography>
-                      </Box>
-                    ) : liveAlertResults[rule.id] ? (
-                      <Alert
-                        severity={liveAlertResults[rule.id].length > 0 ? "warning" : "success"}
-                        sx={{ mt: 1, py: 0.5 }}
-                        icon={false}
-                      >
-                        <Typography variant="caption" fontWeight="medium" sx={{ fontSize: '0.75rem' }}>
-                          {rule.type === 'client-based' ? (
-                            <>📊 Live Test: Alert would {liveAlertResults[rule.id].length > 0 ? '🔥 trigger' : '✓ not trigger'}</>
-                          ) : (
-                            <>📊 Live Test: {liveAlertResults[rule.id].length} items found</>
-                          )}
-                        </Typography>
-                        {liveAlertResults[rule.id].length > 0 && (
-                          <Box sx={{ mt: 0.5 }}>
-                            {rule.type === 'client-based' ? (
-                              liveAlertResults[rule.id].map((item: any, idx: number) => (
-                                <Typography key={idx} variant="caption" display="block" sx={{ fontSize: '0.7rem', opacity: 0.8 }}>
-                                  • {item.clientName}: {item.issue}
-                                </Typography>
-                              ))
-                            ) : (
-                              liveAlertResults[rule.id].map((item: any, idx: number) => (
-                                <Typography key={idx} variant="caption" display="block" sx={{ fontSize: '0.7rem', opacity: 0.8 }}>
-                                  • {item.title || item.writerName || item.email}
-                                </Typography>
-                              ))
-                            )}
-                          </Box>
-                        )}
-                      </Alert>
-                    ) : null}
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
+                  </Paper>
+                </Grid>
+              )}
+            </Grid>
+          </>
         )}
-      </Paper>
-
-      {/* Writer Performance Section */}
-      <Paper sx={{ width: '100%', mb: 4, p: 3 }}>
-        <Box sx={{ mb: 3 }}>
-          <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <PersonIcon />
-            Writer Performance
-          </Typography>
-        </Box>
-        
-        {monitoringLoading ? (
-          <Box display="flex" justifyContent="center" my={4}>
-            <CircularProgress />
-          </Box>
-        ) : (
-          <Grid container spacing={3}>
-            {writerMetrics.map((writer) => (
-              <Grid size={{ xs: 12, md: 6, lg: 4 }} key={writer.writerName}>
-                <Card>
-                  <CardContent>
-                    <Box display="flex" alignItems="center" mb={2}>
-                      <Avatar sx={{ 
-                        bgcolor: getStatusColor(writer.status),
-                        mr: 2 
-                      }}>
-                        {getStatusIcon(writer.status)}
-                      </Avatar>
-                      <Box>
-                        <Typography variant="h6">
-                          {writer.writerName}
-                        </Typography>
-                        <Chip
-                          label={writer.status}
-                          size="small"
-                          sx={{ 
-                            bgcolor: getStatusColor(writer.status),
-                            color: 'white',
-                            textTransform: 'capitalize'
-                          }}
-                        />
-                      </Box>
-                    </Box>
-                    <Stack spacing={1}>
-                      <Box display="flex" justifyContent="space-between">
-                        <Typography variant="body2">Assigned Tasks:</Typography>
-                        <Typography variant="body2" fontWeight="bold">{writer.assignedTasks}</Typography>
-                      </Box>
-                      <Box display="flex" justifyContent="space-between">
-                        <Typography variant="body2">Completed:</Typography>
-                        <Typography variant="body2" fontWeight="bold" color="success.main">
-                          {writer.completedTasks}
-                        </Typography>
-                      </Box>
-                      <Box display="flex" justifyContent="space-between">
-                        <Typography variant="body2">In Progress:</Typography>
-                        <Typography variant="body2" fontWeight="bold" color="warning.main">
-                          {writer.inProgressTasks}
-                        </Typography>
-                      </Box>
-                      <Box display="flex" justifyContent="space-between">
-                        <Typography variant="body2">Internal Review:</Typography>
-                        <Typography variant="body2" fontWeight="bold" color="info.main">
-                          {writer.internalReviewTasks}
-                        </Typography>
-                      </Box>
-                      <Box display="flex" justifyContent="space-between">
-                        <Typography variant="body2">Client Review:</Typography>
-                        <Typography variant="body2" fontWeight="bold" color="secondary.main">
-                          {writer.clientReviewTasks}
-                        </Typography>
-                      </Box>
-                    </Stack>
-                  </CardContent>
-                </Card>
-              </Grid>
-            ))}
-          </Grid>
-        )}
-      </Paper>
-
-      {/* Simple Alert Rule Dialog */}
-      <Dialog open={openDialog} onClose={handleDialogClose} maxWidth="md" fullWidth>
-        <DialogTitle>
-          {editingRule ? 'Edit Alert Rule' : 'Create Alert Rule'}
-        </DialogTitle>
-        <DialogContent>
-          <AlertRuleForm
-            formData={formData}
-            formErrors={formErrors}
-            setFormData={setFormData}
-          />        </DialogContent>
-        <DialogActions>
-          <Button onClick={handleDialogClose}>Cancel</Button>
-          <Button onClick={handleSaveRule} variant="contained">
-            {editingRule ? 'Update' : 'Create'}
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog
-        open={deleteDialogOpen}
-        onClose={cancelDelete}
-        aria-labelledby="alert-dialog-title"
-        aria-describedby="alert-dialog-description"
-      >
-        <DialogTitle id="alert-dialog-title">
-          Delete Alert Rule
-        </DialogTitle>
-        <DialogContent>
-          <Typography>
-            Are you sure you want to delete this alert rule? This action cannot be undone.
-          </Typography>
-        </DialogContent>
-        <DialogActions>
-          <Button onClick={cancelDelete}>Cancel</Button>
-          <Button onClick={confirmDelete} variant="contained" color="error" autoFocus>
-            Delete
-          </Button>
-        </DialogActions>
-      </Dialog>
-
-      {/* Alert Snackbar */}
-      <Snackbar
-        open={alert.show}
-        autoHideDuration={6000}
-        onClose={() => setAlert(prev => ({ ...prev, show: false }))}
-      >
-        <Alert 
-          onClose={() => setAlert(prev => ({ ...prev, show: false }))}
-          severity={alert.severity}
-          sx={{ width: '100%' }}
-        >
-          {alert.message}
-        </Alert>
-      </Snackbar>
-    </Box>
+      </Box>
+    </ThemeProvider>
   );
 };
 

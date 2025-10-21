@@ -31,25 +31,24 @@ export const AdvancedFilterBuilder: React.FC<AdvancedFilterBuilderProps> = ({
       try {
         const config = await getCustomFieldsConfig();
         const filterableFields = getFilterableFields(config.fields);
-        console.log('[AdvancedFilterBuilder] Loaded fields:', filterableFields);
         setFields(filterableFields);
         setFieldsLoaded(true);
       } catch (error) {
-        console.error('[AdvancedFilterBuilder] Error loading filterable fields:', error);
+        console.error('Error loading filterable fields:', error);
       } finally {
         setLoading(false);
       }
     }
 
+    // Load fields if panel is expanded
     if (isExpanded && !fieldsLoaded) {
       loadFields();
     }
   }, [isExpanded, fieldsLoaded]);
 
-  // Add default rule AFTER fields are loaded
+  // Add default rule AFTER fields are loaded (only if no rules)
   useEffect(() => {
     if (fieldsLoaded && fields.length > 0 && rules.length === 0) {
-      console.log('[AdvancedFilterBuilder] Creating default rule');
       const defaultRule: FilterRule = {
         id: `rule_${Date.now()}`,
         field: '',

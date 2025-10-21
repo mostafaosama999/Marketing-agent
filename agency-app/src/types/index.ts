@@ -77,3 +77,16 @@ export type {
   SearchPeopleRequest,
   SearchPeopleResponse
 } from './apollo';
+
+// Filter and Preset types
+export type {
+  FilterOperator,
+  FilterRule,
+  FilterBuilderState,
+  FilterState,
+  FilterableField,
+  ActiveFilter,
+  FilterPreset,
+  SavePresetRequest,
+  PresetListItem
+} from './filter';

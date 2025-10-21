@@ -94,10 +94,10 @@ const modernTheme = createTheme({
 });
 
 interface CompensationStructure {
-  type: 'hourly' | 'fixed';
-  hourlyRate?: number;
-  blogRate?: number;
-  tutorialRate?: number;
+  type: 'salary' | 'commission';
+  baseSalary?: number;
+  commissionRate?: number;
+  bonusStructure?: number;
 }
 
 interface User {
@@ -111,9 +111,9 @@ interface User {
   specialties?: string[];
   compensation?: CompensationStructure;
   performance?: {
-    tasksCompleted: number;
-    averageScore: number;
-    onTimeDelivery: number;
+    leadsConverted: number;
+    conversionRate: number;
+    pipelineValue: number;
   };
 }
 
@@ -138,10 +138,10 @@ const TeamManagement: React.FC = () => {
         .filter(user => user.role !== 'CEO');
       
       usersData.sort((a, b) => {
-        const roleOrder = { Manager: 1, Writer: 2 };
+        const roleOrder = { 'Sales Manager': 1, 'Sales Representative': 2 };
         const aOrder = roleOrder[a.role as keyof typeof roleOrder] || 3;
         const bOrder = roleOrder[b.role as keyof typeof roleOrder] || 3;
-        
+
         if (aOrder !== bOrder) return aOrder - bOrder;
         return (a.displayName || a.email).localeCompare(b.displayName || b.email);
       });
@@ -153,9 +153,9 @@ const TeamManagement: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  const handleWriterClick = (user: User) => {
-    if (user.role === 'Writer' || user.role === 'Manager') {
-      navigate(`/writer/${user.id}`);
+  const handleTeamMemberClick = (user: User) => {
+    if (user.role === 'Sales Representative' || user.role === 'Sales Manager') {
+      navigate(`/team-member/${user.id}`);
     }
   };
 
@@ -192,20 +192,20 @@ const TeamManagement: React.FC = () => {
 
   const getAvatarColor = (role: string) => {
     switch (role) {
-      case 'Manager': return 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
-      case 'Writer': return 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)';
+      case 'Sales Manager': return 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)';
+      case 'Sales Representative': return 'linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%)';
       default: return 'linear-gradient(135deg, #64748b 0%, #475569 100%)';
     }
   };
 
   const getRoleChipColor = (role: string) => {
     switch (role) {
-      case 'Manager': return {
+      case 'Sales Manager': return {
         background: 'linear-gradient(135deg, #fef3c7 0%, #fde68a 100%)',
         color: '#92400e',
         fontWeight: 600,
       };
-      case 'Writer': return {
+      case 'Sales Representative': return {
         background: 'linear-gradient(135deg, #dbeafe 0%, #bfdbfe 100%)',
         color: '#1e40af',
         fontWeight: 600,
@@ -226,26 +226,26 @@ const TeamManagement: React.FC = () => {
 
   const formatCompensation = (compensation?: CompensationStructure) => {
     if (!compensation) return null;
-    
-    if (compensation.type === 'hourly') {
-      return `$${compensation.hourlyRate}/hr`;
+
+    if (compensation.type === 'salary') {
+      const parts = [];
+      if (compensation.baseSalary && compensation.baseSalary > 0) {
+        parts.push(`$${compensation.baseSalary.toLocaleString()}/yr`);
+      }
+      if (compensation.bonusStructure && compensation.bonusStructure > 0) {
+        parts.push(`+$${compensation.bonusStructure.toLocaleString()} bonus`);
+      }
+      return parts.join(' ');
     } else {
-      const rates = [];
-      if (compensation.blogRate && compensation.blogRate > 0) {
-        rates.push(`$${compensation.blogRate}/blog`);
-      }
-      if (compensation.tutorialRate && compensation.tutorialRate > 0) {
-        rates.push(`$${compensation.tutorialRate}/tutorial`);
-      }
-      return rates.join(', ');
+      return compensation.commissionRate ? `${compensation.commissionRate}% commission` : null;
     }
   };
 
   // Calculate team stats
-  const writers = users.filter(user => user.role === 'Writer');
-  const managers = users.filter(user => user.role === 'Manager');
-  const avgPerformance = writers.length > 0 
-    ? writers.reduce((sum, writer) => sum + (writer.performance?.averageScore || 0), 0) / writers.length
+  const salesReps = users.filter(user => user.role === 'Sales Representative');
+  const managers = users.filter(user => user.role === 'Sales Manager');
+  const avgConversionRate = salesReps.length > 0
+    ? salesReps.reduce((sum, rep) => sum + (rep.performance?.conversionRate || 0), 0) / salesReps.length
     : 0;
 
   if (loading) {
@@ -291,7 +291,7 @@ const TeamManagement: React.FC = () => {
               Team Management
             </Typography>
             <Typography variant="subtitle1">
-              Manage your content team and track performance
+              Manage your sales team and track performance
             </Typography>
           </Box>
           
@@ -350,22 +350,22 @@ const TeamManagement: React.FC = () => {
                 }}>
                   <EditIcon sx={{ color: 'white', fontSize: 24 }} />
                 </Box>
-                <Typography variant="h4" sx={{ 
+                <Typography variant="h4" sx={{
                   fontWeight: 800,
                   color: '#1e293b',
                   fontSize: '36px',
                   mb: 1
                 }}>
-                  {writers.length}
+                  {salesReps.length}
                 </Typography>
-                <Typography variant="body2" sx={{ 
+                <Typography variant="body2" sx={{
                   color: '#64748b',
                   fontSize: '14px',
                   fontWeight: 500,
                   textTransform: 'uppercase',
                   letterSpacing: '0.5px'
                 }}>
-                  Writers
+                  Sales Reps
                 </Typography>
               </CardContent>
             </Card>
@@ -444,22 +444,22 @@ const TeamManagement: React.FC = () => {
                 }}>
                   <TrendingUpIcon sx={{ color: 'white', fontSize: 24 }} />
                 </Box>
-                <Typography variant="h4" sx={{ 
+                <Typography variant="h4" sx={{
                   fontWeight: 800,
                   color: '#1e293b',
                   fontSize: '36px',
                   mb: 1
                 }}>
-                  {avgPerformance.toFixed(1)}
+                  {avgConversionRate.toFixed(1)}%
                 </Typography>
-                <Typography variant="body2" sx={{ 
+                <Typography variant="body2" sx={{
                   color: '#64748b',
                   fontSize: '14px',
                   fontWeight: 500,
                   textTransform: 'uppercase',
                   letterSpacing: '0.5px'
                 }}>
-                  Avg Performance
+                  Avg Conversion Rate
                 </Typography>
               </CardContent>
             </Card>
@@ -525,10 +525,10 @@ const TeamManagement: React.FC = () => {
                   border: '1px solid rgba(226, 232, 240, 0.8)',
                   boxShadow: '0 4px 16px rgba(0, 0, 0, 0.04)',
                   transition: 'all 0.3s cubic-bezier(0.4, 0, 0.2, 1)',
-                  cursor: (user.role === 'Writer' || user.role === 'Manager') ? 'pointer' : 'default',
+                  cursor: (user.role === 'Sales Representative' || user.role === 'Sales Manager') ? 'pointer' : 'default',
                   position: 'relative',
                   overflow: 'hidden',
-                  '&:hover': (user.role === 'Writer' || user.role === 'Manager') ? {
+                  '&:hover': (user.role === 'Sales Representative' || user.role === 'Sales Manager') ? {
                     boxShadow: '0 12px 40px rgba(0, 0, 0, 0.1)',
                     transform: 'translateY(-6px)',
                     borderColor: 'rgba(59, 130, 246, 0.3)',
@@ -543,7 +543,7 @@ const TeamManagement: React.FC = () => {
                     background: getAvatarColor(user.role),
                   }
                 }}
-                onClick={() => handleWriterClick(user)}
+                onClick={() => handleTeamMemberClick(user)}
               >
                 <CardContent sx={{ p: 4 }}>
                   {/* User Header */}
@@ -636,8 +636,8 @@ const TeamManagement: React.FC = () => {
 
                   <Divider sx={{ mb: 3, borderColor: 'rgba(226, 232, 240, 0.8)' }} />
 
-                  {/* Compensation - Only for Writers and Managers, and only visible to CEOs */}
-                  {(user.role === 'Writer' || user.role === 'Manager') && userProfile?.role === 'CEO' && user.compensation && formatCompensation(user.compensation) && (
+                  {/* Compensation - Only for Sales Reps and Managers, and only visible to CEOs */}
+                  {(user.role === 'Sales Representative' || user.role === 'Sales Manager') && userProfile?.role === 'CEO' && user.compensation && formatCompensation(user.compensation) && (
                     <Box sx={{ mb: 3 }}>
                       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, mb: 2 }}>
                         <MoneyIcon sx={{ fontSize: 16, color: '#94a3b8' }} />
@@ -721,8 +721,8 @@ const TeamManagement: React.FC = () => {
                     </Box>
                   )}
 
-                  {/* Performance Stats (for Writers) */}
-                  {user.role === 'Writer' && user.performance && (
+                  {/* Performance Stats (for Sales Reps) */}
+                  {user.role === 'Sales Representative' && user.performance && (
                     <Box>
                       <Typography variant="body2" sx={{ 
                         color: '#475569',
@@ -735,21 +735,21 @@ const TeamManagement: React.FC = () => {
                         Performance
                       </Typography>
                       
-                      {/* Performance Score */}
+                      {/* Conversion Rate */}
                       <Box sx={{ mb: 3 }}>
                         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
                           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                             <StarIcon sx={{ fontSize: 14, color: '#94a3b8' }} />
                             <Typography variant="caption" sx={{ color: '#64748b', fontSize: '12px' }}>
-                              Overall Score
+                              Conversion Rate
                             </Typography>
                           </Box>
                           <Chip
-                            label={`${user.performance.averageScore}%`}
+                            label={`${user.performance.conversionRate}%`}
                             size="small"
                             sx={{
-                              background: getPerformanceColor(user.performance.averageScore).bg,
-                              color: getPerformanceColor(user.performance.averageScore).color,
+                              background: getPerformanceColor(user.performance.conversionRate).bg,
+                              color: getPerformanceColor(user.performance.conversionRate).color,
                               fontSize: '11px',
                               height: 22,
                               borderRadius: 4,
@@ -758,15 +758,15 @@ const TeamManagement: React.FC = () => {
                             }}
                           />
                         </Box>
-                        <LinearProgress 
-                          variant="determinate" 
-                          value={user.performance.averageScore} 
-                          sx={{ 
-                            height: 6, 
+                        <LinearProgress
+                          variant="determinate"
+                          value={user.performance.conversionRate}
+                          sx={{
+                            height: 6,
                             borderRadius: 3,
                             backgroundColor: '#f1f5f9',
                             '& .MuiLinearProgress-bar': {
-                              backgroundColor: getPerformanceColor(user.performance.averageScore).color,
+                              backgroundColor: getPerformanceColor(user.performance.conversionRate).color,
                               borderRadius: 3,
                             }
                           }}
@@ -777,34 +777,34 @@ const TeamManagement: React.FC = () => {
                       <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 2 }}>
                         <Box>
                           <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: '11px' }}>
-                            Tasks Completed
+                            Leads Converted
                           </Typography>
-                          <Typography variant="body1" sx={{ 
-                            fontWeight: 700, 
+                          <Typography variant="body1" sx={{
+                            fontWeight: 700,
                             color: '#1e293b',
                             fontSize: '16px'
                           }}>
-                            {user.performance.tasksCompleted}
+                            {user.performance.leadsConverted}
                           </Typography>
                         </Box>
                         <Box>
                           <Typography variant="caption" sx={{ color: '#94a3b8', fontSize: '11px' }}>
-                            On-time Delivery
+                            Pipeline Value
                           </Typography>
-                          <Typography variant="body1" sx={{ 
-                            fontWeight: 700, 
+                          <Typography variant="body1" sx={{
+                            fontWeight: 700,
                             color: '#1e293b',
                             fontSize: '16px'
                           }}>
-                            {user.performance.onTimeDelivery}%
+                            ${user.performance.pipelineValue?.toLocaleString() || 0}
                           </Typography>
                         </Box>
                       </Box>
                     </Box>
                   )}
 
-                  {/* Click hint for writers and managers */}
-                  {(user.role === 'Writer' || user.role === 'Manager') && (
+                  {/* Click hint for sales reps and managers */}
+                  {(user.role === 'Sales Representative' || user.role === 'Sales Manager') && (
                     <Box sx={{ 
                       mt: 3, 
                       pt: 3, 
@@ -849,13 +849,13 @@ const TeamManagement: React.FC = () => {
             }}>
               No team members yet
             </Typography>
-            <Typography variant="body2" sx={{ 
+            <Typography variant="body2" sx={{
               color: '#64748b',
               mb: 4,
               maxWidth: 400,
               mx: 'auto'
             }}>
-              Add writers and managers to start building your content team
+              Add sales representatives and managers to start building your team
             </Typography>
             {userProfile?.role === 'CEO' && (
               <Button

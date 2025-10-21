@@ -35,10 +35,10 @@ interface EditWriterModalProps {
 }
 
 interface CompensationStructure {
-  type: 'hourly' | 'fixed';
-  hourlyRate?: number;
-  blogRate?: number;
-  tutorialRate?: number;
+  type: 'salary' | 'commission';
+  baseSalary?: number;
+  commissionRate?: number;
+  bonusStructure?: number;
 }
 
 interface WriterFormData {
@@ -57,15 +57,15 @@ const EditWriterModal: React.FC<EditWriterModalProps> = ({ open, onClose, user }
   const [formData, setFormData] = useState<WriterFormData>({
     email: '',
     displayName: '',
-    role: 'Writer',
-    department: 'Content Team',
+    role: 'Sales Representative',
+    department: 'Sales Team',
     phoneNumber: '',
     specialties: [],
     joinDate: new Date().toISOString().split('T')[0],
     compensation: {
-      type: 'fixed',
-      blogRate: 0,
-      tutorialRate: 0
+      type: 'salary',
+      baseSalary: 0,
+      commissionRate: 0
     }
   });
   
@@ -74,16 +74,16 @@ const EditWriterModal: React.FC<EditWriterModalProps> = ({ open, onClose, user }
   const [error, setError] = useState('');
 
   const availableSpecialties = [
-    'Technical Writing',
-    'Blog Writing',
-    'Social Media',
-    'SEO Content',
-    'Email Marketing',
-    'Press Releases',
-    'Product Descriptions',
-    'White Papers',
-    'Case Studies',
-    'Landing Pages'
+    'Lead Generation',
+    'Cold Outreach',
+    'Inbound Sales',
+    'Account Management',
+    'Social Selling',
+    'Email Campaigns',
+    'LinkedIn Outreach',
+    'Closing Deals',
+    'Follow-up Management',
+    'Pipeline Management'
   ];
 
   // Populate form when user changes
@@ -92,15 +92,15 @@ const EditWriterModal: React.FC<EditWriterModalProps> = ({ open, onClose, user }
       setFormData({
         email: user.email || '',
         displayName: user.displayName || '',
-        role: user.role || 'Writer',
-        department: user.department || 'Content Team',
+        role: user.role || 'Sales Representative',
+        department: user.department || 'Sales Team',
         phoneNumber: user.phoneNumber || '',
         specialties: user.specialties || [],
         joinDate: user.joinDate || new Date().toISOString().split('T')[0],
         compensation: user.compensation || {
-          type: 'fixed',
-          blogRate: 0,
-          tutorialRate: 0
+          type: 'salary',
+          baseSalary: 0,
+          commissionRate: 0
         }
       });
     }
@@ -117,20 +117,22 @@ const EditWriterModal: React.FC<EditWriterModalProps> = ({ open, onClose, user }
   };
 
   const handleCompensationTypeChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    const newType = event.target.value as 'hourly' | 'fixed';
+    const newType = event.target.value as 'salary' | 'commission';
     setFormData(prev => ({
       ...prev,
       compensation: {
         type: newType,
-        ...(newType === 'hourly' ? { hourlyRate: prev.compensation?.hourlyRate || 0 } : { 
-          blogRate: prev.compensation?.blogRate || 0, 
-          tutorialRate: prev.compensation?.tutorialRate || 0 
+        ...(newType === 'salary' ? {
+          baseSalary: prev.compensation?.baseSalary || 0,
+          bonusStructure: prev.compensation?.bonusStructure || 0
+        } : {
+          commissionRate: prev.compensation?.commissionRate || 0
         })
       }
     }));
   };
 
-  const handleCompensationAmountChange = (field: 'hourlyRate' | 'blogRate' | 'tutorialRate') => (
+  const handleCompensationAmountChange = (field: 'baseSalary' | 'commissionRate' | 'bonusStructure') => (
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
     const value = parseFloat(event.target.value) || 0;
@@ -161,14 +163,13 @@ const EditWriterModal: React.FC<EditWriterModalProps> = ({ open, onClose, user }
   };
 
   const validateCompensation = () => {
-    // Only validate compensation for writers and managers when user is CEO
-    if ((formData.role !== 'Writer' && formData.role !== 'Manager') || !formData.compensation || userProfile?.role !== 'CEO') return true;
-    
-    if (formData.compensation.type === 'hourly') {
-      return formData.compensation.hourlyRate && formData.compensation.hourlyRate > 0;
+    // Only validate compensation for sales reps and managers when user is CEO
+    if ((formData.role !== 'Sales Representative' && formData.role !== 'Sales Manager') || !formData.compensation || userProfile?.role !== 'CEO') return true;
+
+    if (formData.compensation.type === 'salary') {
+      return formData.compensation.baseSalary && formData.compensation.baseSalary > 0;
     } else {
-      return (formData.compensation.blogRate && formData.compensation.blogRate > 0) ||
-             (formData.compensation.tutorialRate && formData.compensation.tutorialRate > 0);
+      return formData.compensation.commissionRate && formData.compensation.commissionRate > 0;
     }
   };
 
@@ -185,7 +186,7 @@ const EditWriterModal: React.FC<EditWriterModalProps> = ({ open, onClose, user }
       return;
     }
 
-    if ((formData.role === 'Writer' || formData.role === 'Manager') && userProfile?.role === 'CEO' && !validateCompensation()) {
+    if ((formData.role === 'Sales Representative' || formData.role === 'Sales Manager') && userProfile?.role === 'CEO' && !validateCompensation()) {
       setError('Please set at least one compensation rate');
       return;
     }
@@ -204,18 +205,18 @@ const EditWriterModal: React.FC<EditWriterModalProps> = ({ open, onClose, user }
         updatedAt: new Date().toISOString(),
       };
 
-      // Only include compensation for writers and managers
-      if (formData.role !== 'Writer' && formData.role !== 'Manager') {
+      // Only include compensation for sales reps and managers
+      if (formData.role !== 'Sales Representative' && formData.role !== 'Sales Manager') {
         const { compensation, ...updateDataWithoutCompensation } = updateData;
         await updateDoc(doc(db, 'users', user.id), updateDataWithoutCompensation);
       } else {
         await updateDoc(doc(db, 'users', user.id), updateData);
       }
-      
+
       handleClose();
     } catch (error) {
-      console.error('Error updating writer:', error);
-      setError('Failed to update writer. Please try again.');
+      console.error('Error updating team member:', error);
+      setError('Failed to update team member. Please try again.');
     } finally {
       setSubmitting(false);
     }
@@ -226,15 +227,15 @@ const EditWriterModal: React.FC<EditWriterModalProps> = ({ open, onClose, user }
       setFormData({
         email: '',
         displayName: '',
-        role: 'Writer',
-        department: 'Content Team',
+        role: 'Sales Representative',
+        department: 'Sales Team',
         phoneNumber: '',
         specialties: [],
         joinDate: new Date().toISOString().split('T')[0],
         compensation: {
-          type: 'fixed',
-          blogRate: 0,
-          tutorialRate: 0
+          type: 'salary',
+          baseSalary: 0,
+          commissionRate: 0
         }
       });
       setSpecialtyInput('');
@@ -290,8 +291,8 @@ const EditWriterModal: React.FC<EditWriterModalProps> = ({ open, onClose, user }
                     onChange={handleChange('role')}
                     disabled={submitting || user.role === 'CEO'} // Don't allow changing CEO role
                   >
-                    <MenuItem value="Writer">Writer</MenuItem>
-                    <MenuItem value="Manager">Manager</MenuItem>
+                    <MenuItem value="Sales Representative">Sales Representative</MenuItem>
+                    <MenuItem value="Sales Manager">Sales Manager</MenuItem>
                     {user.role === 'CEO' && (
                       <MenuItem value="CEO">CEO</MenuItem>
                     )}
@@ -338,8 +339,8 @@ const EditWriterModal: React.FC<EditWriterModalProps> = ({ open, onClose, user }
                 />
               </Grid>
 
-              {/* Compensation Section - Only for Writers and Managers, and only visible to CEOs */}
-              {(formData.role === 'Writer' || formData.role === 'Manager') && userProfile?.role === 'CEO' && (
+              {/* Compensation Section - Only for Sales Reps and Managers, and only visible to CEOs */}
+              {(formData.role === 'Sales Representative' || formData.role === 'Sales Manager') && userProfile?.role === 'CEO' && (
                 <>
                   <Grid size={{ xs: 12 }}>
                     <Divider sx={{ my: 2 }} />
@@ -355,78 +356,79 @@ const EditWriterModal: React.FC<EditWriterModalProps> = ({ open, onClose, user }
                       </Typography>
                       <RadioGroup
                         row
-                        value={formData.compensation?.type || 'fixed'}
+                        value={formData.compensation?.type || 'salary'}
                         onChange={handleCompensationTypeChange}
                       >
-                        <FormControlLabel 
-                          value="hourly" 
-                          control={<Radio disabled={submitting} />} 
-                          label="Hourly Rate" 
+                        <FormControlLabel
+                          value="salary"
+                          control={<Radio disabled={submitting} />}
+                          label="Base Salary + Bonus"
                         />
-                        <FormControlLabel 
-                          value="fixed" 
-                          control={<Radio disabled={submitting} />} 
-                          label="Fixed Rate per Content Type" 
+                        <FormControlLabel
+                          value="commission"
+                          control={<Radio disabled={submitting} />}
+                          label="Commission-Based"
                         />
                       </RadioGroup>
                     </FormControl>
                   </Grid>
 
-                  {formData.compensation?.type === 'hourly' ? (
-                    <Grid size={{ xs: 12, sm: 6 }}>
-                      <TextField
-                        fullWidth
-                        label="Hourly Rate *"
-                        type="number"
-                        value={formData.compensation.hourlyRate || ''}
-                        onChange={handleCompensationAmountChange('hourlyRate')}
-                        disabled={submitting}
-                        InputProps={{
-                          startAdornment: <InputAdornment position="start">$</InputAdornment>,
-                        }}
-                        inputProps={{
-                          min: 0,
-                          step: 0.01
-                        }}
-                      />
-                    </Grid>
-                  ) : (
+                  {formData.compensation?.type === 'salary' ? (
                     <>
                       <Grid size={{ xs: 12, sm: 6 }}>
                         <TextField
                           fullWidth
-                          label="Rate per Blog Post"
+                          label="Base Salary (Annual) *"
                           type="number"
-                          value={formData.compensation?.blogRate || ''}
-                          onChange={handleCompensationAmountChange('blogRate')}
+                          value={formData.compensation.baseSalary || ''}
+                          onChange={handleCompensationAmountChange('baseSalary')}
                           disabled={submitting}
                           InputProps={{
                             startAdornment: <InputAdornment position="start">$</InputAdornment>,
                           }}
                           inputProps={{
                             min: 0,
-                            step: 0.01
+                            step: 1000
                           }}
                         />
                       </Grid>
                       <Grid size={{ xs: 12, sm: 6 }}>
                         <TextField
                           fullWidth
-                          label="Rate per Tutorial"
+                          label="Bonus Structure (Annual)"
                           type="number"
-                          value={formData.compensation?.tutorialRate || ''}
-                          onChange={handleCompensationAmountChange('tutorialRate')}
+                          value={formData.compensation?.bonusStructure || ''}
+                          onChange={handleCompensationAmountChange('bonusStructure')}
                           disabled={submitting}
                           InputProps={{
                             startAdornment: <InputAdornment position="start">$</InputAdornment>,
                           }}
                           inputProps={{
                             min: 0,
-                            step: 0.01
+                            step: 1000
                           }}
                         />
                       </Grid>
                     </>
+                  ) : (
+                    <Grid size={{ xs: 12, sm: 6 }}>
+                      <TextField
+                        fullWidth
+                        label="Commission Rate *"
+                        type="number"
+                        value={formData.compensation?.commissionRate || ''}
+                        onChange={handleCompensationAmountChange('commissionRate')}
+                        disabled={submitting}
+                        InputProps={{
+                          endAdornment: <InputAdornment position="end">%</InputAdornment>,
+                        }}
+                        inputProps={{
+                          min: 0,
+                          max: 100,
+                          step: 0.5
+                        }}
+                      />
+                    </Grid>
                   )}
                 </>
               )}

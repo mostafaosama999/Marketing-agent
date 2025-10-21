@@ -118,16 +118,6 @@ function sanitize(str: string): string {
 }
 
 /**
- * Auto-generate email if missing
- * Format: {sanitized_name}@{sanitized_company}.example
- */
-export function generateEmail(name: string, company: string): string {
-  const sanitizedName = sanitize(name).replace(/\s+/g, '.');
-  const sanitizedCompany = sanitize(company);
-  return `${sanitizedName}@${sanitizedCompany}.example`;
-}
-
-/**
  * Transform CSV row to LeadFormData using field mappings
  */
 function transformRowToLead(
@@ -176,9 +166,9 @@ function transformRowToLead(
     return null;
   }
 
-  // Auto-generate email if missing
+  // Set empty string if email is missing (don't fabricate data)
   if (!leadData.email || leadData.email.trim() === '') {
-    leadData.email = generateEmail(leadData.name, leadData.company);
+    leadData.email = '';
   }
 
   // Set default phone if missing

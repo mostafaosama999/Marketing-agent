@@ -23,6 +23,7 @@ import {
   Analytics,
   NotificationImportant,
   TrendingUp,
+  Business,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -191,10 +192,8 @@ const Navbar: React.FC = () => {
     // All roles can see Leads
     items.push({ label: 'LEADS', path: '/', icon: Dashboard });
 
-    // CEOs and Managers can see Clients
-    if (userProfile.role === 'CEO' || userProfile.role === 'Manager') {
-      items.push({ label: 'CLIENTS', path: '/clients', icon: People });
-    }
+    // All roles can see Companies
+    items.push({ label: 'COMPANIES', path: '/companies', icon: Business });
 
     // Managers and CEOs can see Team
     if (userProfile.role === 'Manager' || userProfile.role === 'CEO') {
