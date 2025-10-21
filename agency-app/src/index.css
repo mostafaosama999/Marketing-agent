@@ -1,0 +1,106 @@
+body {
+  margin: 0;
+  font-family: "Inter", "SF Pro Display", -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  font-size: 13px; /* Smaller base font */
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html, body, #root {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+#root {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Override MUI components to be more compact */
+.MuiTypography-h4 {
+  font-size: 1.5rem !important;
+  font-weight: 600 !important;
+}
+
+.MuiTypography-h5 {
+  font-size: 1.2rem !important;
+}
+
+.MuiTypography-h6 {
+  font-size: 1rem !important;
+}
+
+.MuiTypography-body1 {
+  font-size: 0.8rem !important;
+}
+
+.MuiTypography-body2 {
+  font-size: 0.75rem !important;
+}
+
+.MuiTypography-subtitle1 {
+  font-size: 0.85rem !important;
+}
+
+.MuiButton-root {
+  padding: 4px 8px !important;
+  font-size: 0.75rem !important;
+  min-height: 28px !important;
+}
+
+.MuiCardContent-root {
+  padding: 8px !important;
+}
+
+.MuiCardContent-root:last-child {
+  padding-bottom: 8px !important;
+}
+
+.MuiChip-root {
+  height: 20px !important;
+  font-size: 0.7rem !important;
+}
+
+.MuiChip-label {
+  padding-left: 6px !important;
+  padding-right: 6px !important;
+}
+
+/* Compact toolbar */
+.MuiToolbar-root {
+  min-height: 48px !important;
+  padding-left: 12px !important;
+  padding-right: 12px !important;
+}
+
+/* Custom scrollbars */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(0, 0, 0, 0.2);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(0, 0, 0, 0.3);
+}
+
+code {
+  font-family: source-code-pro, Menlo, Monaco, Consolas, 'Courier New',
+    monospace;
+}
