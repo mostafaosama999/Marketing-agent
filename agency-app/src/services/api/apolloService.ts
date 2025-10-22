@@ -71,12 +71,12 @@ export async function fetchEmail(
   try {
     // Call Firebase Cloud Function to proxy the Apollo API request
     const functions = getFunctions();
-    const fetchEmailCloud = httpsCallable<FetchEmailRequest, FetchEmailResponse>(
+    const fetchApolloEmail = httpsCallable<FetchEmailRequest, FetchEmailResponse>(
       functions,
-      'fetchEmailCloud'
+      'fetchApolloEmail'
     );
 
-    const result = await fetchEmailCloud(request);
+    const result = await fetchApolloEmail(request);
 
     console.log('Apollo API: Cloud Function response:', result.data.matched ? 'Match found' : 'No match');
 

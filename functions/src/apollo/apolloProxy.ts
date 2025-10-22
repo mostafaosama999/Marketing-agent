@@ -91,9 +91,9 @@ interface ApolloApiError {
  * import { getFunctions, httpsCallable } from 'firebase/functions';
  *
  * const functions = getFunctions();
- * const fetchEmailCloud = httpsCallable(functions, 'fetchEmailCloud');
+ * const fetchApolloEmail = httpsCallable(functions, 'fetchApolloEmail');
  *
- * const result = await fetchEmailCloud({
+ * const result = await fetchApolloEmail({
  *   firstName: 'John',
  *   lastName: 'Doe',
  *   companyName: 'Acme Inc',
@@ -103,7 +103,7 @@ interface ApolloApiError {
  * console.log(result.data.email);
  * ```
  */
-export const fetchEmailCloud = functions.https.onCall(
+export const fetchApolloEmail = functions.https.onCall(
   async (data: FetchEmailRequest, _context): Promise<FetchEmailResponse> => {
     functions.logger.info("Apollo API: Fetching email for", {
       firstName: data.firstName,
