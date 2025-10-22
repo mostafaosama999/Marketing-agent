@@ -16,10 +16,17 @@ export interface LinkedInPostGeneration {
   generatedAt: string;
 }
 
-// Initialize OpenAI
-const openai = new OpenAI({
-  apiKey: functions.config().openai?.key || process.env.OPENAI_API_KEY,
-});
+// Lazy-initialize OpenAI (only when needed, not at import time)
+let openaiInstance: OpenAI | null = null;
+
+function getOpenAI(): OpenAI {
+  if (!openaiInstance) {
+    openaiInstance = new OpenAI({
+      apiKey: functions.config().openai?.key || process.env.OPENAI_API_KEY || "",
+    });
+  }
+  return openaiInstance;
+}
 
 /**
  * Generate LinkedIn posts from extracted content using the specified prompt
@@ -61,6 +68,7 @@ The final post must be fully ready for copy-paste into LinkedIn.
 I want you to create 2 different linkedin posts I can choose from`;
 
     // Make the OpenAI API call
+    const openai = getOpenAI();
     const completion = await openai.chat.completions.create({
       model: "gpt-4",
       messages: [

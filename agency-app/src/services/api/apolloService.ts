@@ -1,6 +1,7 @@
 // src/services/api/apolloService.ts
 
 import axios, { AxiosError } from 'axios';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 import {
   ApolloEmailEnrichmentRequest,
   ApolloEmailEnrichmentResponse,
@@ -22,7 +23,9 @@ import {
  * Apollo.io API Service
  *
  * This service provides email enrichment and people search capabilities
- * using the Apollo.io REST API.
+ * using Firebase Cloud Functions that proxy Apollo.io's REST API.
+ *
+ * This approach solves CORS issues and keeps API keys secure on the server.
  *
  * API Documentation: https://apolloio.github.io/apollo-api-docs
  */
@@ -33,6 +36,9 @@ const DEFAULT_TIMEOUT = 10000; // 10 seconds
 /**
  * Fetch email and contact information for a person using Apollo.io People Match API
  *
+ * This function calls a Firebase Cloud Function that proxies the request to Apollo.io,
+ * solving CORS issues and keeping API keys secure on the server.
+ *
  * Cost: 1 Apollo credit per successful match
  *
  * Matching Strategy:
@@ -40,7 +46,6 @@ const DEFAULT_TIMEOUT = 10000; // 10 seconds
  * - Fallback: first_name + last_name + organization_name/domain
  *
  * @param request - Person details for enrichment
- * @param apiKey - Apollo.io API key
  * @returns Enriched contact information including email, phone, LinkedIn, title, organization
  *
  * @example
@@ -50,7 +55,7 @@ const DEFAULT_TIMEOUT = 10000; // 10 seconds
  *   lastName: 'Doe',
  *   companyName: 'Acme Inc',
  *   linkedinUrl: 'https://www.linkedin.com/in/johndoe'
- * }, process.env.REACT_APP_APOLLO_API_KEY!);
+ * });
  *
  * if (result.matched) {
  *   console.log('Email:', result.email);
@@ -59,178 +64,26 @@ const DEFAULT_TIMEOUT = 10000; // 10 seconds
  * ```
  */
 export async function fetchEmail(
-  request: FetchEmailRequest,
-  apiKey: string
+  request: FetchEmailRequest
 ): Promise<FetchEmailResponse> {
   console.log('Apollo API: Fetching email for', request.firstName, request.lastName);
 
-  if (!apiKey) {
-    console.error('Apollo API: Missing API key');
-    return {
-      email: null,
-      phone: null,
-      linkedinUrl: null,
-      title: null,
-      companyName: null,
-      companyWebsite: null,
-      matched: false,
-      error: 'Missing Apollo API key. Please set REACT_APP_APOLLO_API_KEY environment variable.',
-    };
-  }
-
-  // Build the API request payload
-  const payload: ApolloEmailEnrichmentRequest = {
-    first_name: request.firstName,
-    last_name: request.lastName,
-  };
-
-  // Add optional fields with priority to LinkedIn URL (most accurate)
-  if (request.linkedinUrl) {
-    payload.linkedin_url = request.linkedinUrl;
-    console.log('Apollo API: Using LinkedIn URL for matching:', request.linkedinUrl);
-  }
-
-  if (request.companyName) {
-    payload.organization_name = request.companyName;
-    console.log('Apollo API: Using company name for matching:', request.companyName);
-  }
-
   try {
-    const response = await axios.post<{
-      person: ApolloPerson | null;
-      organization: ApolloOrganization | null;
-    }>(
-      `${APOLLO_BASE_URL}/people/match`,
-      payload,
-      {
-        headers: {
-          'X-Api-Key': apiKey,
-          'Content-Type': 'application/json',
-        },
-        timeout: DEFAULT_TIMEOUT,
-      }
+    // Call Firebase Cloud Function to proxy the Apollo API request
+    const functions = getFunctions();
+    const fetchEmailCloud = httpsCallable<FetchEmailRequest, FetchEmailResponse>(
+      functions,
+      'fetchEmailCloud'
     );
 
-    const { person, organization } = response.data;
+    const result = await fetchEmailCloud(request);
 
-    if (!person) {
-      console.log('Apollo API: No match found');
-      return {
-        email: null,
-        phone: null,
-        linkedinUrl: null,
-        title: null,
-        companyName: null,
-        companyWebsite: null,
-        matched: false,
-        error: 'No match found for the provided information',
-      };
-    }
+    console.log('Apollo API: Cloud Function response:', result.data.matched ? 'Match found' : 'No match');
 
-    // Extract phone number (prefer first sanitized number)
-    let phone: string | null = null;
-    if (person.phone_numbers && person.phone_numbers.length > 0) {
-      phone = person.phone_numbers[0].sanitized_number ||
-              person.phone_numbers[0].raw_number ||
-              null;
-    }
-
-    // Extract email
-    const email = person.email || null;
-
-    // Extract LinkedIn URL
-    const linkedinUrl = person.linkedin_url || null;
-
-    // Extract title
-    const title = person.title || null;
-
-    // Extract company information
-    const companyName = organization?.name || person.organization?.name || null;
-    const companyWebsite = organization?.website_url ||
-                           organization?.primary_domain ||
-                           person.organization?.website_url ||
-                           person.organization?.primary_domain ||
-                           null;
-
-    // Cost tracking (1 credit per match)
-    const costInfo: ApolloCostInfo = {
-      credits: 1,
-      model: 'apollo-people-match',
-      timestamp: new Date(),
-    };
-
-    console.log('Apollo API: Match found');
-    console.log(`  Email: ${email || 'Not found'}`);
-    console.log(`  Phone: ${phone || 'Not found'}`);
-    console.log(`  LinkedIn: ${linkedinUrl || 'Not found'}`);
-    console.log(`  Title: ${title || 'Not found'}`);
-    console.log(`  Company: ${companyName || 'Not found'}`);
-    console.log(`  Cost: 1 credit`);
-
-    return {
-      email,
-      phone,
-      linkedinUrl,
-      title,
-      companyName,
-      companyWebsite,
-      matched: true,
-      costInfo,
-    };
-
+    return result.data;
   } catch (error) {
-    console.error('Apollo API: Error fetching email', error);
+    console.error('Apollo API: Error calling Cloud Function', error);
 
-    if (axios.isAxiosError(error)) {
-      const axiosError = error as AxiosError<ApolloApiError>;
-
-      // Handle rate limiting
-      if (axiosError.response?.status === 429) {
-        return {
-          email: null,
-          phone: null,
-          linkedinUrl: null,
-          title: null,
-          companyName: null,
-          companyWebsite: null,
-          matched: false,
-          error: 'Rate limit exceeded. Please try again later.',
-        };
-      }
-
-      // Handle authentication errors
-      if (axiosError.response?.status === 401 || axiosError.response?.status === 403) {
-        return {
-          email: null,
-          phone: null,
-          linkedinUrl: null,
-          title: null,
-          companyName: null,
-          companyWebsite: null,
-          matched: false,
-          error: 'Invalid Apollo API key. Please check your REACT_APP_APOLLO_API_KEY.',
-        };
-      }
-
-      // Handle other API errors
-      const errorMessage = axiosError.response?.data?.error ||
-                          axiosError.response?.data?.message ||
-                          axiosError.message ||
-                          'Unknown error occurred';
-
-      return {
-        email: null,
-        phone: null,
-        linkedinUrl: null,
-        title: null,
-        companyName: null,
-        companyWebsite: null,
-        matched: false,
-        error: `Apollo API error: ${errorMessage}`,
-      };
-    }
-
-    // Handle non-Axios errors
     return {
       email: null,
       phone: null,
@@ -239,7 +92,7 @@ export async function fetchEmail(
       companyName: null,
       companyWebsite: null,
       matched: false,
-      error: error instanceof Error ? error.message : 'Unknown error occurred',
+      error: error instanceof Error ? error.message : 'Failed to fetch email. Please try again.',
     };
   }
 }

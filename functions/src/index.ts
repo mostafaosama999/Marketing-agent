@@ -22,3 +22,4 @@ export {dailyWebflowSync} from "./webflow/dailySync";
 export {qualifyCompanyBlog} from "./blogQualifier/qualifyBlog";
 export {findWritingProgramCloud} from "./writingProgramFinder/findWritingProgram";
 export {generateCustomIdeasCloud, getLeadIdeas, updateIdeaStatus} from "./ideaGenerator/generateIdeas";
+export {fetchEmailCloud} from "./apollo/apolloProxy";

@@ -111,18 +111,40 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
           return { csvField, leadField: 'outreach.email.status', section };
         }
 
-        // Default to skip for unmapped columns (will be auto-created if enabled)
-        return { csvField, leadField: 'skip', section };
+        // Default to skip for unmapped columns (will be auto-created if global setting enabled)
+        return { csvField, leadField: 'skip', section, autoCreate: autoCreateFields };
       });
 
       setMappings(detectedMappings);
     }
-  }, [headers]);
+  }, [headers, autoCreateFields]);
 
   const handleMappingChange = (csvField: string, leadField: string) => {
     setMappings((prev) =>
       prev.map((mapping) =>
-        mapping.csvField === csvField ? { ...mapping, leadField } : mapping
+        mapping.csvField === csvField
+          ? { ...mapping, leadField, autoCreate: leadField === 'skip' ? autoCreateFields : undefined }
+          : mapping
+      )
+    );
+  };
+
+  const handleAutoCreateToggle = (csvField: string, autoCreate: boolean) => {
+    setMappings((prev) =>
+      prev.map((mapping) =>
+        mapping.csvField === csvField ? { ...mapping, autoCreate } : mapping
+      )
+    );
+  };
+
+  const handleGlobalAutoCreateToggle = (checked: boolean) => {
+    setAutoCreateFields(checked);
+    // Update all skipped fields to match the new global setting
+    setMappings((prev) =>
+      prev.map((mapping) =>
+        mapping.leadField === 'skip' || mapping.leadField === null
+          ? { ...mapping, autoCreate: checked }
+          : mapping
       )
     );
   };
@@ -201,6 +223,8 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
   // Render a single field mapping row
   const renderFieldMappingRow = (mapping: FieldMapping, availableFields: Array<{ value: string; label: string }>) => {
     const samples = getSampleValues(mapping.csvField);
+    const isSkipped = mapping.leadField === 'skip' || mapping.leadField === null;
+
     return (
       <Box
         key={mapping.csvField}
@@ -251,6 +275,25 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
                 ))}
               </Select>
             </FormControl>
+
+            {/* Per-field auto-create checkbox */}
+            {isSkipped && (
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={mapping.autoCreate ?? false}
+                    onChange={(e) => handleAutoCreateToggle(mapping.csvField, e.target.checked)}
+                    size="small"
+                  />
+                }
+                label={
+                  <Typography variant="caption" sx={{ color: '#64748b' }}>
+                    Auto-create as custom field
+                  </Typography>
+                }
+                sx={{ mt: 1, ml: 0 }}
+              />
+            )}
           </Box>
         </Box>
       </Box>
@@ -392,7 +435,7 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
               control={
                 <Checkbox
                   checked={autoCreateFields}
-                  onChange={(e) => setAutoCreateFields(e.target.checked)}
+                  onChange={(e) => handleGlobalAutoCreateToggle(e.target.checked)}
                 />
               }
               label="Auto-create custom fields for unmapped columns"

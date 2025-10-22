@@ -8,10 +8,17 @@ import {
   AITrend,
 } from "../types";
 
-// Initialize OpenAI
-const openai = new OpenAI({
-  apiKey: functions.config().openai?.key || process.env.OPENAI_API_KEY,
-});
+// Lazy-initialize OpenAI (only when needed, not at import time)
+let openaiInstance: OpenAI | null = null;
+
+function getOpenAI(): OpenAI {
+  if (!openaiInstance) {
+    openaiInstance = new OpenAI({
+      apiKey: functions.config().openai?.key || process.env.OPENAI_API_KEY || "",
+    });
+  }
+  return openaiInstance;
+}
 
 /**
  * Generate content ideas using OpenAI GPT
@@ -30,6 +37,7 @@ async function generateContentIdeas(
   );
 
   try {
+    const openai = getOpenAI();
     const completion = await openai.chat.completions.create({
       model: "gpt-4",
       messages: [

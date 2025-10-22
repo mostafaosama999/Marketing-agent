@@ -130,6 +130,7 @@ export interface FieldMapping {
   csvField: string;
   leadField: string | null; // Lead field name or custom field name
   section?: FieldSection; // Section grouping for UI
+  autoCreate?: boolean; // Whether to auto-create this field as custom field if unmapped
 }
 
 // Status to internal LeadStatus mapping

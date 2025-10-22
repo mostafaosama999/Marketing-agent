@@ -9,10 +9,17 @@ import {
 } from "../types";
 import {extractTokenUsage, calculateCost, CostInfo} from "./costTracker";
 
-// Initialize OpenAI
-const openai = new OpenAI({
-  apiKey: functions.config().openai?.key || process.env.OPENAI_API_KEY,
-});
+// Lazy-initialize OpenAI (only when needed, not at import time)
+let openaiInstance: OpenAI | null = null;
+
+function getOpenAI(): OpenAI {
+  if (!openaiInstance) {
+    openaiInstance = new OpenAI({
+      apiKey: functions.config().openai?.key || process.env.OPENAI_API_KEY || "",
+    });
+  }
+  return openaiInstance;
+}
 
 /**
  * Common URL patterns for writing/guest author programs
@@ -525,6 +532,7 @@ Return your response as a JSON object with this structure:
 Only suggest URLs you have evidence for. Provide up to 3 suggestions maximum.
 `;
 
+    const openai = getOpenAI();
     const completion = await openai.chat.completions.create({
       model: "gpt-4",
       messages: [

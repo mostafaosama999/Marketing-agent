@@ -267,21 +267,12 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
     setApolloLoading(true);
 
     try {
-      const apiKey = process.env.REACT_APP_APOLLO_API_KEY;
-      if (!apiKey) {
-        setApolloError('Apollo API key not configured');
-        setApolloLoading(false);
-        return;
-      }
-
-      const result = await fetchEmail(
-        {
-          firstName,
-          lastName,
-          companyName: formData.company,
-        },
-        apiKey
-      );
+      // Call Cloud Function (no API key needed - it's stored securely on the server)
+      const result = await fetchEmail({
+        firstName,
+        lastName,
+        companyName: formData.company,
+      });
 
       if (result.matched && result.email) {
         // Update email field with fetched email

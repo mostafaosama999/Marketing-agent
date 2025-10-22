@@ -311,7 +311,8 @@ export async function importLeadsFromCSV(
   // Apply forward-fill for Excel compatibility
   const filledData = applyForwardFill(data);
 
-  // Auto-create custom fields if enabled
+  // Auto-create custom fields based on per-field settings
+  // First check global setting for backward compatibility
   if (autoCreateCustomFields) {
     const unmappedColumns = Object.keys(filledData[0] || {}).filter(
       (column) => !mappings.find((m) => m.csvField === column && m.leadField !== 'skip')
@@ -336,6 +337,35 @@ export async function importLeadsFromCSV(
         console.error(`Failed to auto-create custom field for column ${column}:`, error);
         // Non-blocking: continue with import
       }
+    }
+  }
+
+  // Also check per-field autoCreate flags (takes precedence)
+  const skippedFieldsToCreate = mappings.filter(
+    (m) => (m.leadField === 'skip' || m.leadField === null) && m.autoCreate === true
+  );
+
+  for (const mapping of skippedFieldsToCreate) {
+    try {
+      // Skip if already created by global logic above
+      const alreadyMapped = mappings.some(
+        (m) => m.csvField === mapping.csvField && m.leadField && m.leadField !== 'skip'
+      );
+      if (alreadyMapped) continue;
+
+      // Detect type from sample data
+      const samples = filledData.slice(0, 10).map((row) => row[mapping.csvField] || '');
+      const detectedType = detectFieldType(samples);
+
+      // Create custom field
+      await autoCreateCustomField(mapping.csvField, detectedType);
+      result.customFieldsCreated++;
+
+      // Update the mapping to point to the new custom field
+      mapping.leadField = mapping.csvField.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_');
+    } catch (error) {
+      console.error(`Failed to auto-create custom field for column ${mapping.csvField}:`, error);
+      // Non-blocking: continue with import
     }
   }
 
