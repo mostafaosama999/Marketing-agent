@@ -230,3 +230,35 @@ export async function updateStageOrder(
 
   console.log('Updated pipeline stage order');
 }
+
+/**
+ * Update the visibility of a pipeline stage
+ * @param stageId - The stage ID to update
+ * @param visible - Whether the stage should be visible
+ */
+export async function updateStageVisibility(
+  stageId: LeadStatus,
+  visible: boolean
+): Promise<void> {
+  const config = await getPipelineConfig();
+
+  // Prevent hiding all stages
+  if (!visible) {
+    const visibleCount = config.stages.filter(s => s.visible).length;
+    if (visibleCount <= 1) {
+      throw new Error('Cannot hide all columns. At least one column must remain visible.');
+    }
+  }
+
+  const updatedStages = config.stages.map((stage) =>
+    stage.id === stageId ? { ...stage, visible } : stage
+  );
+
+  const configRef = getPipelineConfigRef();
+  await updateDoc(configRef, {
+    stages: updatedStages,
+    updatedAt: Timestamp.now(),
+  });
+
+  console.log(`Updated stage "${stageId}" visibility to ${visible}`);
+}

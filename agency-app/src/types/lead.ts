@@ -44,6 +44,19 @@ export interface Lead {
   // API Cost Tracking
   totalApiCosts?: number;
   lastApiCostUpdate?: Date;
+
+  // Outreach Tracking (lead-level)
+  outreach?: {
+    linkedIn?: {
+      status: 'not_sent' | 'sent' | 'opened' | 'replied' | 'refused' | 'no_response';
+      sentAt?: Date;
+      profileUrl?: string;
+    };
+    email?: {
+      status: 'not_sent' | 'sent' | 'opened' | 'replied' | 'bounced' | 'refused' | 'no_response';
+      sentAt?: Date;
+    };
+  };
 }
 
 // Lead form data (for create/update operations)
@@ -54,6 +67,17 @@ export interface LeadFormData {
   phone: string;
   status: LeadStatus;
   customFields?: Record<string, any>;
+  outreach?: {
+    linkedIn?: {
+      status: 'not_sent' | 'sent' | 'opened' | 'replied' | 'refused' | 'no_response';
+      sentAt?: Date;
+      profileUrl?: string;
+    };
+    email?: {
+      status: 'not_sent' | 'sent' | 'opened' | 'replied' | 'bounced' | 'refused' | 'no_response';
+      sentAt?: Date;
+    };
+  };
 }
 
 // Lead Timeline (state history tracking - subcollection)

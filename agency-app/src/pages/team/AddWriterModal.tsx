@@ -56,7 +56,7 @@ const AddWriterModal: React.FC<AddWriterModalProps> = ({ open, onClose }) => {
   const [formData, setFormData] = useState<WriterFormData>({
     email: '',
     displayName: '',
-    role: 'Sales Representative',
+    role: 'Marketing Analyst',
     department: 'Sales Team',
     phoneNumber: '',
     specialties: [],
@@ -201,7 +201,7 @@ const AddWriterModal: React.FC<AddWriterModalProps> = ({ open, onClose }) => {
       setFormData({
         email: '',
         displayName: '',
-        role: 'Sales Representative',
+        role: 'Marketing Analyst',
         department: 'Sales Team',
         phoneNumber: '',
         specialties: [],
@@ -263,8 +263,7 @@ const AddWriterModal: React.FC<AddWriterModalProps> = ({ open, onClose }) => {
                     onChange={handleChange('role')}
                     disabled={submitting}
                   >
-                    <MenuItem value="Sales Representative">Sales Representative</MenuItem>
-                    <MenuItem value="Sales Manager">Sales Manager</MenuItem>
+                    <MenuItem value="Marketing Analyst">Marketing Analyst</MenuItem>
                   </Select>
                 </FormControl>
               </Grid>
@@ -275,30 +274,6 @@ const AddWriterModal: React.FC<AddWriterModalProps> = ({ open, onClose }) => {
                   label="Department"
                   value={formData.department}
                   onChange={handleChange('department')}
-                  disabled={submitting}
-                />
-              </Grid>
-
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  fullWidth
-                  label="Phone Number"
-                  value={formData.phoneNumber}
-                  onChange={handleChange('phoneNumber')}
-                  disabled={submitting}
-                />
-              </Grid>
-
-              <Grid size={{ xs: 12, sm: 6 }}>
-                <TextField
-                  fullWidth
-                  label="Join Date"
-                  type="date"
-                  value={formData.joinDate}
-                  onChange={handleChange('joinDate')}
-                  InputLabelProps={{
-                    shrink: true,
-                  }}
                   disabled={submitting}
                 />
               </Grid>

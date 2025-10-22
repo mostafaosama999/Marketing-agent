@@ -1,5 +1,5 @@
 // src/types/auth.ts
-export type UserRole = 'admin' | 'manager' | 'writer' | 'viewer' | 'CEO' | 'Manager' | 'Writer';
+export type UserRole = 'admin' | 'manager' | 'writer' | 'viewer' | 'CEO' | 'Manager' | 'Writer' | 'Marketing Analyst';
 
 export interface User {
   id: string;

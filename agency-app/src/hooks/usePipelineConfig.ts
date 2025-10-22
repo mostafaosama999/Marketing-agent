@@ -7,6 +7,7 @@ import {
   subscribeToPipelineConfig,
   updateStageLabel,
   updateStageOrder,
+  updateStageVisibility,
   stagesToLabelMap,
 } from '../services/api/pipelineConfigService';
 import { LeadStatus } from '../types/lead';
@@ -17,6 +18,7 @@ interface UsePipelineConfigReturn {
   loading: boolean;
   updateLabel: (stageId: LeadStatus, newLabel: string) => Promise<void>;
   updateOrder: (newStages: PipelineStage[]) => Promise<void>;
+  updateVisibility: (stageId: LeadStatus, visible: boolean) => Promise<void>;
   getLabelMap: () => Record<LeadStatus, string>;
 }
 
@@ -68,6 +70,16 @@ export function usePipelineConfig(): UsePipelineConfigReturn {
     }
   };
 
+  const updateVisibility = async (stageId: LeadStatus, visible: boolean) => {
+    try {
+      await updateStageVisibility(stageId, visible);
+      console.log(`usePipelineConfig: Updated visibility for ${stageId} to ${visible}`);
+    } catch (error) {
+      console.error('usePipelineConfig: Error updating visibility', error);
+      throw error;
+    }
+  };
+
   const getLabelMap = (): Record<LeadStatus, string> => {
     if (!config) {
       // Return default mapping if config not loaded
@@ -89,6 +101,7 @@ export function usePipelineConfig(): UsePipelineConfigReturn {
     loading,
     updateLabel,
     updateOrder,
+    updateVisibility,
     getLabelMap,
   };
 }

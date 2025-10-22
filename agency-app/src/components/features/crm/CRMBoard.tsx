@@ -1,7 +1,7 @@
 // src/components/features/crm/CRMBoard.tsx
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Fab, Button, ThemeProvider, createTheme, Alert, Snackbar, Menu, MenuItem, Checkbox, ListItemIcon, ListItemText } from '@mui/material';
-import { Add as AddIcon, UploadFile as UploadFileIcon, ViewColumn as ViewColumnIcon } from '@mui/icons-material';
+import { Box, Typography, Fab, Button, ThemeProvider, createTheme, Alert, Snackbar } from '@mui/material';
+import { Add as AddIcon, UploadFile as UploadFileIcon } from '@mui/icons-material';
 import { useAuth } from '../../../contexts/AuthContext';
 import { Lead, LeadStatus } from '../../../types/lead';
 import { CSVRow } from '../../../types/crm';
@@ -9,18 +9,23 @@ import { FilterState, FilterRule, SavePresetRequest } from '../../../types/filte
 import { applyAdvancedFilters } from '../../../services/api/advancedFilterService';
 import { LeadDialog } from './LeadDialog';
 import { LeadColumn } from './LeadColumn';
-import { ViewToggle } from './ViewToggle';
 import { CRMLeadsTable } from './CRMLeadsTable';
 import { CSVUploadDialog } from './CSVUploadDialog';
 import { CSVFieldMappingDialog } from './CSVFieldMappingDialog';
+import { BulkActionsToolbar } from './BulkActionsToolbar';
+import { BulkEditDialog } from './BulkEditDialog';
+import { TableColumnVisibilityMenu } from './TableColumnVisibilityMenu';
 import {
   CollapsibleFilterBar,
 } from './filters';
+import { TableColumnConfig, DEFAULT_TABLE_COLUMNS, TABLE_COLUMNS_STORAGE_KEY, applyVisibilityPreferences } from '../../../types/table';
+import { buildTableColumns, columnsToVisibilityMap } from '../../../services/api/tableColumnsService';
 import { FilterPresetsMenu } from './filters/FilterPresetsMenu';
 import { SavePresetDialog } from './filters/SavePresetDialog';
 import {
   subscribeToLeads,
   createLead,
+  updateLead,
   updateLeadStatus,
   deleteLead,
 } from '../../../services/api/leads';
@@ -75,30 +80,19 @@ function CRMBoard() {
   const [parsedCSVData, setParsedCSVData] = useState<CSVRow[]>([]);
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
 
-  const [currentView, setCurrentView] = useState<'board' | 'table'>('board');
+  const [currentView, setCurrentView] = useState<'board' | 'table'>('table');
 
   // Preset dialog state
   const [showSavePresetDialog, setShowSavePresetDialog] = useState(false);
 
-  // Column visibility state for table view
-  const defaultColumns = [
-    { id: 'name', label: 'Name', required: true },
-    { id: 'email', label: 'Email', required: false },
-    { id: 'phone', label: 'Phone', required: false },
-    { id: 'company', label: 'Company', required: false },
-    { id: 'status', label: 'Status', required: false },
-    { id: 'created', label: 'Created', required: false },
-    { id: 'actions', label: 'Actions', required: true },
-  ];
+  // Selection state for table view
+  const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
 
-  const [columnVisibility, setColumnVisibility] = useState<Record<string, boolean>>(() =>
-    defaultColumns.reduce((acc, col) => {
-      acc[col.id] = true;
-      return acc;
-    }, {} as Record<string, boolean>)
-  );
+  // Bulk edit dialog state
+  const [showBulkEditDialog, setShowBulkEditDialog] = useState(false);
 
-  const [columnMenuAnchor, setColumnMenuAnchor] = useState<null | HTMLElement>(null);
+  // Table column visibility state
+  const [tableColumns, setTableColumns] = useState<TableColumnConfig[]>(DEFAULT_TABLE_COLUMNS);
 
   // Get columns with counts from dynamic pipeline stages
   const getColumns = () => {
@@ -124,6 +118,39 @@ function CRMBoard() {
     return () => unsubscribe();
   }, []);
 
+  // Load table columns (default + custom fields) on mount
+  useEffect(() => {
+    async function initializeTableColumns() {
+      try {
+        // Build complete column list from default + custom fields
+        const allColumns = await buildTableColumns();
+
+        // Load saved visibility preferences from localStorage
+        const savedPrefs = localStorage.getItem(TABLE_COLUMNS_STORAGE_KEY);
+        let visibilityMap: Record<string, boolean> | null = null;
+
+        if (savedPrefs) {
+          try {
+            visibilityMap = JSON.parse(savedPrefs);
+          } catch (e) {
+            console.error('Error parsing saved column preferences:', e);
+          }
+        }
+
+        // Apply saved preferences to columns
+        const columnsWithPreferences = applyVisibilityPreferences(allColumns, visibilityMap);
+
+        setTableColumns(columnsWithPreferences);
+      } catch (error) {
+        console.error('Error loading table columns:', error);
+        // Fallback to default columns
+        setTableColumns(DEFAULT_TABLE_COLUMNS);
+      }
+    }
+
+    initializeTableColumns();
+  }, []);
+
   // Migrate localStorage data and load default preset on mount
   useEffect(() => {
     async function initializePresets() {
@@ -140,9 +167,7 @@ function CRMBoard() {
           setAdvancedFilterRules(defaultPreset.advancedRules);
           setFilters(defaultPreset.basicFilters);
           setCurrentView(defaultPreset.viewMode);
-          if (defaultPreset.tableColumns) {
-            setColumnVisibility(defaultPreset.tableColumns);
-          }
+          // Note: Column visibility is now managed by the field configuration system
         }
       } catch (error) {
         console.error('Error initializing presets:', error);
@@ -295,7 +320,8 @@ function CRMBoard() {
         if (!user) throw new Error('User not authenticated');
         await createLead(leadData, user.uid);
       } else if (selectedLead) {
-        // Update handled by LeadDialog
+        // Update existing lead
+        await updateLead(selectedLead.id, leadData);
       }
       setOpenDialog(false);
       setOpenLeadDetail(false);
@@ -307,10 +333,9 @@ function CRMBoard() {
   };
 
   const handleDeleteLead = async (leadId: string) => {
-    if (!window.confirm('Are you sure you want to delete this lead?')) return;
-
     try {
       await deleteLead(leadId);
+      showAlert('Lead deleted successfully');
     } catch (error) {
       console.error('Error deleting lead:', error);
       showAlert('Failed to delete lead. Please try again.');
@@ -432,27 +457,28 @@ function CRMBoard() {
     return filteredLeads;
   };
 
-  const handleViewChange = (view: 'board' | 'table') => {
-    setCurrentView(view);
+  // Selection handlers for table view
+  const handleSelectLead = (leadId: string) => {
+    setSelectedLeadIds(prev => {
+      if (prev.includes(leadId)) {
+        return prev.filter(id => id !== leadId);
+      } else {
+        return [...prev, leadId];
+      }
+    });
   };
 
-  // Column visibility handler
-  const toggleColumnVisibility = (columnId: string) => {
-    const column = defaultColumns.find((c) => c.id === columnId);
-    if (column?.required) return;
-
-    const visibleCount = Object.values(columnVisibility).filter((v) => v).length;
-    if (visibleCount === 1 && columnVisibility[columnId]) {
-      alert('At least one column must remain visible');
-      return;
+  const handleSelectAll = (selected: boolean) => {
+    if (selected) {
+      const allLeadIds = getFilteredLeads().map(lead => lead.id);
+      setSelectedLeadIds(allLeadIds);
+    } else {
+      setSelectedLeadIds([]);
     }
+  };
 
-    const newVisibility = {
-      ...columnVisibility,
-      [columnId]: !columnVisibility[columnId],
-    };
-
-    setColumnVisibility(newVisibility);
+  const handleClearSelection = () => {
+    setSelectedLeadIds([]);
   };
 
   const handleUpdateStatus = async (leadId: string, newStatus: LeadStatus) => {
@@ -464,6 +490,135 @@ function CRMBoard() {
     } catch (error) {
       console.error('Error updating lead status:', error);
       showAlert('Failed to update status. Please try again.');
+    }
+  };
+
+  // Bulk action handlers
+  const handleBulkChangeStatus = async (newStatus: LeadStatus) => {
+    if (!user || selectedLeadIds.length === 0) return;
+
+    try {
+      // Update all selected leads in parallel
+      await Promise.all(
+        selectedLeadIds.map(leadId => updateLeadStatus(leadId, newStatus, user.uid))
+      );
+
+      showAlert(`Successfully updated ${selectedLeadIds.length} lead${selectedLeadIds.length > 1 ? 's' : ''}`);
+      setSelectedLeadIds([]);
+    } catch (error) {
+      console.error('Error updating leads:', error);
+      showAlert('Failed to update some leads. Please try again.');
+    }
+  };
+
+  const handleBulkEditFields = () => {
+    setShowBulkEditDialog(true);
+  };
+
+  const handleBulkEditSave = async (updates: Partial<Lead['customFields']>) => {
+    if (selectedLeadIds.length === 0) return;
+
+    try {
+      // Update all selected leads with the new custom fields
+      await Promise.all(
+        selectedLeadIds.map(leadId => {
+          const lead = leads.find(l => l.id === leadId);
+          if (!lead) return Promise.resolve();
+
+          const updatedCustomFields = {
+            ...lead.customFields,
+            ...updates,
+          };
+
+          return updateLead(leadId, { customFields: updatedCustomFields });
+        })
+      );
+
+      showAlert(`Successfully updated ${selectedLeadIds.length} lead${selectedLeadIds.length > 1 ? 's' : ''}`);
+      setSelectedLeadIds([]);
+      setShowBulkEditDialog(false);
+    } catch (error) {
+      console.error('Error bulk editing leads:', error);
+      showAlert('Failed to update some leads. Please try again.');
+    }
+  };
+
+  const handleBulkExportCSV = () => {
+    if (selectedLeadIds.length === 0) return;
+
+    try {
+      // Get selected leads
+      const selectedLeads = leads.filter(lead => selectedLeadIds.includes(lead.id));
+
+      // Prepare CSV headers
+      const headers = [
+        'Name',
+        'Email',
+        'Phone',
+        'Company',
+        'Status',
+        'Lead Owner',
+        'Priority',
+        'Deal Value',
+        'Created At',
+      ];
+
+      // Prepare CSV rows
+      const rows = selectedLeads.map(lead => [
+        lead.name,
+        lead.email,
+        lead.phone || '',
+        lead.company,
+        lead.status,
+        lead.customFields?.lead_owner || '',
+        lead.customFields?.priority || '',
+        lead.customFields?.deal_value || '',
+        lead.createdAt?.toLocaleDateString() || '',
+      ]);
+
+      // Create CSV content
+      const csvContent = [
+        headers.join(','),
+        ...rows.map(row => row.map(cell => `"${cell}"`).join(',')),
+      ].join('\n');
+
+      // Create download link
+      const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+      const link = document.createElement('a');
+      const url = URL.createObjectURL(blob);
+      link.setAttribute('href', url);
+      link.setAttribute('download', `leads_export_${new Date().toISOString().split('T')[0]}.csv`);
+      link.style.visibility = 'hidden';
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+
+      showAlert(`Exported ${selectedLeadIds.length} lead${selectedLeadIds.length > 1 ? 's' : ''} to CSV`);
+      setSelectedLeadIds([]);
+    } catch (error) {
+      console.error('Error exporting CSV:', error);
+      showAlert('Failed to export CSV. Please try again.');
+    }
+  };
+
+  const handleBulkDelete = async () => {
+    if (selectedLeadIds.length === 0) return;
+
+    const confirmMessage = `Are you sure you want to delete ${selectedLeadIds.length} lead${selectedLeadIds.length > 1 ? 's' : ''}? This action cannot be undone.`;
+
+    if (!window.confirm(confirmMessage)) return;
+
+    try {
+      // Delete all selected leads in parallel
+      await Promise.all(
+        selectedLeadIds.map(leadId => deleteLead(leadId))
+      );
+
+      showAlert(`Successfully deleted ${selectedLeadIds.length} lead${selectedLeadIds.length > 1 ? 's' : ''}`);
+      setSelectedLeadIds([]);
+    } catch (error) {
+      console.error('Error deleting leads:', error);
+      showAlert('Failed to delete some leads. Please try again.');
     }
   };
 
@@ -486,6 +641,76 @@ function CRMBoard() {
     setAdvancedFilterRules(rules);
   };
 
+  // Table column visibility handler
+  const handleToggleTableColumnVisibility = (columnId: string, visible: boolean) => {
+    const updatedColumns = tableColumns.map(col =>
+      col.id === columnId ? { ...col, visible } : col
+    );
+
+    // Ensure at least one column remains visible
+    const visibleCount = updatedColumns.filter(c => c.visible).length;
+    if (visibleCount === 0) {
+      showAlert('At least one column must remain visible.');
+      return;
+    }
+
+    setTableColumns(updatedColumns);
+    // Save only visibility map (not full column objects) to localStorage
+    const visibilityMap = columnsToVisibilityMap(updatedColumns);
+    localStorage.setItem(TABLE_COLUMNS_STORAGE_KEY, JSON.stringify(visibilityMap));
+  };
+
+  // Column reordering handlers
+  const handleMoveColumnLeft = (columnId: string) => {
+    const currentIndex = tableColumns.findIndex(col => col.id === columnId);
+
+    // Can't move first column left
+    if (currentIndex <= 0) return;
+
+    // Create new array with swapped positions
+    const newColumns = [...tableColumns];
+    const targetIndex = currentIndex - 1;
+
+    // Swap order values
+    const currentOrder = newColumns[currentIndex].order;
+    newColumns[currentIndex] = { ...newColumns[currentIndex], order: newColumns[targetIndex].order };
+    newColumns[targetIndex] = { ...newColumns[targetIndex], order: currentOrder };
+
+    // Sort by new order
+    const sortedColumns = newColumns.sort((a, b) => a.order - b.order);
+
+    setTableColumns(sortedColumns);
+
+    // Save to localStorage
+    const visibilityMap = columnsToVisibilityMap(sortedColumns);
+    localStorage.setItem(TABLE_COLUMNS_STORAGE_KEY, JSON.stringify(visibilityMap));
+  };
+
+  const handleMoveColumnRight = (columnId: string) => {
+    const currentIndex = tableColumns.findIndex(col => col.id === columnId);
+
+    // Can't move last column right
+    if (currentIndex < 0 || currentIndex >= tableColumns.length - 1) return;
+
+    // Create new array with swapped positions
+    const newColumns = [...tableColumns];
+    const targetIndex = currentIndex + 1;
+
+    // Swap order values
+    const currentOrder = newColumns[currentIndex].order;
+    newColumns[currentIndex] = { ...newColumns[currentIndex], order: newColumns[targetIndex].order };
+    newColumns[targetIndex] = { ...newColumns[targetIndex], order: currentOrder };
+
+    // Sort by new order
+    const sortedColumns = newColumns.sort((a, b) => a.order - b.order);
+
+    setTableColumns(sortedColumns);
+
+    // Save to localStorage
+    const visibilityMap = columnsToVisibilityMap(sortedColumns);
+    localStorage.setItem(TABLE_COLUMNS_STORAGE_KEY, JSON.stringify(visibilityMap));
+  };
+
   // Preset handlers
   const handleLoadPreset = async (presetId: string) => {
     if (!user) return;
@@ -496,9 +721,7 @@ function CRMBoard() {
         setAdvancedFilterRules(preset.advancedRules);
         setFilters(preset.basicFilters);
         setCurrentView(preset.viewMode);
-        if (preset.tableColumns) {
-          setColumnVisibility(preset.tableColumns);
-        }
+        // Note: Column visibility is now managed by the field configuration system
         showAlert(`Preset "${preset.name}" loaded successfully`);
       }
     } catch (error) {
@@ -517,7 +740,6 @@ function CRMBoard() {
       advancedRules: advancedFilterRules,
       basicFilters: filters,
       viewMode: currentView,
-      tableColumns: columnVisibility,
     };
   };
 
@@ -619,35 +841,26 @@ function CRMBoard() {
                     <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
                   </>
                 )}
+                {/* Table view: Show lead count and column visibility */}
+                {currentView === 'table' && (
+                  <>
+                    <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap' }}>
+                      Showing {getFilteredLeads().length} leads
+                    </Typography>
+                    <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
+                    <TableColumnVisibilityMenu
+                      columns={tableColumns}
+                      onToggleVisibility={handleToggleTableColumnVisibility}
+                    />
+                    <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
+                  </>
+                )}
+                {/* ViewToggle hidden - keeping code for potential future use
                 <ViewToggle
                   view={currentView}
                   onViewChange={handleViewChange}
                 />
-                {currentView === 'table' && (
-                  <>
-                    <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
-                    <Button
-                      variant="outlined"
-                      size="small"
-                      startIcon={<ViewColumnIcon />}
-                      onClick={(e) => setColumnMenuAnchor(e.currentTarget)}
-                      sx={{
-                        textTransform: 'none',
-                        borderColor: '#e2e8f0',
-                        color: '#64748b',
-                        fontWeight: 500,
-                        '&:hover': {
-                          borderColor: '#667eea',
-                          bgcolor: 'rgba(102, 126, 234, 0.04)',
-                          color: '#667eea',
-                        },
-                      }}
-                    >
-                      Columns
-                    </Button>
-                  </>
-                )}
-                <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
+                */}
               </Box>
 
               {/* Collapsible Filter Bar */}
@@ -696,18 +909,39 @@ function CRMBoard() {
         ) : (
           <Box sx={{
             flex: 1,
-            px: 3,
-            py: 1.5,
             overflow: 'auto',
+            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+            py: 2,
           }}>
-            <CRMLeadsTable
-              leads={getFilteredLeads()}
-              onLeadClick={handleLeadClick}
-              onDeleteLead={handleDeleteLead}
-              onUpdateStatus={handleUpdateStatus}
-              columnVisibility={columnVisibility}
-              onToggleColumnVisibility={toggleColumnVisibility}
-            />
+            <Box sx={{
+              maxWidth: '2200px',
+              margin: '0 auto',
+              px: 0.5,
+            }}>
+              {/* Bulk Actions Toolbar */}
+              <BulkActionsToolbar
+                selectedCount={selectedLeadIds.length}
+                onChangeStatus={handleBulkChangeStatus}
+                onEditFields={handleBulkEditFields}
+                onExportCSV={handleBulkExportCSV}
+                onDelete={handleBulkDelete}
+                onClear={handleClearSelection}
+              />
+
+              {/* Table */}
+              <CRMLeadsTable
+                leads={getFilteredLeads()}
+                onLeadClick={handleLeadClick}
+                onUpdateStatus={handleUpdateStatus}
+                selectedLeadIds={selectedLeadIds}
+                onSelectLead={handleSelectLead}
+                onSelectAll={handleSelectAll}
+                onClearSelection={handleClearSelection}
+                visibleColumns={tableColumns}
+                onMoveColumnLeft={handleMoveColumnLeft}
+                onMoveColumnRight={handleMoveColumnRight}
+              />
+            </Box>
           </Box>
         )}
 
@@ -750,6 +984,7 @@ function CRMBoard() {
             setSelectedLead(null);
           }}
           onSave={handleSaveLead}
+          onDelete={handleDeleteLead}
           lead={selectedLead || undefined}
           mode={dialogMode}
         />
@@ -780,67 +1015,13 @@ function CRMBoard() {
           />
         )}
 
-        {/* Column Visibility Menu */}
-        <Menu
-          anchorEl={columnMenuAnchor}
-          open={Boolean(columnMenuAnchor)}
-          onClose={() => setColumnMenuAnchor(null)}
-          PaperProps={{
-            sx: {
-              minWidth: 200,
-              maxHeight: 400,
-            },
-          }}
-        >
-          <Box sx={{ px: 2, py: 1, borderBottom: '1px solid #e2e8f0' }}>
-            <Typography variant="caption" fontWeight={600} color="#64748b">
-              SHOW/HIDE COLUMNS
-            </Typography>
-          </Box>
-          {defaultColumns.map((column) => (
-            <MenuItem
-              key={column.id}
-              onClick={() => {
-                if (!column.required) {
-                  toggleColumnVisibility(column.id);
-                }
-              }}
-              disabled={column.required}
-              sx={{
-                py: 1,
-                '&.Mui-disabled': {
-                  opacity: 0.5,
-                },
-              }}
-            >
-              <ListItemIcon>
-                <Checkbox
-                  checked={columnVisibility[column.id] ?? true}
-                  disabled={column.required}
-                  size="small"
-                  sx={{
-                    color: '#64748b',
-                    '&.Mui-checked': {
-                      color: '#667eea',
-                    },
-                  }}
-                />
-              </ListItemIcon>
-              <ListItemText
-                primary={column.label}
-                primaryTypographyProps={{
-                  fontSize: '14px',
-                  fontWeight: columnVisibility[column.id] ? 500 : 400,
-                }}
-              />
-              {column.required && (
-                <Typography variant="caption" color="#94a3b8" sx={{ ml: 1 }}>
-                  Required
-                </Typography>
-              )}
-            </MenuItem>
-          ))}
-        </Menu>
+        {/* Bulk Edit Dialog */}
+        <BulkEditDialog
+          open={showBulkEditDialog}
+          onClose={() => setShowBulkEditDialog(false)}
+          onSave={handleBulkEditSave}
+          selectedCount={selectedLeadIds.length}
+        />
       </Box>
     </ThemeProvider>
   );

@@ -211,44 +211,6 @@ const LeadAnalytics: React.FC = () => {
     return stages.filter(s => s.count > 0);
   }, [leads]);
 
-  // Check permissions
-  const isCEO = userProfile?.role === 'CEO';
-  const isManager = userProfile?.role === 'Manager';
-  const canViewAnalytics = isCEO || isManager;
-
-  if (!canViewAnalytics) {
-    return (
-      <ThemeProvider theme={modernTheme}>
-        <Box sx={{
-          background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
-          minHeight: '100vh',
-          p: 4,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-        }}>
-          <Card sx={{
-            background: 'rgba(255, 255, 255, 0.9)',
-            borderRadius: 3,
-            backdropFilter: 'blur(20px)',
-            border: '1px solid rgba(226, 232, 240, 0.5)',
-            boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08)',
-            p: 6,
-            textAlign: 'center',
-            maxWidth: 500,
-          }}>
-            <Typography variant="h5" sx={{ color: '#64748b', fontWeight: 600 }}>
-              Access Restricted
-            </Typography>
-            <Typography variant="body2" sx={{ color: '#94a3b8', mt: 2 }}>
-              This page is only accessible to CEO and Manager users
-            </Typography>
-          </Card>
-        </Box>
-      </ThemeProvider>
-    );
-  }
-
   return (
     <ThemeProvider theme={modernTheme}>
       <Box sx={{

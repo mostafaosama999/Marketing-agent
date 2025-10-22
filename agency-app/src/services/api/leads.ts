@@ -13,6 +13,7 @@ import {
   Unsubscribe,
   where,
   getDoc,
+  writeBatch,
 } from 'firebase/firestore';
 import { db } from '../firebase/firestore';
 import { Lead, LeadFormData, LeadStatus } from '../../types/lead';
@@ -43,6 +44,23 @@ function convertToLead(id: string, data: any): Lead {
     lastEnrichedAt: data.lastEnrichedAt?.toDate(),
     totalApiCosts: data.totalApiCosts,
     lastApiCostUpdate: data.lastApiCostUpdate?.toDate(),
+    outreach: data.outreach
+      ? {
+          linkedIn: data.outreach.linkedIn
+            ? {
+                status: data.outreach.linkedIn.status,
+                sentAt: data.outreach.linkedIn.sentAt?.toDate(),
+                profileUrl: data.outreach.linkedIn.profileUrl,
+              }
+            : undefined,
+          email: data.outreach.email
+            ? {
+                status: data.outreach.email.status,
+                sentAt: data.outreach.email.sentAt?.toDate(),
+              }
+            : undefined,
+        }
+      : undefined,
   };
 }
 
@@ -72,6 +90,67 @@ export function subscribeToLeads(
 }
 
 /**
+ * Subscribe to leads for a specific company with real-time updates (by company ID)
+ */
+export function subscribeToCompanyLeads(
+  companyId: string,
+  callback: (leads: Lead[]) => void
+): Unsubscribe {
+  const leadsRef = collection(db, LEADS_COLLECTION);
+  const q = query(
+    leadsRef,
+    where('companyId', '==', companyId),
+    orderBy('createdAt', 'desc')
+  );
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const leads: Lead[] = [];
+      snapshot.forEach((doc) => {
+        leads.push(convertToLead(doc.id, doc.data()));
+      });
+      callback(leads);
+    },
+    (error) => {
+      console.error('Error listening to company leads:', error);
+      callback([]);
+    }
+  );
+}
+
+/**
+ * Subscribe to leads for a specific company by name (fallback for legacy leads)
+ * Used when leads don't have companyId field
+ */
+export function subscribeToCompanyLeadsByName(
+  companyName: string,
+  callback: (leads: Lead[]) => void
+): Unsubscribe {
+  const leadsRef = collection(db, LEADS_COLLECTION);
+  const q = query(
+    leadsRef,
+    where('company', '==', companyName),
+    orderBy('createdAt', 'desc')
+  );
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const leads: Lead[] = [];
+      snapshot.forEach((doc) => {
+        leads.push(convertToLead(doc.id, doc.data()));
+      });
+      callback(leads);
+    },
+    (error) => {
+      console.error('Error listening to company leads by name:', error);
+      callback([]);
+    }
+  );
+}
+
+/**
  * Get all leads (one-time fetch)
  */
 export async function getLeads(): Promise<Lead[]> {
@@ -88,6 +167,31 @@ export async function getLeads(): Promise<Lead[]> {
     return leads;
   } catch (error) {
     console.error('Error fetching leads:', error);
+    return [];
+  }
+}
+
+/**
+ * Get leads for a specific company (one-time fetch)
+ */
+export async function getLeadsByCompanyId(companyId: string): Promise<Lead[]> {
+  try {
+    const leadsRef = collection(db, LEADS_COLLECTION);
+    const q = query(
+      leadsRef,
+      where('companyId', '==', companyId),
+      orderBy('createdAt', 'desc')
+    );
+    const snapshot = await getDocs(q);
+
+    const leads: Lead[] = [];
+    snapshot.forEach((doc) => {
+      leads.push(convertToLead(doc.id, doc.data()));
+    });
+
+    return leads;
+  } catch (error) {
+    console.error('Error fetching company leads:', error);
     return [];
   }
 }
@@ -150,7 +254,9 @@ export async function createLead(
     const company = await getOrCreateCompany(leadData.company);
 
     const leadsRef = collection(db, LEADS_COLLECTION);
-    const docRef = await addDoc(leadsRef, {
+
+    // Build lead document data (only include fields with values)
+    const leadDocData: any = {
       name: leadData.name,
       email: leadData.email,
       phone: leadData.phone,
@@ -161,7 +267,14 @@ export async function createLead(
       customFields: leadData.customFields || {},
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
-    });
+    };
+
+    // Only add outreach if it exists (Firestore doesn't allow undefined)
+    if ((leadData as any).outreach) {
+      leadDocData.outreach = (leadData as any).outreach;
+    }
+
+    const docRef = await addDoc(leadsRef, leadDocData);
 
     // Initialize timeline subcollection for state history tracking
     await leadTimelineService.initializeTimeline(
@@ -289,28 +402,144 @@ export async function deleteLead(leadId: string): Promise<void> {
 }
 
 /**
- * Bulk update leads (for bulk operations)
+ * Bulk update lead status (uses batch writes for efficiency)
+ * Max 500 leads per batch (Firestore limit)
  */
-export async function bulkUpdateLeads(
+export async function bulkUpdateLeadStatus(
   leadIds: string[],
-  updates: Partial<LeadFormData>
+  newStatus: LeadStatus,
+  userId: string
 ): Promise<void> {
   try {
-    const promises = leadIds.map((leadId) => updateLead(leadId, updates));
-    await Promise.all(promises);
+    const BATCH_SIZE = 500;
+
+    // Process in batches of 500 (Firestore limit)
+    for (let i = 0; i < leadIds.length; i += BATCH_SIZE) {
+      const batchLeadIds = leadIds.slice(i, i + BATCH_SIZE);
+      const batch = writeBatch(db);
+
+      // Get current status for each lead for timeline updates
+      const leadDocs = await Promise.all(
+        batchLeadIds.map(id => getDoc(doc(db, LEADS_COLLECTION, id)))
+      );
+
+      batchLeadIds.forEach((leadId, index) => {
+        const leadRef = doc(db, LEADS_COLLECTION, leadId);
+        batch.update(leadRef, {
+          status: newStatus,
+          updatedAt: serverTimestamp(),
+        });
+      });
+
+      await batch.commit();
+
+      // Update timelines (can't batch subcollections easily, so do separately)
+      await Promise.all(
+        batchLeadIds.map(async (leadId, index) => {
+          const leadDoc = leadDocs[index];
+          if (leadDoc.exists()) {
+            const oldStatus = leadDoc.data().status;
+            await leadTimelineService.updateLeadStatus(
+              leadId,
+              oldStatus,
+              newStatus,
+              userId
+            );
+          }
+        })
+      );
+    }
   } catch (error) {
-    console.error('Error bulk updating leads:', error);
+    console.error('Error bulk updating lead status:', error);
     throw error;
   }
 }
 
 /**
- * Bulk delete leads
+ * Bulk update lead fields (uses batch writes)
+ * Updates customFields for multiple leads
+ */
+export async function bulkUpdateLeadFields(
+  leadIds: string[],
+  updates: Record<string, any>
+): Promise<void> {
+  try {
+    const BATCH_SIZE = 500;
+
+    for (let i = 0; i < leadIds.length; i += BATCH_SIZE) {
+      const batchLeadIds = leadIds.slice(i, i + BATCH_SIZE);
+      const batch = writeBatch(db);
+
+      batchLeadIds.forEach((leadId) => {
+        const leadRef = doc(db, LEADS_COLLECTION, leadId);
+        const updateData: any = {};
+
+        // Update direct fields
+        Object.keys(updates).forEach(key => {
+          if (['name', 'email', 'phone', 'company'].includes(key)) {
+            updateData[key] = updates[key];
+          } else {
+            // Update as custom field
+            updateData[`customFields.${key}`] = updates[key];
+          }
+        });
+
+        updateData.updatedAt = serverTimestamp();
+        batch.update(leadRef, updateData);
+      });
+
+      await batch.commit();
+    }
+  } catch (error) {
+    console.error('Error bulk updating lead fields:', error);
+    throw error;
+  }
+}
+
+/**
+ * Bulk delete leads (uses batch writes where possible)
+ * Also handles company cleanup
  */
 export async function bulkDeleteLeads(leadIds: string[]): Promise<void> {
   try {
-    const promises = leadIds.map((leadId) => deleteLead(leadId));
-    await Promise.all(promises);
+    // Get all lead documents first to find their companies
+    const leadDocs = await Promise.all(
+      leadIds.map(id => getDoc(doc(db, LEADS_COLLECTION, id)))
+    );
+
+    const companyIds = new Set<string>();
+    leadDocs.forEach(leadDoc => {
+      if (leadDoc.exists()) {
+        const companyId = leadDoc.data().companyId;
+        if (companyId) {
+          companyIds.add(companyId);
+        }
+      }
+    });
+
+    // Delete leads in batches
+    const BATCH_SIZE = 500;
+    for (let i = 0; i < leadIds.length; i += BATCH_SIZE) {
+      const batchLeadIds = leadIds.slice(i, i + BATCH_SIZE);
+      const batch = writeBatch(db);
+
+      batchLeadIds.forEach((leadId) => {
+        const leadRef = doc(db, LEADS_COLLECTION, leadId);
+        batch.delete(leadRef);
+      });
+
+      await batch.commit();
+    }
+
+    // Check and clean up companies that no longer have leads
+    const companyCleanupPromises = Array.from(companyIds).map(async (companyId) => {
+      const remainingLeads = await countLeadsForCompany(companyId);
+      if (remainingLeads === 0) {
+        await deleteCompany(companyId);
+      }
+    });
+
+    await Promise.all(companyCleanupPromises);
   } catch (error) {
     console.error('Error bulk deleting leads:', error);
     throw error;

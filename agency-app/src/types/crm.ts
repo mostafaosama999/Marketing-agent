@@ -124,9 +124,12 @@ export interface CSVRow {
   [key: string]: string;
 }
 
+export type FieldSection = 'general' | 'linkedin' | 'email';
+
 export interface FieldMapping {
   csvField: string;
   leadField: string | null; // Lead field name or custom field name
+  section?: FieldSection; // Section grouping for UI
 }
 
 // Status to internal LeadStatus mapping

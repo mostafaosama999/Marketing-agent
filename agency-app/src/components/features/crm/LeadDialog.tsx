@@ -19,8 +19,13 @@ import {
   CircularProgress,
   InputAdornment,
   Alert,
+  Divider,
+  FormControl,
+  InputLabel,
+  Select,
+  Grid,
 } from '@mui/material';
-import { Email as EmailIcon } from '@mui/icons-material';
+import { Email as EmailIcon, LinkedIn as LinkedInIcon, Delete as DeleteIcon } from '@mui/icons-material';
 import { Lead, LeadFormData, LeadStatusChange } from '../../../types/lead';
 import { leadTimelineService } from '../../../services/api/leadSubcollections';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -31,6 +36,7 @@ interface LeadDialogProps {
   open: boolean;
   onClose: () => void;
   onSave: (leadData: LeadFormData) => Promise<void>;
+  onDelete?: (leadId: string) => Promise<void>;
   lead?: Lead; // If provided, edit mode; otherwise, create mode
   mode: 'create' | 'edit';
 }
@@ -60,6 +66,7 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
   open,
   onClose,
   onSave,
+  onDelete,
   lead,
   mode,
 }) => {
@@ -85,8 +92,18 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
     customFields: {},
   });
 
-  // Initialize form data when lead changes
+  // Outreach tracking state
+  const [linkedInStatus, setLinkedInStatus] = useState<'not_sent' | 'sent' | 'opened' | 'replied' | 'refused' | 'no_response'>('not_sent');
+  const [linkedInProfileUrl, setLinkedInProfileUrl] = useState('');
+
+  const [emailStatus, setEmailStatus] = useState<'not_sent' | 'sent' | 'opened' | 'replied' | 'bounced' | 'refused' | 'no_response'>('not_sent');
+
+  // Initialize form data when lead changes or dialog opens/closes
   useEffect(() => {
+    // Clear Apollo messages when switching leads or opening/closing dialog
+    setApolloSuccess(null);
+    setApolloError(null);
+
     if (lead && mode === 'edit') {
       setFormData({
         name: lead.name,
@@ -96,6 +113,21 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
         status: lead.status,
         customFields: lead.customFields || {},
       });
+
+      // Populate outreach fields
+      if (lead.outreach?.linkedIn) {
+        setLinkedInStatus(lead.outreach.linkedIn.status);
+        setLinkedInProfileUrl(lead.outreach.linkedIn.profileUrl || '');
+      } else {
+        setLinkedInStatus('not_sent');
+        setLinkedInProfileUrl('');
+      }
+
+      if (lead.outreach?.email) {
+        setEmailStatus(lead.outreach.email.status);
+      } else {
+        setEmailStatus('not_sent');
+      }
     } else {
       // Reset for create mode
       setFormData({
@@ -106,8 +138,11 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
         status: 'new_lead',
         customFields: {},
       });
+      setLinkedInStatus('not_sent');
+      setLinkedInProfileUrl('');
+      setEmailStatus('not_sent');
     }
-  }, [lead, mode]);
+  }, [lead, mode, open]);
 
   // Fetch activity/timeline when in edit mode
   useEffect(() => {
@@ -138,7 +173,63 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
   const handleSubmit = async () => {
     setLoading(true);
     try {
-      await onSave(formData);
+      // Build outreach data
+      const outreachData: any = {};
+
+      // Add LinkedIn data if status is not 'not_sent' or if profileUrl is filled
+      if (linkedInStatus !== 'not_sent' || linkedInProfileUrl) {
+        outreachData.linkedIn = {
+          status: linkedInStatus,
+        };
+
+        // Auto-set sentAt if status changed from 'not_sent' to something else
+        const previousLinkedInStatus = lead?.outreach?.linkedIn?.status || 'not_sent';
+        const previousSentAt = lead?.outreach?.linkedIn?.sentAt;
+
+        if (linkedInStatus !== 'not_sent') {
+          // If there's already a sentAt, preserve it; otherwise set current date
+          if (previousSentAt) {
+            outreachData.linkedIn.sentAt = previousSentAt;
+          } else if (previousLinkedInStatus === 'not_sent') {
+            // Status just changed from 'not_sent', set current date
+            outreachData.linkedIn.sentAt = new Date();
+          }
+        }
+
+        if (linkedInProfileUrl?.trim()) {
+          outreachData.linkedIn.profileUrl = linkedInProfileUrl.trim();
+        }
+      }
+
+      // Add email data if status is not 'not_sent'
+      if (emailStatus !== 'not_sent') {
+        outreachData.email = {
+          status: emailStatus,
+        };
+
+        // Auto-set sentAt if status changed from 'not_sent' to something else
+        const previousEmailStatus = lead?.outreach?.email?.status || 'not_sent';
+        const previousSentAt = lead?.outreach?.email?.sentAt;
+
+        // If there's already a sentAt, preserve it; otherwise set current date
+        if (previousSentAt) {
+          outreachData.email.sentAt = previousSentAt;
+        } else if (previousEmailStatus === 'not_sent') {
+          // Status just changed from 'not_sent', set current date
+          outreachData.email.sentAt = new Date();
+        }
+      }
+
+      // Include outreach in form data (only if there's actual data)
+      const dataToSave = {
+        ...formData,
+      };
+
+      if (Object.keys(outreachData).length > 0) {
+        dataToSave.outreach = outreachData;
+      }
+
+      await onSave(dataToSave);
       onClose();
     } catch (error) {
       console.error('Error saving lead:', error);
@@ -211,6 +302,20 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
     }
   };
 
+  const handleDelete = async () => {
+    if (!lead || !onDelete) return;
+
+    const confirmMessage = `Are you sure you want to delete "${lead.name}"? This action cannot be undone.`;
+    if (!window.confirm(confirmMessage)) return;
+
+    try {
+      await onDelete(lead.id);
+      onClose();
+    } catch (error) {
+      console.error('Error deleting lead:', error);
+    }
+  };
+
   const formatDate = (dateString: string) => {
     const date = new Date(dateString);
     return date.toLocaleString('en-US', {
@@ -233,6 +338,7 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
           <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
             <Tabs value={tabValue} onChange={handleTabChange}>
               <Tab label="Details" />
+              <Tab label="Outreach" />
               <Tab label="Activity" />
             </Tabs>
           </Box>
@@ -401,9 +507,89 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
           </Box>
         </TabPanel>
 
-        {/* Activity Tab (Edit mode only) */}
+        {/* Outreach Tab (Edit mode only) */}
         {mode === 'edit' && (
           <TabPanel value={tabValue} index={1}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {/* LinkedIn Outreach Section */}
+              <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                  <LinkedInIcon sx={{ color: '#0077b5' }} />
+                  <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '18px' }}>
+                    LinkedIn Outreach
+                  </Typography>
+                </Box>
+
+                <Grid container spacing={2}>
+                  <Grid size={{ xs: 12 }}>
+                    <FormControl fullWidth>
+                      <InputLabel>Status</InputLabel>
+                      <Select
+                        value={linkedInStatus}
+                        onChange={(e) => setLinkedInStatus(e.target.value as any)}
+                        label="Status"
+                      >
+                        <MenuItem value="not_sent">Not Sent</MenuItem>
+                        <MenuItem value="sent">Sent</MenuItem>
+                        <MenuItem value="opened">Opened</MenuItem>
+                        <MenuItem value="replied">Replied</MenuItem>
+                        <MenuItem value="refused">Refused</MenuItem>
+                        <MenuItem value="no_response">No Response</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+
+                  <Grid size={{ xs: 12 }}>
+                    <TextField
+                      fullWidth
+                      label="LinkedIn Profile URL"
+                      value={linkedInProfileUrl}
+                      onChange={(e) => setLinkedInProfileUrl(e.target.value)}
+                      placeholder="https://linkedin.com/in/..."
+                    />
+                  </Grid>
+                </Grid>
+              </Box>
+
+              <Divider />
+
+              {/* Email Outreach Section */}
+              <Box>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                  <EmailIcon sx={{ color: '#ea4335' }} />
+                  <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '18px' }}>
+                    Email Outreach
+                  </Typography>
+                </Box>
+
+                <Grid container spacing={2}>
+                  <Grid size={{ xs: 12 }}>
+                    <FormControl fullWidth>
+                      <InputLabel>Status</InputLabel>
+                      <Select
+                        value={emailStatus}
+                        onChange={(e) => setEmailStatus(e.target.value as any)}
+                        label="Status"
+                      >
+                        <MenuItem value="not_sent">Not Sent</MenuItem>
+                        <MenuItem value="sent">Sent</MenuItem>
+                        <MenuItem value="opened">Opened</MenuItem>
+                        <MenuItem value="replied">Replied</MenuItem>
+                        <MenuItem value="bounced">Bounced</MenuItem>
+                        <MenuItem value="refused">Refused</MenuItem>
+                        <MenuItem value="no_response">No Response</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                </Grid>
+              </Box>
+            </Box>
+          </TabPanel>
+        )}
+
+        {/* Activity Tab (Edit mode only) */}
+        {mode === 'edit' && (
+          <TabPanel value={tabValue} index={2}>
             {activityLoading ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
                 <CircularProgress />
@@ -465,21 +651,47 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
         )}
       </DialogContent>
 
-      <DialogActions>
-        <Button onClick={onClose} disabled={loading}>
-          Cancel
-        </Button>
-        <Button
-          onClick={handleSubmit}
-          variant="contained"
-          disabled={
-            loading ||
-            !formData.name ||
-            !formData.company
-          }
-        >
-          {loading ? <CircularProgress size={24} /> : mode === 'create' ? 'Create' : 'Save'}
-        </Button>
+      <DialogActions sx={{ justifyContent: 'space-between', px: 3, pb: 2 }}>
+        {/* Delete button (left side, edit mode only) */}
+        {mode === 'edit' && onDelete && lead && (
+          <Button
+            onClick={handleDelete}
+            startIcon={<DeleteIcon />}
+            color="error"
+            disabled={loading}
+            sx={{
+              textTransform: 'none',
+              fontWeight: 600,
+            }}
+          >
+            Delete
+          </Button>
+        )}
+        {mode === 'create' && <Box />}
+
+        {/* Cancel and Save buttons (right side) */}
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button onClick={onClose} disabled={loading}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            variant="contained"
+            disabled={
+              loading ||
+              !formData.name ||
+              !formData.company
+            }
+            sx={{
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              '&:hover': {
+                background: 'linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%)',
+              },
+            }}
+          >
+            {loading ? <CircularProgress size={24} /> : mode === 'create' ? 'Create' : 'Save'}
+          </Button>
+        </Box>
       </DialogActions>
     </Dialog>
   );

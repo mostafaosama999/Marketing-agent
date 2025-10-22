@@ -23,10 +23,12 @@ import {
   Warning as WarningIcon,
   Error as ErrorIcon,
   Info as InfoIcon,
+  LinkedIn as LinkedInIcon,
+  Email as EmailIcon,
 } from '@mui/icons-material';
 import { CSVRow, FieldMapping } from '../../../types/crm';
 import { LeadStatus } from '../../../types/lead';
-import { importLeadsFromCSV, ImportResult } from '../../../services/api/csvImportService';
+import { importLeadsFromCSV, ImportResult, detectFieldSection } from '../../../services/api/csvImportService';
 import { useAuth } from '../../../contexts/AuthContext';
 import { usePipelineConfigContext } from '../../../contexts/PipelineConfigContext';
 
@@ -39,11 +41,20 @@ interface CSVFieldMappingDialogProps {
 }
 
 const STANDARD_FIELDS = [
-  { value: 'name', label: 'Lead Name (Required)' },
-  { value: 'email', label: 'Email' },
-  { value: 'company', label: 'Company (Required)' },
-  { value: 'phone', label: 'Phone' },
-  { value: 'status', label: 'Pipeline Stage' },
+  { value: 'name', label: 'Lead Name (Required)', section: 'general' },
+  { value: 'email', label: 'Email', section: 'general' },
+  { value: 'company', label: 'Company (Required)', section: 'general' },
+  { value: 'phone', label: 'Phone', section: 'general' },
+  { value: 'status', label: 'Pipeline Stage', section: 'general' },
+];
+
+const LINKEDIN_FIELDS = [
+  { value: 'outreach.linkedIn.profileUrl', label: 'LinkedIn Profile URL' },
+  { value: 'outreach.linkedIn.status', label: 'LinkedIn Status' },
+];
+
+const EMAIL_FIELDS = [
+  { value: 'outreach.email.status', label: 'Email Status' },
 ];
 
 export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
@@ -68,26 +79,40 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
     if (headers.length > 0) {
       const detectedMappings: FieldMapping[] = headers.map((csvField) => {
         const lowerField = csvField.toLowerCase().trim();
+        const section = detectFieldSection(csvField);
 
         // Auto-detect standard fields (case-insensitive)
-        if (lowerField === 'name' || lowerField === 'lead name' || lowerField === 'full name') {
-          return { csvField, leadField: 'name' };
+        if (lowerField === 'name' || lowerField === 'lead name' || lowerField === 'full name' || lowerField === 'name of person') {
+          return { csvField, leadField: 'name', section };
         }
-        if (lowerField === 'email' || lowerField === 'email address') {
-          return { csvField, leadField: 'email' };
+        if (lowerField === 'email' || lowerField === 'email address' || lowerField.includes("e'mail")) {
+          return { csvField, leadField: 'email', section };
         }
         if (lowerField === 'company' || lowerField === 'company name' || lowerField === 'organization') {
-          return { csvField, leadField: 'company' };
+          return { csvField, leadField: 'company', section };
         }
         if (lowerField === 'phone' || lowerField === 'phone number' || lowerField === 'telephone') {
-          return { csvField, leadField: 'phone' };
+          return { csvField, leadField: 'phone', section };
         }
         if (lowerField === 'status' || lowerField === 'stage' || lowerField === 'pipeline stage') {
-          return { csvField, leadField: 'status' };
+          return { csvField, leadField: 'status', section };
+        }
+
+        // LinkedIn fields
+        if (lowerField.includes('linkedin') && (lowerField.includes('link') || lowerField.includes('url') || lowerField.includes('profile'))) {
+          return { csvField, leadField: 'outreach.linkedIn.profileUrl', section };
+        }
+        if (section === 'linkedin' && (lowerField.includes('status') || lowerField.includes('response'))) {
+          return { csvField, leadField: 'outreach.linkedIn.status', section };
+        }
+
+        // Email fields
+        if (section === 'email' && (lowerField.includes('status') || lowerField.includes('response'))) {
+          return { csvField, leadField: 'outreach.email.status', section };
         }
 
         // Default to skip for unmapped columns (will be auto-created if enabled)
-        return { csvField, leadField: 'skip' };
+        return { csvField, leadField: 'skip', section };
       });
 
       setMappings(detectedMappings);
@@ -107,6 +132,13 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
       .slice(0, 3)
       .map((row) => row[csvField])
       .filter((val) => val && val.trim() !== '');
+  };
+
+  // Group mappings by section
+  const groupedMappings = {
+    general: mappings.filter((m) => m.section === 'general'),
+    linkedin: mappings.filter((m) => m.section === 'linkedin'),
+    email: mappings.filter((m) => m.section === 'email'),
   };
 
   const validateMappings = (): boolean => {
@@ -166,6 +198,106 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
     ? (importProgress.current / importProgress.total) * 100
     : 0;
 
+  // Render a single field mapping row
+  const renderFieldMappingRow = (mapping: FieldMapping, availableFields: Array<{ value: string; label: string }>) => {
+    const samples = getSampleValues(mapping.csvField);
+    return (
+      <Box
+        key={mapping.csvField}
+        sx={{
+          mb: 2,
+          p: 2,
+          border: '1px solid #e2e8f0',
+          borderRadius: '8px',
+          bgcolor: 'white',
+        }}
+      >
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: { xs: 'column', md: 'row' },
+            gap: 2,
+            alignItems: { xs: 'stretch', md: 'center' },
+          }}
+        >
+          {/* Left column: CSV field info */}
+          <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 60%' } }}>
+            <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+              CSV Column: <Chip label={mapping.csvField} size="small" sx={{ ml: 1 }} />
+            </Typography>
+
+            {samples.length > 0 && (
+              <Typography variant="caption" sx={{ color: '#64748b', display: 'block' }}>
+                Sample values: {samples.join(', ')}
+              </Typography>
+            )}
+          </Box>
+
+          {/* Right column: Mapping dropdown */}
+          <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 40%' } }}>
+            <FormControl fullWidth size="small">
+              <Select
+                value={mapping.leadField || 'skip'}
+                onChange={(e) => handleMappingChange(mapping.csvField, e.target.value)}
+                sx={{ bgcolor: 'white' }}
+              >
+                <MenuItem value="skip">
+                  <em>Skip this field</em>
+                </MenuItem>
+                {availableFields.map((field) => (
+                  <MenuItem key={field.value} value={field.value}>
+                    {field.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          </Box>
+        </Box>
+      </Box>
+    );
+  };
+
+  // Render a section with header and fields
+  const renderSection = (
+    title: string,
+    icon: React.ReactNode,
+    mappings: FieldMapping[],
+    availableFields: Array<{ value: string; label: string }>
+  ) => {
+    if (mappings.length === 0) return null;
+
+    return (
+      <Box sx={{ mb: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+          {icon}
+          <Typography
+            variant="h6"
+            sx={{
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              backgroundClip: 'text',
+              WebkitBackgroundClip: 'text',
+              color: 'transparent',
+              fontWeight: 700,
+              fontSize: '18px',
+            }}
+          >
+            {title}
+          </Typography>
+        </Box>
+        <Box
+          sx={{
+            p: 2,
+            bgcolor: '#f8fafc',
+            borderRadius: '12px',
+            border: '1px solid #e2e8f0',
+          }}
+        >
+          {mappings.map((mapping) => renderFieldMappingRow(mapping, availableFields))}
+        </Box>
+      </Box>
+    );
+  };
+
   return (
     <Dialog
       open={open}
@@ -208,67 +340,33 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
             )}
 
             <Box sx={{ mb: 3 }}>
-              <Typography variant="body2" sx={{ color: '#64748b', mb: 2 }}>
+              <Typography variant="body2" sx={{ color: '#64748b', mb: 3 }}>
                 Map your CSV columns to CRM fields. Required fields: Name, Company.
               </Typography>
 
-              {mappings.map((mapping) => {
-                const samples = getSampleValues(mapping.csvField);
-                return (
-                  <Box
-                    key={mapping.csvField}
-                    sx={{
-                      mb: 2,
-                      p: 2,
-                      border: '1px solid #e2e8f0',
-                      borderRadius: '8px',
-                      bgcolor: '#f8fafc',
-                    }}
-                  >
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        flexDirection: { xs: 'column', md: 'row' },
-                        gap: 2,
-                        alignItems: { xs: 'stretch', md: 'center' },
-                      }}
-                    >
-                      {/* Left column: CSV field info */}
-                      <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 60%' } }}>
-                        <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
-                          CSV Column: <Chip label={mapping.csvField} size="small" sx={{ ml: 1 }} />
-                        </Typography>
+              {/* General Fields Section */}
+              {renderSection(
+                'General Information',
+                <InfoIcon sx={{ color: '#667eea', fontSize: 24 }} />,
+                groupedMappings.general,
+                STANDARD_FIELDS
+              )}
 
-                        {samples.length > 0 && (
-                          <Typography variant="caption" sx={{ color: '#64748b', display: 'block' }}>
-                            Sample values: {samples.join(', ')}
-                          </Typography>
-                        )}
-                      </Box>
+              {/* LinkedIn Fields Section */}
+              {renderSection(
+                'LinkedIn Outreach',
+                <LinkedInIcon sx={{ color: '#0077b5', fontSize: 24 }} />,
+                groupedMappings.linkedin,
+                [...STANDARD_FIELDS, ...LINKEDIN_FIELDS]
+              )}
 
-                      {/* Right column: Mapping dropdown */}
-                      <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 40%' } }}>
-                        <FormControl fullWidth size="small">
-                          <Select
-                            value={mapping.leadField || 'skip'}
-                            onChange={(e) => handleMappingChange(mapping.csvField, e.target.value)}
-                            sx={{ bgcolor: 'white' }}
-                          >
-                            <MenuItem value="skip">
-                              <em>Skip this field</em>
-                            </MenuItem>
-                            {STANDARD_FIELDS.map((field) => (
-                              <MenuItem key={field.value} value={field.value}>
-                                {field.label}
-                              </MenuItem>
-                            ))}
-                          </Select>
-                        </FormControl>
-                      </Box>
-                    </Box>
-                  </Box>
-                );
-              })}
+              {/* Email Fields Section */}
+              {renderSection(
+                'Email Outreach',
+                <EmailIcon sx={{ color: '#ea4335', fontSize: 24 }} />,
+                groupedMappings.email,
+                [...STANDARD_FIELDS, ...EMAIL_FIELDS]
+              )}
             </Box>
 
             <Box sx={{ mb: 2 }}>

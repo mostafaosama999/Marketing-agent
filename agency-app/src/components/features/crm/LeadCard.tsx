@@ -5,6 +5,11 @@ import {
   Business as CompanyIcon,
   Email as EmailIcon,
   Phone as PhoneIcon,
+  LinkedIn as LinkedInIcon,
+  Article as ArticleIcon,
+  CheckCircle as CheckCircleIcon,
+  Cancel as CancelIcon,
+  Schedule as ScheduleIcon,
 } from '@mui/icons-material';
 import { Lead } from '../../../types/lead';
 
@@ -245,6 +250,136 @@ export const LeadCard: React.FC<LeadCardProps> = ({
           >
             {lead.phone}
           </Typography>
+        </Box>
+      )}
+
+      {/* Outreach Status Badges */}
+      {(lead.outreach?.linkedIn || lead.outreach?.email) && (
+        <Box
+          sx={{
+            mt: 2,
+            display: 'flex',
+            gap: 1,
+            flexWrap: 'wrap',
+          }}
+        >
+          {/* LinkedIn Badge */}
+          {lead.outreach?.linkedIn && lead.outreach.linkedIn.status !== 'not_sent' && (
+            <Tooltip title={`LinkedIn: ${lead.outreach.linkedIn.status.replace('_', ' ')}`} arrow>
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.5,
+                  px: 1.5,
+                  py: 0.5,
+                  borderRadius: 1.5,
+                  background:
+                    lead.outreach.linkedIn.status === 'replied'
+                      ? '#dcfce7'
+                      : lead.outreach.linkedIn.status === 'no_response'
+                      ? '#fee2e2'
+                      : '#dbeafe',
+                  border: '1px solid',
+                  borderColor:
+                    lead.outreach.linkedIn.status === 'replied'
+                      ? '#86efac'
+                      : lead.outreach.linkedIn.status === 'no_response'
+                      ? '#fecaca'
+                      : '#93c5fd',
+                }}
+              >
+                <LinkedInIcon
+                  sx={{
+                    fontSize: 14,
+                    color:
+                      lead.outreach.linkedIn.status === 'replied'
+                        ? '#16a34a'
+                        : lead.outreach.linkedIn.status === 'no_response'
+                        ? '#dc2626'
+                        : '#0077b5',
+                  }}
+                />
+                <Typography
+                  sx={{
+                    fontSize: '10px',
+                    fontWeight: 600,
+                    color:
+                      lead.outreach.linkedIn.status === 'replied'
+                        ? '#16a34a'
+                        : lead.outreach.linkedIn.status === 'no_response'
+                        ? '#dc2626'
+                        : '#0077b5',
+                  }}
+                >
+                  {lead.outreach.linkedIn.status === 'replied'
+                    ? '✓'
+                    : lead.outreach.linkedIn.status === 'no_response'
+                    ? '✗'
+                    : 'LI'}
+                </Typography>
+              </Box>
+            </Tooltip>
+          )}
+
+          {/* Email Badge */}
+          {lead.outreach?.email && lead.outreach.email.status !== 'not_sent' && (
+            <Tooltip title={`Email: ${lead.outreach.email.status.replace('_', ' ')}`} arrow>
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 0.5,
+                  px: 1.5,
+                  py: 0.5,
+                  borderRadius: 1.5,
+                  background:
+                    lead.outreach.email.status === 'replied'
+                      ? '#dcfce7'
+                      : lead.outreach.email.status === 'bounced' || lead.outreach.email.status === 'no_response'
+                      ? '#fee2e2'
+                      : '#fef3c7',
+                  border: '1px solid',
+                  borderColor:
+                    lead.outreach.email.status === 'replied'
+                      ? '#86efac'
+                      : lead.outreach.email.status === 'bounced' || lead.outreach.email.status === 'no_response'
+                      ? '#fecaca'
+                      : '#fde68a',
+                }}
+              >
+                <EmailIcon
+                  sx={{
+                    fontSize: 14,
+                    color:
+                      lead.outreach.email.status === 'replied'
+                        ? '#16a34a'
+                        : lead.outreach.email.status === 'bounced' || lead.outreach.email.status === 'no_response'
+                        ? '#dc2626'
+                        : '#ea4335',
+                  }}
+                />
+                <Typography
+                  sx={{
+                    fontSize: '10px',
+                    fontWeight: 600,
+                    color:
+                      lead.outreach.email.status === 'replied'
+                        ? '#16a34a'
+                        : lead.outreach.email.status === 'bounced' || lead.outreach.email.status === 'no_response'
+                        ? '#dc2626'
+                        : '#ea4335',
+                  }}
+                >
+                  {lead.outreach.email.status === 'replied'
+                    ? '✓'
+                    : lead.outreach.email.status === 'bounced' || lead.outreach.email.status === 'no_response'
+                    ? '✗'
+                    : '@'}
+                </Typography>
+              </Box>
+            </Tooltip>
+          )}
         </Box>
       )}
 

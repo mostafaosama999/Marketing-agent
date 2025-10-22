@@ -195,18 +195,16 @@ const Navbar: React.FC = () => {
     // All roles can see Companies
     items.push({ label: 'COMPANIES', path: '/companies', icon: Business });
 
-    // Managers and CEOs can see Team
-    if (userProfile.role === 'Manager' || userProfile.role === 'CEO') {
+    // Managers, CEOs, and Marketing Analysts can see Team
+    if (userProfile.role === 'Manager' || userProfile.role === 'CEO' || userProfile.role === 'Marketing Analyst') {
       items.push({ label: 'TEAM', path: '/team', icon: Group });
     }
 
-    // CEOs and Managers can see Revenue Analytics
-    if (userProfile.role === 'CEO' || userProfile.role === 'Manager') {
-      items.push({ label: 'ANALYTICS', path: '/analytics', icon: TrendingUp });
-    }
+    // All roles can see Analytics
+    items.push({ label: 'ANALYTICS', path: '/analytics', icon: TrendingUp });
 
-    // Managers and CEOs can see Monitoring
-    if (userProfile.role === 'Manager' || userProfile.role === 'CEO') {
+    // Managers, CEOs, and Marketing Analysts can see Monitoring
+    if (userProfile.role === 'Manager' || userProfile.role === 'CEO' || userProfile.role === 'Marketing Analyst') {
       items.push({ label: 'MONITORING', path: '/monitoring', icon: Analytics });
     }
 
@@ -273,9 +271,9 @@ const Navbar: React.FC = () => {
         >
           <MenuItem disabled sx={{ opacity: '1 !important', cursor: 'default' }}>
             <Box>
-              <Typography 
-                variant="subtitle2" 
-                sx={{ 
+              <Typography
+                variant="subtitle2"
+                sx={{
                   fontWeight: 600,
                   fontSize: '14px',
                   color: '#1e293b'
@@ -283,9 +281,9 @@ const Navbar: React.FC = () => {
               >
                 {userProfile.displayName || 'User'}
               </Typography>
-              <Typography 
-                variant="caption" 
-                sx={{ 
+              <Typography
+                variant="caption"
+                sx={{
                   fontSize: '12px',
                   color: '#64748b',
                   fontWeight: 400
@@ -295,10 +293,10 @@ const Navbar: React.FC = () => {
               </Typography>
             </Box>
           </MenuItem>
-          
-          <MenuItem 
+
+          <MenuItem
             onClick={handleLogout}
-            sx={{ 
+            sx={{
               color: '#ef4444',
               '&:hover': {
                 backgroundColor: 'rgba(239, 68, 68, 0.08) !important',

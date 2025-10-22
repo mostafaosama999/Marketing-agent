@@ -2,7 +2,7 @@
 // Service for CSV parsing and lead import logic
 
 import Papa from 'papaparse';
-import { CSVRow, FieldMapping } from '../../types/crm';
+import { CSVRow, FieldMapping, FieldSection } from '../../types/crm';
 import { LeadFormData, LeadStatus } from '../../types/lead';
 import { createLead } from './leads';
 import { checkDuplicate } from './deduplicationService';
@@ -29,6 +29,58 @@ export interface ImportResult {
   customFieldsCreated: number;
   errors: string[];
   totalProcessed: number;
+}
+
+/**
+ * Detect if a CSV column belongs to LinkedIn section
+ */
+export function isLinkedInField(columnName: string): boolean {
+  const lower = columnName.toLowerCase().trim();
+  return (
+    lower.includes('linkedin') ||
+    lower.includes('linked in') ||
+    lower.includes('linked-in') ||
+    lower.includes('li profile') ||
+    (lower.includes('profile') && (lower.includes('url') || lower.includes('link'))) ||
+    lower === 'link' || // Generic "Link" in LinkedIn context
+    lower.includes('name of person') ||
+    lower.includes('job') ||
+    lower.includes('type of message') ||
+    lower.includes('date of contact') ||
+    lower.includes('date of followup') ||
+    lower.includes('follow up') ||
+    lower.includes('followup')
+  );
+}
+
+/**
+ * Detect if a CSV column belongs to Email section
+ */
+export function isEmailField(columnName: string): boolean {
+  const lower = columnName.toLowerCase().trim();
+  return (
+    lower.includes('email') ||
+    lower.includes('e-mail') ||
+    lower.includes("e'mail") ||
+    lower.includes('mail') ||
+    lower.includes('date sent') ||
+    lower.includes('sent date') ||
+    lower.includes('who applied') ||
+    lower.includes('applied')
+  );
+}
+
+/**
+ * Detect section for a CSV column
+ */
+export function detectFieldSection(columnName: string): FieldSection {
+  if (isLinkedInField(columnName)) {
+    return 'linkedin';
+  }
+  if (isEmailField(columnName)) {
+    return 'email';
+  }
+  return 'general';
 }
 
 /**
@@ -128,6 +180,7 @@ function transformRowToLead(
   const leadData: Partial<LeadFormData> = {
     status: defaultStatus,
     customFields: {},
+    outreach: {},
   };
 
   // Apply mappings
@@ -155,8 +208,52 @@ function transformRowToLead(
       else if (statusLower.includes('follow')) leadData.status = 'follow_up';
       else if (statusLower.includes('won')) leadData.status = 'won';
       else if (statusLower.includes('lost')) leadData.status = 'lost';
-    } else {
-      // Custom field
+    }
+    // Outreach fields - LinkedIn
+    else if (mapping.leadField === 'outreach.linkedIn.profileUrl') {
+      if (!leadData.outreach!.linkedIn) {
+        leadData.outreach!.linkedIn = { status: 'not_sent' };
+      }
+      leadData.outreach!.linkedIn.profileUrl = value.trim();
+    } else if (mapping.leadField === 'outreach.linkedIn.status') {
+      if (!leadData.outreach!.linkedIn) {
+        leadData.outreach!.linkedIn = { status: 'not_sent' };
+      }
+      const statusLower = value.toLowerCase().trim();
+      if (statusLower.includes('sent') && !statusLower.includes('not')) {
+        leadData.outreach!.linkedIn.status = 'sent';
+      } else if (statusLower.includes('open')) {
+        leadData.outreach!.linkedIn.status = 'opened';
+      } else if (statusLower.includes('repl')) {
+        leadData.outreach!.linkedIn.status = 'replied';
+      } else if (statusLower.includes('refus')) {
+        leadData.outreach!.linkedIn.status = 'refused';
+      } else if (statusLower.includes('no response')) {
+        leadData.outreach!.linkedIn.status = 'no_response';
+      }
+    }
+    // Outreach fields - Email
+    else if (mapping.leadField === 'outreach.email.status') {
+      if (!leadData.outreach!.email) {
+        leadData.outreach!.email = { status: 'not_sent' };
+      }
+      const statusLower = value.toLowerCase().trim();
+      if (statusLower.includes('sent') && !statusLower.includes('not')) {
+        leadData.outreach!.email.status = 'sent';
+      } else if (statusLower.includes('open')) {
+        leadData.outreach!.email.status = 'opened';
+      } else if (statusLower.includes('repl')) {
+        leadData.outreach!.email.status = 'replied';
+      } else if (statusLower.includes('bounc')) {
+        leadData.outreach!.email.status = 'bounced';
+      } else if (statusLower.includes('refus')) {
+        leadData.outreach!.email.status = 'refused';
+      } else if (statusLower.includes('no response')) {
+        leadData.outreach!.email.status = 'no_response';
+      }
+    }
+    // Custom field
+    else {
       leadData.customFields![mapping.leadField] = value.trim();
     }
   }
@@ -174,6 +271,11 @@ function transformRowToLead(
   // Set default phone if missing
   if (!leadData.phone) {
     leadData.phone = '';
+  }
+
+  // Clean up empty outreach objects
+  if (leadData.outreach && Object.keys(leadData.outreach).length === 0) {
+    delete leadData.outreach;
   }
 
   return leadData as LeadFormData;

@@ -11,9 +11,26 @@ import {
   Alert,
   CircularProgress,
   Grid,
+  Typography,
+  Tabs,
+  Tab,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
+  Chip,
 } from '@mui/material';
+import {
+  LinkedIn as LinkedInIcon,
+  Email as EmailIcon,
+} from '@mui/icons-material';
 import { Company, CompanyFormData } from '../../../types/crm';
 import { createCompany, updateCompany, getCompanies } from '../../../services/api/companies';
+import { subscribeToCompanyLeads, subscribeToCompanyLeadsByName } from '../../../services/api/leads';
+import { Lead } from '../../../types/lead';
 
 interface CompanyDialogProps {
   open: boolean;
@@ -40,6 +57,13 @@ export const CompanyDialog: React.FC<CompanyDialogProps> = ({
   const [error, setError] = useState('');
   const [duplicateWarning, setDuplicateWarning] = useState('');
 
+  // Tab state
+  const [tabValue, setTabValue] = useState(0);
+
+  // Leads state
+  const [companyLeads, setCompanyLeads] = useState<Lead[]>([]);
+  const [leadsLoading, setLeadsLoading] = useState(false);
+
   const isEditMode = Boolean(company);
 
   // Populate form when company prop changes
@@ -63,8 +87,44 @@ export const CompanyDialog: React.FC<CompanyDialogProps> = ({
       });
       setError('');
       setDuplicateWarning('');
+      setTabValue(0); // Reset to first tab
+      setCompanyLeads([]); // Clear leads
     }
   }, [company, open]);
+
+  // Subscribe to company leads when in edit mode
+  // Try by companyId first, fallback to company name for legacy leads
+  useEffect(() => {
+    if (!company || !open || !isEditMode) return;
+
+    setLeadsLoading(true);
+
+    // First, try querying by companyId
+    const unsubscribeById = subscribeToCompanyLeads(company.id, (leadsById) => {
+      if (leadsById.length > 0) {
+        // Found leads with companyId
+        setCompanyLeads(leadsById);
+        setLeadsLoading(false);
+      } else {
+        // No leads found by ID, try fallback query by company name
+        // (for legacy leads that don't have companyId)
+        const unsubscribeByName = subscribeToCompanyLeadsByName(company.name, (leadsByName) => {
+          setCompanyLeads(leadsByName);
+          setLeadsLoading(false);
+        });
+
+        // Return cleanup for both subscriptions
+        return () => {
+          unsubscribeById();
+          unsubscribeByName();
+        };
+      }
+    });
+
+    return () => {
+      unsubscribeById();
+    };
+  }, [company, open, isEditMode]);
 
   const handleChange = (field: keyof CompanyFormData) => (
     event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
@@ -149,13 +209,21 @@ export const CompanyDialog: React.FC<CompanyDialogProps> = ({
         normalizedWebsite = `https://${normalizedWebsite}`;
       }
 
-      const companyData: CompanyFormData = {
+      const companyData: any = {
         name: formData.name.trim(),
-        website: normalizedWebsite,
-        industry: formData.industry?.trim(),
-        description: formData.description?.trim(),
-        customFields: formData.customFields,
+        customFields: formData.customFields || {},
       };
+
+      // Only add fields if they have values (Firestore doesn't allow undefined)
+      if (normalizedWebsite) {
+        companyData.website = normalizedWebsite;
+      }
+      if (formData.industry?.trim()) {
+        companyData.industry = formData.industry.trim();
+      }
+      if (formData.description?.trim()) {
+        companyData.description = formData.description.trim();
+      }
 
       if (isEditMode && company) {
         await updateCompany(company.id, companyData);
@@ -179,11 +247,80 @@ export const CompanyDialog: React.FC<CompanyDialogProps> = ({
     }
   };
 
+  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+    setTabValue(newValue);
+  };
+
+  // Render outreach status badge
+  const renderOutreachStatus = (
+    status: string | undefined,
+    type: 'linkedin' | 'email'
+  ) => {
+    if (!status || status === 'not_sent') {
+      return (
+        <Chip
+          size="small"
+          label="Not Sent"
+          sx={{
+            bgcolor: '#e5e7eb',
+            color: '#6b7280',
+            fontSize: '12px',
+            height: '24px',
+          }}
+        />
+      );
+    }
+
+    const statusConfig: Record<string, { label: string; color: string }> = {
+      sent: { label: 'Sent', color: '#3b82f6' },
+      opened: { label: 'Opened', color: '#9333ea' },
+      replied: { label: 'Replied', color: '#10b981' },
+      refused: { label: 'Refused', color: '#ef4444' },
+      bounced: { label: 'Bounced', color: '#ef4444' },
+      no_response: { label: 'No Response', color: '#f59e0b' },
+    };
+
+    const config = statusConfig[status] || { label: status, color: '#6b7280' };
+
+    return (
+      <Chip
+        size="small"
+        label={config.label}
+        icon={
+          type === 'linkedin' ? (
+            <LinkedInIcon sx={{ fontSize: 14, color: 'white' }} />
+          ) : (
+            <EmailIcon sx={{ fontSize: 14, color: 'white' }} />
+          )
+        }
+        sx={{
+          bgcolor: config.color,
+          color: 'white',
+          fontSize: '12px',
+          height: '24px',
+          '& .MuiChip-icon': {
+            color: 'white',
+            marginLeft: '4px',
+          },
+        }}
+      />
+    );
+  };
+
+  // Format date
+  const formatDate = (date: Date) => {
+    return new Date(date).toLocaleDateString('en-US', {
+      month: 'short',
+      day: 'numeric',
+      year: 'numeric',
+    });
+  };
+
   return (
     <Dialog
       open={open}
       onClose={handleClose}
-      maxWidth="sm"
+      maxWidth="md"
       fullWidth
       PaperProps={{
         sx: {
@@ -197,25 +334,37 @@ export const CompanyDialog: React.FC<CompanyDialogProps> = ({
         fontSize: '24px',
         pb: 1,
       }}>
-        {isEditMode ? 'Edit Company' : 'Add New Company'}
+        {isEditMode ? `Edit Company: ${company?.name}` : 'Add New Company'}
       </DialogTitle>
+
+      {/* Tabs (only show in edit mode) */}
+      {isEditMode && (
+        <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 3 }}>
+          <Tabs value={tabValue} onChange={handleTabChange}>
+            <Tab label="Details" />
+            <Tab label={`Leads (${companyLeads.length})`} />
+          </Tabs>
+        </Box>
+      )}
 
       <form onSubmit={handleSubmit}>
         <DialogContent>
-          <Box sx={{ pt: 1 }}>
-            {error && (
-              <Alert severity="error" sx={{ mb: 3 }}>
-                {error}
-              </Alert>
-            )}
+          {/* Details Tab */}
+          {(!isEditMode || tabValue === 0) && (
+            <Box sx={{ pt: 1 }}>
+              {error && (
+                <Alert severity="error" sx={{ mb: 3 }}>
+                  {error}
+                </Alert>
+              )}
 
-            {duplicateWarning && (
-              <Alert severity="warning" sx={{ mb: 3 }}>
-                {duplicateWarning}
-              </Alert>
-            )}
+              {duplicateWarning && (
+                <Alert severity="warning" sx={{ mb: 3 }}>
+                  {duplicateWarning}
+                </Alert>
+              )}
 
-            <Grid container spacing={3}>
+              <Grid container spacing={3}>
               <Grid size={{ xs: 12 }}>
                 <TextField
                   fullWidth
@@ -267,7 +416,72 @@ export const CompanyDialog: React.FC<CompanyDialogProps> = ({
                 />
               </Grid>
             </Grid>
-          </Box>
+            </Box>
+          )}
+
+          {/* Leads Tab */}
+          {isEditMode && tabValue === 1 && (
+            <Box sx={{ pt: 2 }}>
+              {leadsLoading ? (
+                <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                  <CircularProgress />
+                </Box>
+              ) : companyLeads.length === 0 ? (
+                <Box sx={{ textAlign: 'center', py: 6 }}>
+                  <Typography variant="body1" color="text.secondary">
+                    No leads found for this company
+                  </Typography>
+                </Box>
+              ) : (
+                <TableContainer component={Paper} sx={{ maxHeight: 500 }}>
+                  <Table stickyHeader>
+                    <TableHead>
+                      <TableRow>
+                        <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Email</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>LinkedIn Status</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Email Status</TableCell>
+                        <TableCell sx={{ fontWeight: 600 }}>Created</TableCell>
+                      </TableRow>
+                    </TableHead>
+                    <TableBody>
+                      {companyLeads.map((lead) => (
+                        <TableRow key={lead.id} hover>
+                          <TableCell>
+                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                              {lead.name}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2" color="text.secondary">
+                              {lead.email || '-'}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            {renderOutreachStatus(
+                              lead.outreach?.linkedIn?.status,
+                              'linkedin'
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            {renderOutreachStatus(
+                              lead.outreach?.email?.status,
+                              'email'
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Typography variant="body2" color="text.secondary">
+                              {formatDate(lead.createdAt)}
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                </TableContainer>
+              )}
+            </Box>
+          )}
         </DialogContent>
 
         <DialogActions sx={{ px: 3, pb: 3, pt: 2 }}>
