@@ -291,6 +291,90 @@ export async function createLead(
 }
 
 /**
+ * Create multiple leads in batch (optimized for bulk import)
+ * Uses Firestore batch writes for maximum performance
+ * @param leadsData Array of lead data to create
+ * @param userId User ID performing the import
+ * @param companyIdMap Map of company names to company IDs (pre-fetched)
+ * @returns Array of created lead IDs
+ */
+export async function createLeadsBatch(
+  leadsData: LeadFormData[],
+  userId: string,
+  companyIdMap: Map<string, string>
+): Promise<string[]> {
+  try {
+    const leadsRef = collection(db, LEADS_COLLECTION);
+    const leadIds: string[]= [];
+
+    // Firestore batch limit is 500 operations
+    const BATCH_SIZE = 500;
+
+    for (let i = 0; i < leadsData.length; i += BATCH_SIZE) {
+      const batch = writeBatch(db);
+      const chunkLeadsData = leadsData.slice(i, Math.min(i + BATCH_SIZE, leadsData.length));
+
+      for (const leadData of chunkLeadsData) {
+        const companyId = companyIdMap.get(leadData.company);
+        if (!companyId) {
+          console.error(`Company ID not found for: ${leadData.company}`);
+          continue;
+        }
+
+        const leadDocRef = doc(leadsRef);
+        leadIds.push(leadDocRef.id);
+
+        // Build lead document data
+        const leadDocData: any = {
+          name: leadData.name,
+          email: leadData.email,
+          phone: leadData.phone,
+          company: leadData.company,
+          companyId: companyId,
+          companyName: leadData.company,
+          status: leadData.status || 'new_lead',
+          customFields: leadData.customFields || {},
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        };
+
+        // Only add outreach if it exists
+        if ((leadData as any).outreach) {
+          leadDocData.outreach = (leadData as any).outreach;
+        }
+
+        batch.set(leadDocRef, leadDocData);
+
+        // Initialize timeline in the same batch
+        const timelineRef = doc(db, `${LEADS_COLLECTION}/${leadDocRef.id}/timeline/${leadDocRef.id}`);
+        const status = leadData.status || 'new_lead';
+        const now = new Date().toISOString();
+
+        batch.set(timelineRef, {
+          stateHistory: { [status]: now },
+          stateDurations: { [status]: 0 },
+          statusChanges: [{
+            fromStatus: null,
+            toStatus: status,
+            changedBy: userId,
+            changedAt: now,
+            automaticChange: false,
+          }],
+        });
+      }
+
+      // Commit this batch
+      await batch.commit();
+    }
+
+    return leadIds;
+  } catch (error) {
+    console.error('Error creating leads batch:', error);
+    throw error;
+  }
+}
+
+/**
  * Update an existing lead
  * If company name changes, updates company reference
  */
@@ -360,6 +444,33 @@ export async function updateLeadStatus(
 }
 
 /**
+ * Helper function to delete all documents in a lead's timeline subcollection
+ * @param leadId - The ID of the lead whose timeline should be deleted
+ */
+async function deleteLeadTimeline(leadId: string): Promise<void> {
+  try {
+    const timelineRef = collection(db, LEADS_COLLECTION, leadId, 'timeline');
+    const timelineSnapshot = await getDocs(timelineRef);
+
+    if (timelineSnapshot.empty) {
+      return; // No timeline documents to delete
+    }
+
+    // Delete all timeline documents using batch
+    const batch = writeBatch(db);
+    timelineSnapshot.docs.forEach((timelineDoc) => {
+      batch.delete(timelineDoc.ref);
+    });
+
+    await batch.commit();
+    console.log(`Deleted ${timelineSnapshot.size} timeline documents for lead ${leadId}`);
+  } catch (error) {
+    console.error(`Error deleting timeline for lead ${leadId}:`, error);
+    // Don't throw - we still want to delete the parent document even if timeline deletion fails
+  }
+}
+
+/**
  * Delete a lead
  * Automatically deletes the company if this is the last lead for that company
  * Also deletes all subcollections (timeline)
@@ -378,13 +489,11 @@ export async function deleteLead(leadId: string): Promise<void> {
     const leadData = leadDoc.data();
     const companyId = leadData.companyId;
 
-    // Delete the lead
-    await deleteDoc(leadRef);
+    // Delete timeline subcollection first
+    await deleteLeadTimeline(leadId);
 
-    // Delete timeline subcollection
-    // Note: Firestore doesn't auto-delete subcollections, but for now we'll rely on
-    // the parent document deletion. In production, you may want to use a Cloud Function
-    // to clean up subcollections or delete them manually here.
+    // Delete the lead document
+    await deleteDoc(leadRef);
 
     // If lead had a company, check if we should delete the company too
     if (companyId) {
@@ -516,6 +625,9 @@ export async function bulkDeleteLeads(leadIds: string[]): Promise<void> {
         }
       }
     });
+
+    // Delete timeline subcollections first (in parallel for better performance)
+    await Promise.all(leadIds.map(leadId => deleteLeadTimeline(leadId)));
 
     // Delete leads in batches
     const BATCH_SIZE = 500;

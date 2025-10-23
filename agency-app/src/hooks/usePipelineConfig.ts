@@ -31,16 +31,12 @@ export function usePipelineConfig(): UsePipelineConfigReturn {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    console.log('usePipelineConfig: Subscribing to pipeline config');
-
     const unsubscribe = subscribeToPipelineConfig((pipelineConfig) => {
-      console.log('usePipelineConfig: Received config update', pipelineConfig);
       setConfig(pipelineConfig);
       setLoading(false);
     });
 
     return () => {
-      console.log('usePipelineConfig: Unsubscribing from pipeline config');
       unsubscribe();
     };
   }, []);
@@ -48,7 +44,6 @@ export function usePipelineConfig(): UsePipelineConfigReturn {
   const updateLabel = async (stageId: LeadStatus, newLabel: string) => {
     try {
       await updateStageLabel(stageId, newLabel);
-      console.log(`usePipelineConfig: Updated label for ${stageId} to "${newLabel}"`);
     } catch (error) {
       console.error('usePipelineConfig: Error updating label', error);
       throw error;
@@ -63,7 +58,6 @@ export function usePipelineConfig(): UsePipelineConfigReturn {
         order: index,
       }));
       await updateStageOrder(reorderedStages);
-      console.log('usePipelineConfig: Updated stage order');
     } catch (error) {
       console.error('usePipelineConfig: Error updating order', error);
       throw error;
@@ -73,7 +67,6 @@ export function usePipelineConfig(): UsePipelineConfigReturn {
   const updateVisibility = async (stageId: LeadStatus, visible: boolean) => {
     try {
       await updateStageVisibility(stageId, visible);
-      console.log(`usePipelineConfig: Updated visibility for ${stageId} to ${visible}`);
     } catch (error) {
       console.error('usePipelineConfig: Error updating visibility', error);
       throw error;

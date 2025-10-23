@@ -3,12 +3,11 @@
 
 import { Lead } from '../../types/lead';
 import { FilterRule, FilterOperator, FilterableField } from '../../types/filter';
-import { CustomField } from '../../types/crm';
 
 /**
- * Get all filterable fields from standard Lead fields + custom fields
+ * Get all filterable fields from standard Lead fields + custom fields from actual leads
  */
-export function getFilterableFields(customFields: CustomField[]): FilterableField[] {
+export function getFilterableFields(leads: Lead[]): FilterableField[] {
   // Standard lead fields
   const standardFields: FilterableField[] = [
     { name: 'name', label: 'Name', type: 'text', isCustomField: false },
@@ -20,45 +19,27 @@ export function getFilterableFields(customFields: CustomField[]): FilterableFiel
     { name: 'updatedAt', label: 'Updated Date', type: 'date', isCustomField: false },
   ];
 
-  // Custom fields
-  const customFilterableFields: FilterableField[] = customFields
-    .filter(field => field.visible)
-    .map(field => ({
-      name: field.name,
-      label: field.label,
-      type: mapCustomFieldType(field.type),
-      options: field.options,
+  // Extract unique custom field names from all leads
+  const customFieldNames = new Set<string>();
+  leads.forEach(lead => {
+    if (lead.customFields) {
+      Object.keys(lead.customFields).forEach(fieldName => {
+        customFieldNames.add(fieldName);
+      });
+    }
+  });
+
+  // Create filterable fields for each custom field
+  const customFilterableFields: FilterableField[] = Array.from(customFieldNames)
+    .sort()
+    .map(fieldName => ({
+      name: fieldName,
+      label: fieldName.charAt(0).toUpperCase() + fieldName.slice(1).replace(/_/g, ' '),
+      type: 'text' as const, // Default to text for custom fields
       isCustomField: true,
     }));
 
   return [...standardFields, ...customFilterableFields];
-}
-
-/**
- * Map custom field type to filter field type
- */
-function mapCustomFieldType(customFieldType: string): 'text' | 'number' | 'date' | 'select' | 'boolean' {
-  switch (customFieldType) {
-    case 'number':
-    case 'currency':
-      return 'number';
-    case 'date':
-    case 'datetime':
-      return 'date';
-    case 'select':
-    case 'multiselect':
-      return 'select';
-    case 'boolean':
-    case 'checkbox':
-      return 'boolean';
-    case 'text':
-    case 'textarea':
-    case 'email':
-    case 'phone':
-    case 'url':
-    default:
-      return 'text';
-  }
 }
 
 /**

@@ -1,8 +1,7 @@
 // src/services/api/dynamicFilterService.ts
-// Service for dynamically generating filter options from lead data and custom fields
+// Service for dynamically generating filter options from lead data
 
 import { Lead } from '../../types/lead';
-import { CustomField, CustomFieldType } from '../../types/crm';
 
 /**
  * Extract unique values for a custom field from leads
@@ -37,47 +36,15 @@ export function getUniqueValuesForField(
 
 /**
  * Determine if a custom field should be filterable
- * Fields are filterable if they're visible and have reasonable number of unique values
+ * Fields are filterable if they have reasonable number of unique values
  */
-export function isFieldFilterable(field: CustomField, leads: Lead[]): boolean {
-  // Must be visible
-  if (!field.visible) return false;
-
+export function isFieldFilterable(fieldName: string, leads: Lead[]): boolean {
   // Get unique values for this field
-  const uniqueValues = getUniqueValuesForField(leads, field.name);
+  const uniqueValues = getUniqueValuesForField(leads, fieldName);
 
-  // Different criteria based on field type
-  switch (field.type) {
-    case 'select':
-    case 'radio':
-      // Always filterable if it's a select/radio field
-      return true;
-
-    case 'checkbox':
-      // Boolean fields are always filterable
-      return true;
-
-    case 'text':
-    case 'textarea':
-      // Text fields are filterable if they have < 100 unique values
-      // (otherwise it becomes impractical)
-      return uniqueValues.length > 0 && uniqueValues.length < 100;
-
-    case 'number':
-      // Number fields are always filterable (as ranges)
-      return uniqueValues.length > 0;
-
-    case 'date':
-      // Date fields are always filterable (as ranges)
-      return uniqueValues.length > 0;
-
-    case 'url':
-      // URLs are generally not filterable (too specific)
-      return false;
-
-    default:
-      return false;
-  }
+  // Text fields are filterable if they have between 1-100 unique values
+  // (otherwise it becomes impractical)
+  return uniqueValues.length > 0 && uniqueValues.length < 100;
 }
 
 /**
@@ -94,97 +61,54 @@ export interface FilterConfig {
 }
 
 export function getFilterConfig(
-  field: CustomField,
+  fieldName: string,
   leads: Lead[]
 ): FilterConfig | null {
-  if (!isFieldFilterable(field, leads)) {
+  if (!isFieldFilterable(fieldName, leads)) {
     return null;
   }
 
-  const baseConfig = {
-    fieldName: field.name,
-    label: field.label,
+  const label = fieldName.charAt(0).toUpperCase() + fieldName.slice(1).replace(/_/g, ' ');
+
+  // Extract unique values for this field
+  const options = getUniqueValuesForField(leads, fieldName);
+
+  // Default to multiselect filter for all custom fields
+  return {
+    fieldName,
+    label,
+    filterType: 'multiselect',
+    options,
   };
-
-  switch (field.type) {
-    case 'select':
-    case 'radio':
-      // Use predefined options if available, otherwise extract from data
-      const options = field.options?.length
-        ? field.options
-        : getUniqueValuesForField(leads, field.name);
-
-      return {
-        ...baseConfig,
-        filterType: 'multiselect',
-        options,
-      };
-
-    case 'checkbox':
-      return {
-        ...baseConfig,
-        filterType: 'boolean',
-      };
-
-    case 'text':
-    case 'textarea':
-      // Text autocomplete with available values
-      return {
-        ...baseConfig,
-        filterType: 'multiselect',
-        options: getUniqueValuesForField(leads, field.name),
-      };
-
-    case 'number':
-      // Extract numeric values and find min/max
-      const numericValues = leads
-        .map((lead) => lead.customFields?.[field.name])
-        .filter((val) => val !== undefined && val !== null && val !== '')
-        .map((val) => Number(val))
-        .filter((val) => !isNaN(val));
-
-      if (numericValues.length === 0) return null;
-
-      return {
-        ...baseConfig,
-        filterType: 'number-range',
-        min: Math.min(...numericValues),
-        max: Math.max(...numericValues),
-      };
-
-    case 'date':
-      return {
-        ...baseConfig,
-        filterType: 'date-range',
-      };
-
-    default:
-      return null;
-  }
 }
 
 /**
- * Get all filterable custom fields with their configurations
+ * Get all filterable custom fields with their configurations from actual leads data
  */
 export function getFilterableFields(
-  customFields: CustomField[],
   leads: Lead[]
 ): FilterConfig[] {
   const filterConfigs: FilterConfig[] = [];
 
-  for (const field of customFields) {
-    const config = getFilterConfig(field, leads);
+  // Extract all unique custom field names from leads
+  const customFieldNames = new Set<string>();
+  leads.forEach(lead => {
+    if (lead.customFields) {
+      Object.keys(lead.customFields).forEach(fieldName => {
+        customFieldNames.add(fieldName);
+      });
+    }
+  });
+
+  // Create filter configs for each custom field
+  for (const fieldName of Array.from(customFieldNames).sort()) {
+    const config = getFilterConfig(fieldName, leads);
     if (config) {
       filterConfigs.push(config);
     }
   }
 
-  // Sort by field order
-  return filterConfigs.sort((a, b) => {
-    const fieldA = customFields.find((f) => f.name === a.fieldName);
-    const fieldB = customFields.find((f) => f.name === b.fieldName);
-    return (fieldA?.order || 0) - (fieldB?.order || 0);
-  });
+  return filterConfigs;
 }
 
 /**

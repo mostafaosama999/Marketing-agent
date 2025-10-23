@@ -28,6 +28,7 @@ import {
   updateLead,
   updateLeadStatus,
   deleteLead,
+  bulkDeleteLeads,
 } from '../../../services/api/leads';
 import { usePipelineConfig } from '../../../hooks/usePipelineConfig';
 import {
@@ -118,12 +119,21 @@ function CRMBoard() {
     return () => unsubscribe();
   }, []);
 
-  // Load table columns (default + custom fields) on mount
+  // Reset columns when all leads are deleted
+  useEffect(() => {
+    if (leads.length === 0 && tableColumns.length > DEFAULT_TABLE_COLUMNS.length) {
+      // All leads deleted and we have custom columns - reset to defaults
+      setTableColumns(DEFAULT_TABLE_COLUMNS);
+      localStorage.removeItem(TABLE_COLUMNS_STORAGE_KEY);
+    }
+  }, [leads.length, tableColumns.length]);
+
+  // Load table columns (default + custom fields) when leads change
   useEffect(() => {
     async function initializeTableColumns() {
       try {
-        // Build complete column list from default + custom fields
-        const allColumns = await buildTableColumns();
+        // Build complete column list from default + custom fields from actual leads
+        const allColumns = await buildTableColumns(leads);
 
         // Load saved visibility preferences from localStorage
         const savedPrefs = localStorage.getItem(TABLE_COLUMNS_STORAGE_KEY);
@@ -148,8 +158,11 @@ function CRMBoard() {
       }
     }
 
-    initializeTableColumns();
-  }, []);
+    // Only initialize once leads are loaded
+    if (leads.length > 0) {
+      initializeTableColumns();
+    }
+  }, [leads]);
 
   // Migrate localStorage data and load default preset on mount
   useEffect(() => {
@@ -609,10 +622,8 @@ function CRMBoard() {
     if (!window.confirm(confirmMessage)) return;
 
     try {
-      // Delete all selected leads in parallel
-      await Promise.all(
-        selectedLeadIds.map(leadId => deleteLead(leadId))
-      );
+      // Use bulkDeleteLeads to properly handle company cleanup
+      await bulkDeleteLeads(selectedLeadIds);
 
       showAlert(`Successfully deleted ${selectedLeadIds.length} lead${selectedLeadIds.length > 1 ? 's' : ''}`);
       setSelectedLeadIds([]);

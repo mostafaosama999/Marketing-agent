@@ -15,6 +15,7 @@ import {
   Unsubscribe,
   onSnapshot,
   orderBy,
+  writeBatch,
 } from 'firebase/firestore';
 import { db } from '../firebase/firestore';
 import { Company, CompanyFormData } from '../../types/crm';
@@ -84,6 +85,86 @@ export async function getOrCreateCompany(companyName: string): Promise<Company> 
     };
   } catch (error) {
     console.error('Error getting or creating company:', error);
+    throw error;
+  }
+}
+
+/**
+ * Batch create/get multiple companies (optimized for bulk import)
+ * Returns a Map of company names to company IDs
+ * @param companyNames Array of unique company names
+ * @returns Map of company name (lowercase) to company ID
+ */
+export async function getOrCreateCompaniesBatch(
+  companyNames: string[]
+): Promise<Map<string, string>> {
+  try {
+    const companyIdMap = new Map<string, string>();
+
+    // Fetch all existing companies once
+    const companiesRef = collection(db, COMPANIES_COLLECTION);
+    const snapshot = await getDocs(companiesRef);
+
+    const existingCompanies = new Map<string, { id: string; name: string }>();
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      existingCompanies.set(data.name.toLowerCase(), { id: doc.id, name: data.name });
+    });
+
+    // Identify companies that need to be created
+    const companiesToCreate: string[] = [];
+    const normalizedNames = new Map<string, string>(); // lowercase -> original case
+
+    for (const companyName of companyNames) {
+      const normalizedName = companyName.trim();
+      const lowerName = normalizedName.toLowerCase();
+      normalizedNames.set(lowerName, normalizedName);
+
+      const existing = existingCompanies.get(lowerName);
+      if (existing) {
+        // Company exists, use original name from database
+        companyIdMap.set(normalizedName, existing.id);
+        companyIdMap.set(lowerName, existing.id); // Also add lowercase key for lookups
+      } else {
+        // Company doesn't exist, need to create
+        companiesToCreate.push(normalizedName);
+      }
+    }
+
+    // Create new companies in batches
+    if (companiesToCreate.length > 0) {
+      const BATCH_SIZE = 500;
+      const batch = writeBatch(db);
+      let batchCount = 0;
+
+      for (const companyName of companiesToCreate) {
+        const companyDocRef = doc(companiesRef);
+        batch.set(companyDocRef, {
+          name: companyName,
+          customFields: {},
+          createdAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+
+        companyIdMap.set(companyName, companyDocRef.id);
+        companyIdMap.set(companyName.toLowerCase(), companyDocRef.id); // Also add lowercase key for lookups
+
+        batchCount++;
+        if (batchCount >= BATCH_SIZE) {
+          await batch.commit();
+          batchCount = 0;
+        }
+      }
+
+      // Commit any remaining operations
+      if (batchCount > 0) {
+        await batch.commit();
+      }
+    }
+
+    return companyIdMap;
+  } catch (error) {
+    console.error('Error batch creating companies:', error);
     throw error;
   }
 }
@@ -180,7 +261,7 @@ export async function createCompany(
  */
 export async function updateCompany(
   companyId: string,
-  companyData: Partial<CompanyFormData>
+  companyData: Partial<CompanyFormData> | Record<string, any>
 ): Promise<void> {
   try {
     const companyRef = doc(db, COMPANIES_COLLECTION, companyId);
@@ -233,19 +314,77 @@ export async function deleteCompany(companyId: string): Promise<void> {
 }
 
 /**
- * Get companies with lead counts
+ * Get lead counts for all companies in a single optimized query
+ * @returns Map of companyId to lead count
+ */
+export async function getLeadCountsForAllCompanies(): Promise<Map<string, number>> {
+  try {
+    const leadCounts = new Map<string, number>();
+
+    // Fetch all leads in one query
+    const leadsRef = collection(db, LEADS_COLLECTION);
+    const snapshot = await getDocs(leadsRef);
+
+    // Count leads per company
+    snapshot.forEach((doc) => {
+      const data = doc.data();
+      const companyId = data.companyId;
+      if (companyId) {
+        leadCounts.set(companyId, (leadCounts.get(companyId) || 0) + 1);
+      }
+    });
+
+    return leadCounts;
+  } catch (error) {
+    console.error('Error fetching lead counts:', error);
+    return new Map();
+  }
+}
+
+/**
+ * Bulk delete multiple companies
+ * @param companyIds Array of company IDs to delete
+ */
+export async function bulkDeleteCompanies(companyIds: string[]): Promise<void> {
+  try {
+    if (companyIds.length === 0) return;
+
+    const BATCH_SIZE = 500; // Firestore batch write limit
+
+    for (let i = 0; i < companyIds.length; i += BATCH_SIZE) {
+      const batchIds = companyIds.slice(i, i + BATCH_SIZE);
+      const batch = writeBatch(db);
+
+      batchIds.forEach((companyId) => {
+        const companyRef = doc(db, COMPANIES_COLLECTION, companyId);
+        batch.delete(companyRef);
+      });
+
+      await batch.commit();
+    }
+  } catch (error) {
+    console.error('Error bulk deleting companies:', error);
+    throw error;
+  }
+}
+
+/**
+ * Get companies with lead counts (optimized version)
  */
 export async function getCompaniesWithLeadCounts(): Promise<
   Array<Company & { leadCount: number }>
 > {
   try {
     const companies = await getCompanies();
-    const companiesWithCounts = await Promise.all(
-      companies.map(async (company) => {
-        const leadCount = await countLeadsForCompany(company.id);
-        return { ...company, leadCount };
-      })
-    );
+
+    // Get all lead counts in one query
+    const leadCounts = await getLeadCountsForAllCompanies();
+
+    // Map counts to companies
+    const companiesWithCounts = companies.map((company) => ({
+      ...company,
+      leadCount: leadCounts.get(company.id) || 0,
+    }));
 
     return companiesWithCounts;
   } catch (error) {

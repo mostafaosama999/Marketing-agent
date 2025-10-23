@@ -113,6 +113,7 @@ export const CollapsibleFilterBar: React.FC<CollapsibleFilterBarProps> = ({
                 onClearAll();
                 setIsExpanded(false);
               }}
+              leads={leads}
             />
           </Box>
         </Box>

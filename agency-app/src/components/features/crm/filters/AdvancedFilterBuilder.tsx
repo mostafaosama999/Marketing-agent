@@ -3,48 +3,39 @@ import React, { useState, useEffect } from 'react';
 import { Box, Button, Typography, Paper, Collapse, Chip } from '@mui/material';
 import { Add as AddIcon, FilterList as FilterListIcon } from '@mui/icons-material';
 import { FilterRule, FilterableField } from '../../../../types/filter';
+import { Lead } from '../../../../types/lead';
 import { FilterRuleRow } from './FilterRuleRow';
-import { getFilterRuleSummary } from '../../../../services/api/advancedFilterService';
-import { getCustomFieldsConfig } from '../../../../services/api/customFieldsService';
-import { getFilterableFields } from '../../../../services/api/advancedFilterService';
+import { getFilterRuleSummary, getFilterableFields } from '../../../../services/api/advancedFilterService';
 
 interface AdvancedFilterBuilderProps {
   isExpanded: boolean;
   onApplyFilters: (rules: FilterRule[]) => void;
   onClearFilters: () => void;
+  leads: Lead[];
 }
 
 export const AdvancedFilterBuilder: React.FC<AdvancedFilterBuilderProps> = ({
   isExpanded,
   onApplyFilters,
   onClearFilters,
+  leads,
 }) => {
   const [rules, setRules] = useState<FilterRule[]>([]);
   const [fields, setFields] = useState<FilterableField[]>([]);
-  const [loading, setLoading] = useState(false);
   const [fieldsLoaded, setFieldsLoaded] = useState(false);
 
-  // Load filterable fields on mount
+  // Load filterable fields from actual leads data
   useEffect(() => {
-    async function loadFields() {
-      setLoading(true);
+    if (isExpanded && leads.length > 0) {
       try {
-        const config = await getCustomFieldsConfig();
-        const filterableFields = getFilterableFields(config.fields);
+        const filterableFields = getFilterableFields(leads);
         setFields(filterableFields);
         setFieldsLoaded(true);
       } catch (error) {
         console.error('Error loading filterable fields:', error);
-      } finally {
-        setLoading(false);
       }
     }
-
-    // Load fields if panel is expanded
-    if (isExpanded && !fieldsLoaded) {
-      loadFields();
-    }
-  }, [isExpanded, fieldsLoaded]);
+  }, [isExpanded, leads]);
 
   // Add default rule AFTER fields are loaded (only if no rules)
   useEffect(() => {
@@ -141,7 +132,6 @@ export const AdvancedFilterBuilder: React.FC<AdvancedFilterBuilderProps> = ({
             size="small"
             startIcon={<AddIcon />}
             onClick={handleAddRule}
-            disabled={loading}
             sx={{
               textTransform: 'none',
               borderColor: '#667eea',

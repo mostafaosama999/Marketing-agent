@@ -9,9 +9,7 @@ import { LeadOwnerFilter } from './LeadOwnerFilter';
 import { CompanyFilter } from './CompanyFilter';
 import { MonthFilter } from './MonthFilter';
 import { DynamicFieldFilter } from './DynamicFieldFilter';
-import { getCustomFieldsConfig } from '../../../../services/api/customFieldsService';
 import { getFilterableFields, FilterConfig } from '../../../../services/api/dynamicFilterService';
-import { CustomField } from '../../../../types/crm';
 
 interface FilterPanelProps {
   isExpanded: boolean;
@@ -29,27 +27,18 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
   leads,
 }) => {
   const [customFieldConfigs, setCustomFieldConfigs] = useState<FilterConfig[]>([]);
-  const [loading, setLoading] = useState(false);
 
-  // Fetch custom fields configuration on mount
+  // Load filterable custom fields from actual leads data
   useEffect(() => {
-    async function loadCustomFields() {
-      if (!isExpanded || leads.length === 0) return;
-
-      setLoading(true);
+    if (isExpanded && leads.length > 0) {
       try {
-        const config = await getCustomFieldsConfig();
-        const filterableFields = getFilterableFields(config.fields, leads);
+        const filterableFields = getFilterableFields(leads);
         setCustomFieldConfigs(filterableFields);
       } catch (error) {
         console.error('Error loading custom fields:', error);
-      } finally {
-        setLoading(false);
       }
     }
-
-    loadCustomFields();
-  }, [isExpanded, leads.length]);
+  }, [isExpanded, leads]);
 
   const labelStyle = {
     color: '#64748b',

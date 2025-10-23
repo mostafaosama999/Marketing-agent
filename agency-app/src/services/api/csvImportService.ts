@@ -2,12 +2,11 @@
 // Service for CSV parsing and lead import logic
 
 import Papa from 'papaparse';
-import { CSVRow, FieldMapping, FieldSection } from '../../types/crm';
+import { CSVRow, FieldMapping, FieldSection, EntityType } from '../../types/crm';
 import { LeadFormData, LeadStatus } from '../../types/lead';
-import { createLead } from './leads';
-import { checkDuplicate } from './deduplicationService';
-import { autoCreateCustomField } from './customFieldsService';
-import { detectFieldType } from './csvTypeDetectionService';
+import { createLeadsBatch } from './leads';
+import { getAllLeadsMap, checkDuplicateFromMap } from './deduplicationService';
+import { getOrCreateCompaniesBatch, updateCompany } from './companies';
 
 /**
  * Parse result interface
@@ -26,7 +25,6 @@ export interface ImportResult {
   successful: number;
   failed: number;
   duplicates: number;
-  customFieldsCreated: number;
   errors: string[];
   totalProcessed: number;
 }
@@ -81,6 +79,57 @@ export function detectFieldSection(columnName: string): FieldSection {
     return 'email';
   }
   return 'general';
+}
+
+/**
+ * Detect entity type (lead or company) for a CSV column
+ * Company fields include standard company info and fields with company-related keywords
+ */
+export function detectEntityType(columnName: string, leadFieldName: string | null): EntityType {
+  const lower = columnName.toLowerCase().trim();
+
+  // Standard company fields
+  if (
+    leadFieldName === 'website' ||
+    leadFieldName === 'industry' ||
+    leadFieldName === 'description'
+  ) {
+    return 'company';
+  }
+
+  // Company-related keywords in column name
+  const companyKeywords = [
+    'website',
+    'industry',
+    'sector',
+    'company size',
+    'company_size',
+    'companysize',
+    'employees',
+    'employee count',
+    'headcount',
+    'revenue',
+    'funding',
+    'headquarters',
+    'hq',
+    'location',
+    'company location',
+    'company description',
+    'about company',
+    'company info',
+    'organization',
+    'firm',
+    'business type',
+  ];
+
+  for (const keyword of companyKeywords) {
+    if (lower.includes(keyword)) {
+      return 'company';
+    }
+  }
+
+  // Default to lead entity type
+  return 'lead';
 }
 
 /**
@@ -170,25 +219,40 @@ function sanitize(str: string): string {
 }
 
 /**
- * Transform CSV row to LeadFormData using field mappings
+ * Transform CSV row to LeadFormData and CompanyData using field mappings
  */
 function transformRowToLead(
   row: CSVRow,
   mappings: FieldMapping[],
   defaultStatus: LeadStatus
-): LeadFormData | null {
+): { leadData: LeadFormData; companyData: Record<string, any> } | null {
   const leadData: Partial<LeadFormData> = {
     status: defaultStatus,
     customFields: {},
     outreach: {},
   };
 
+  const companyData: Record<string, any> = {};
+
   // Apply mappings
   for (const mapping of mappings) {
-    if (!mapping.leadField || mapping.leadField === 'skip') continue;
+    if (!mapping.leadField) continue;
+
+    // Handle auto-create for skipped fields
+    if (mapping.leadField === 'skip') {
+      if (!mapping.autoCreate) continue; // Skip if not auto-creating
+
+      // Generate field name from CSV column name
+      mapping.leadField = mapping.csvField
+        .toLowerCase()
+        .trim()
+        .replace(/[^a-z0-9]+/g, '_'); // Convert "What they do" → "what_they_do"
+    }
 
     const value = row[mapping.csvField];
     if (!value || value.trim() === '') continue;
+
+    const entityType = mapping.entityType || 'lead';
 
     // Standard fields
     if (mapping.leadField === 'name') {
@@ -252,9 +316,16 @@ function transformRowToLead(
         leadData.outreach!.email.status = 'no_response';
       }
     }
-    // Custom field
+    // Custom field - could be for lead or company
     else {
-      leadData.customFields![mapping.leadField] = value.trim();
+      if (entityType === 'company') {
+        if (!companyData.customFields) {
+          companyData.customFields = {};
+        }
+        companyData.customFields[mapping.leadField] = value.trim();
+      } else {
+        leadData.customFields![mapping.leadField] = value.trim();
+      }
     }
   }
 
@@ -278,7 +349,7 @@ function transformRowToLead(
     delete leadData.outreach;
   }
 
-  return leadData as LeadFormData;
+  return { leadData: leadData as LeadFormData, companyData };
 }
 
 /**
@@ -303,7 +374,6 @@ export async function importLeadsFromCSV(
     successful: 0,
     failed: 0,
     duplicates: 0,
-    customFieldsCreated: 0,
     errors: [],
     totalProcessed: 0,
   };
@@ -311,77 +381,24 @@ export async function importLeadsFromCSV(
   // Apply forward-fill for Excel compatibility
   const filledData = applyForwardFill(data);
 
-  // Auto-create custom fields based on per-field settings
-  // First check global setting for backward compatibility
-  if (autoCreateCustomFields) {
-    const unmappedColumns = Object.keys(filledData[0] || {}).filter(
-      (column) => !mappings.find((m) => m.csvField === column && m.leadField !== 'skip')
-    );
+  // OPTIMIZED BATCH IMPORT
 
-    for (const column of unmappedColumns) {
-      try {
-        // Detect type from sample data
-        const samples = filledData.slice(0, 10).map((row) => row[column] || '');
-        const detectedType = detectFieldType(samples);
+  // 1. Fetch all existing leads once for fast duplicate checking
+  const existingLeadsMap = await getAllLeadsMap();
 
-        // Create custom field
-        await autoCreateCustomField(column, detectedType);
-        result.customFieldsCreated++;
-
-        // Add mapping for this column
-        mappings.push({
-          csvField: column,
-          leadField: column.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_'),
-        });
-      } catch (error) {
-        console.error(`Failed to auto-create custom field for column ${column}:`, error);
-        // Non-blocking: continue with import
-      }
-    }
-  }
-
-  // Also check per-field autoCreate flags (takes precedence)
-  const skippedFieldsToCreate = mappings.filter(
-    (m) => (m.leadField === 'skip' || m.leadField === null) && m.autoCreate === true
-  );
-
-  for (const mapping of skippedFieldsToCreate) {
-    try {
-      // Skip if already created by global logic above
-      const alreadyMapped = mappings.some(
-        (m) => m.csvField === mapping.csvField && m.leadField && m.leadField !== 'skip'
-      );
-      if (alreadyMapped) continue;
-
-      // Detect type from sample data
-      const samples = filledData.slice(0, 10).map((row) => row[mapping.csvField] || '');
-      const detectedType = detectFieldType(samples);
-
-      // Create custom field
-      await autoCreateCustomField(mapping.csvField, detectedType);
-      result.customFieldsCreated++;
-
-      // Update the mapping to point to the new custom field
-      mapping.leadField = mapping.csvField.toLowerCase().trim().replace(/[^a-z0-9]+/g, '_');
-    } catch (error) {
-      console.error(`Failed to auto-create custom field for column ${mapping.csvField}:`, error);
-      // Non-blocking: continue with import
-    }
-  }
-
-  // Track leads being imported in current batch (for duplicate detection)
+  // 2. Transform and validate all rows
+  const validLeadsData: LeadFormData[] = [];
   const batchLeads: Array<{ name: string; company: string }> = [];
+  const companyDataByName: Map<string, Record<string, any>> = new Map();
 
-  // Process each row
   for (let i = 0; i < filledData.length; i++) {
     const row = filledData[i];
-    const rowNumber = i + 2; // +2 because: 0-indexed + 1 for header row + 1 for display
+    const rowNumber = i + 2;
 
     try {
-      // Transform CSV row to lead data
-      const leadData = transformRowToLead(row, mappings, defaultStatus);
+      const transformResult = transformRowToLead(row, mappings, defaultStatus);
 
-      if (!leadData) {
+      if (!transformResult) {
         result.failed++;
         result.errors.push(
           `Row ${rowNumber}: Missing required fields (name or company)`
@@ -389,11 +406,14 @@ export async function importLeadsFromCSV(
         continue;
       }
 
-      // Check for duplicates
-      const duplicateCheck = await checkDuplicate(
+      const { leadData, companyData } = transformResult;
+
+      // Fast duplicate check using Map
+      const duplicateCheck = checkDuplicateFromMap(
         leadData.name,
         leadData.company,
-        batchLeads as any
+        existingLeadsMap,
+        batchLeads
       );
 
       if (duplicateCheck.isDuplicate) {
@@ -404,15 +424,29 @@ export async function importLeadsFromCSV(
         continue;
       }
 
-      // Create lead
-      await createLead(leadData, userId);
-      result.successful++;
-
-      // Add to batch tracking
+      validLeadsData.push(leadData);
       batchLeads.push({ name: leadData.name, company: leadData.company });
 
-      // Report progress
-      if (onProgress) {
+      // Collect company data - merge data from multiple leads of the same company
+      if (Object.keys(companyData).length > 0) {
+        const companyKey = leadData.company.toLowerCase();
+        const existingCompanyData = companyDataByName.get(companyKey) || {};
+
+        // Merge company data (later rows override earlier ones if conflict)
+        companyDataByName.set(companyKey, {
+          ...existingCompanyData,
+          ...companyData,
+          customFields: {
+            ...(existingCompanyData.customFields || {}),
+            ...(companyData.customFields || {})
+          }
+        });
+      }
+
+      result.totalProcessed++;
+
+      // Throttled progress reporting (every 50 leads)
+      if (onProgress && i % 50 === 0) {
         onProgress(i + 1, filledData.length);
       }
     } catch (error) {
@@ -420,9 +454,57 @@ export async function importLeadsFromCSV(
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       result.errors.push(`Row ${rowNumber}: ${errorMessage}`);
+      result.totalProcessed++;
     }
+  }
 
-    result.totalProcessed++;
+  // 3. Extract unique company names
+  const uniqueCompanyNames = Array.from(
+    new Set(validLeadsData.map((lead) => lead.company))
+  );
+
+  // 4. Batch create/get all companies
+  const companyIdMap = await getOrCreateCompaniesBatch(uniqueCompanyNames);
+
+  // 4.5. Update companies with their data (if any company-level fields were imported)
+  if (companyDataByName.size > 0) {
+    const companyUpdatePromises: Promise<void>[] = [];
+
+    companyDataByName.forEach((companyData, companyKey) => {
+      const companyId = companyIdMap.get(companyKey);
+      if (companyId) {
+        companyUpdatePromises.push(
+          updateCompany(companyId, companyData).catch((error) => {
+            console.error(`Failed to update company ${companyKey}:`, error);
+            // Non-blocking: continue with import even if company update fails
+          })
+        );
+      }
+    });
+
+    // Execute all company updates in parallel
+    try {
+      await Promise.all(companyUpdatePromises);
+    } catch (error) {
+      console.error('Some company updates failed:', error);
+      // Non-blocking: continue with lead import
+    }
+  }
+
+  // 5. Batch create all leads (with progress updates)
+  try {
+    await createLeadsBatch(validLeadsData, userId, companyIdMap);
+    result.successful = validLeadsData.length;
+
+    // Final progress update
+    if (onProgress) {
+      onProgress(filledData.length, filledData.length);
+    }
+  } catch (error) {
+    console.error('Error in batch lead creation:', error);
+    result.failed += validLeadsData.length;
+    result.successful = 0;
+    result.errors.push(`Batch creation failed: ${error instanceof Error ? error.message : 'Unknown error'}`);
   }
 
   return result;

@@ -26,9 +26,9 @@ import {
   LinkedIn as LinkedInIcon,
   Email as EmailIcon,
 } from '@mui/icons-material';
-import { CSVRow, FieldMapping } from '../../../types/crm';
+import { CSVRow, FieldMapping, EntityType } from '../../../types/crm';
 import { LeadStatus } from '../../../types/lead';
-import { importLeadsFromCSV, ImportResult, detectFieldSection } from '../../../services/api/csvImportService';
+import { importLeadsFromCSV, ImportResult, detectFieldSection, detectEntityType } from '../../../services/api/csvImportService';
 import { useAuth } from '../../../contexts/AuthContext';
 import { usePipelineConfigContext } from '../../../contexts/PipelineConfigContext';
 
@@ -41,11 +41,11 @@ interface CSVFieldMappingDialogProps {
 }
 
 const STANDARD_FIELDS = [
-  { value: 'name', label: 'Lead Name (Required)', section: 'general' },
-  { value: 'email', label: 'Email', section: 'general' },
-  { value: 'company', label: 'Company (Required)', section: 'general' },
-  { value: 'phone', label: 'Phone', section: 'general' },
-  { value: 'status', label: 'Pipeline Stage', section: 'general' },
+  { value: 'name', label: 'Lead Name (Required)', section: 'general', entityType: 'lead' as EntityType },
+  { value: 'email', label: 'Email', section: 'general', entityType: 'lead' as EntityType },
+  { value: 'company', label: 'Company (Required)', section: 'general', entityType: 'lead' as EntityType },
+  { value: 'phone', label: 'Phone', section: 'general', entityType: 'lead' as EntityType },
+  { value: 'status', label: 'Pipeline Stage', section: 'general', entityType: 'lead' as EntityType },
 ];
 
 const LINKEDIN_FIELDS = [
@@ -74,57 +74,89 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  // Auto-detect mappings on mount
+  // Auto-detect mappings on mount (only run once when headers change)
   useEffect(() => {
     if (headers.length > 0) {
       const detectedMappings: FieldMapping[] = headers.map((csvField) => {
         const lowerField = csvField.toLowerCase().trim();
         const section = detectFieldSection(csvField);
+        let leadField: string | null = null;
+        let entityType: EntityType = 'lead';
 
         // Auto-detect standard fields (case-insensitive)
         if (lowerField === 'name' || lowerField === 'lead name' || lowerField === 'full name' || lowerField === 'name of person') {
-          return { csvField, leadField: 'name', section };
+          leadField = 'name';
+          entityType = 'lead';
+        } else if (lowerField === 'email' || lowerField === 'email address' || lowerField.includes("e'mail")) {
+          leadField = 'email';
+          entityType = 'lead';
+        } else if (lowerField === 'company' || lowerField === 'company name' || lowerField === 'organization') {
+          leadField = 'company';
+          entityType = 'lead';
+        } else if (lowerField === 'phone' || lowerField === 'phone number' || lowerField === 'telephone') {
+          leadField = 'phone';
+          entityType = 'lead';
+        } else if (lowerField === 'status' || lowerField === 'stage' || lowerField === 'pipeline stage') {
+          leadField = 'status';
+          entityType = 'lead';
         }
-        if (lowerField === 'email' || lowerField === 'email address' || lowerField.includes("e'mail")) {
-          return { csvField, leadField: 'email', section };
-        }
-        if (lowerField === 'company' || lowerField === 'company name' || lowerField === 'organization') {
-          return { csvField, leadField: 'company', section };
-        }
-        if (lowerField === 'phone' || lowerField === 'phone number' || lowerField === 'telephone') {
-          return { csvField, leadField: 'phone', section };
-        }
-        if (lowerField === 'status' || lowerField === 'stage' || lowerField === 'pipeline stage') {
-          return { csvField, leadField: 'status', section };
-        }
-
         // LinkedIn fields
-        if (lowerField.includes('linkedin') && (lowerField.includes('link') || lowerField.includes('url') || lowerField.includes('profile'))) {
-          return { csvField, leadField: 'outreach.linkedIn.profileUrl', section };
+        else if (lowerField.includes('linkedin') && (lowerField.includes('link') || lowerField.includes('url') || lowerField.includes('profile'))) {
+          leadField = 'outreach.linkedIn.profileUrl';
+          entityType = 'lead';
+        } else if (section === 'linkedin' && (lowerField.includes('status') || lowerField.includes('response'))) {
+          leadField = 'outreach.linkedIn.status';
+          entityType = 'lead';
         }
-        if (section === 'linkedin' && (lowerField.includes('status') || lowerField.includes('response'))) {
-          return { csvField, leadField: 'outreach.linkedIn.status', section };
-        }
-
         // Email fields
-        if (section === 'email' && (lowerField.includes('status') || lowerField.includes('response'))) {
-          return { csvField, leadField: 'outreach.email.status', section };
+        else if (section === 'email' && (lowerField.includes('status') || lowerField.includes('response'))) {
+          leadField = 'outreach.email.status';
+          entityType = 'lead';
+        }
+        // Default to skip for unmapped columns
+        else {
+          leadField = 'skip';
+          entityType = detectEntityType(csvField, null);
         }
 
-        // Default to skip for unmapped columns (will be auto-created if global setting enabled)
-        return { csvField, leadField: 'skip', section, autoCreate: autoCreateFields };
+        return {
+          csvField,
+          leadField,
+          section,
+          entityType,
+          autoCreate: leadField === 'skip' ? true : undefined
+        };
       });
 
       setMappings(detectedMappings);
     }
-  }, [headers, autoCreateFields]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [headers]); // Only re-run when headers change, not when autoCreateFields changes
 
   const handleMappingChange = (csvField: string, leadField: string) => {
     setMappings((prev) =>
+      prev.map((mapping) => {
+        if (mapping.csvField === csvField) {
+          // Detect entity type based on the selected field
+          const standardField = STANDARD_FIELDS.find(f => f.value === leadField);
+          const entityType = standardField?.entityType || detectEntityType(csvField, leadField);
+
+          return {
+            ...mapping,
+            leadField,
+            entityType,
+            autoCreate: leadField === 'skip' ? autoCreateFields : undefined
+          };
+        }
+        return mapping;
+      })
+    );
+  };
+
+  const handleEntityTypeChange = (csvField: string, entityType: EntityType) => {
+    setMappings((prev) =>
       prev.map((mapping) =>
-        mapping.csvField === csvField
-          ? { ...mapping, leadField, autoCreate: leadField === 'skip' ? autoCreateFields : undefined }
-          : mapping
+        mapping.csvField === csvField ? { ...mapping, entityType } : mapping
       )
     );
   };
@@ -137,17 +169,6 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
     );
   };
 
-  const handleGlobalAutoCreateToggle = (checked: boolean) => {
-    setAutoCreateFields(checked);
-    // Update all skipped fields to match the new global setting
-    setMappings((prev) =>
-      prev.map((mapping) =>
-        mapping.leadField === 'skip' || mapping.leadField === null
-          ? { ...mapping, autoCreate: checked }
-          : mapping
-      )
-    );
-  };
 
   const getSampleValues = (csvField: string): string[] => {
     return data
@@ -182,6 +203,19 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
 
   const handleImport = async () => {
     if (!validateMappings() || !user) return;
+
+    // Count fields that will be auto-created
+    const fieldsToAutoCreate = mappings.filter(
+      (m) => (m.leadField === 'skip' || m.leadField === null) && m.autoCreate === true
+    ).length;
+
+    // Show confirmation if global auto-create is enabled or individual fields are marked
+    if (autoCreateFields && fieldsToAutoCreate > 0) {
+      const confirmMessage = `Auto-create is enabled and will create ${fieldsToAutoCreate} new custom field${fieldsToAutoCreate > 1 ? 's' : ''}. Continue?`;
+      if (!window.confirm(confirmMessage)) {
+        return;
+      }
+    }
 
     setImporting(true);
     setImportProgress({ current: 0, total: data.length });
@@ -221,9 +255,10 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
     : 0;
 
   // Render a single field mapping row
-  const renderFieldMappingRow = (mapping: FieldMapping, availableFields: Array<{ value: string; label: string }>) => {
+  const renderFieldMappingRow = (mapping: FieldMapping, availableFields: Array<{ value: string; label: string; entityType?: EntityType }>) => {
     const samples = getSampleValues(mapping.csvField);
     const isSkipped = mapping.leadField === 'skip' || mapping.leadField === null;
+    const showEntityType = isSkipped || ['website', 'industry', 'description'].includes(mapping.leadField || '');
 
     return (
       <Box
@@ -236,29 +271,30 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
           bgcolor: 'white',
         }}
       >
+        {/* CSV field info */}
+        <Box sx={{ mb: 1.5 }}>
+          <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+            CSV Column: <Chip label={mapping.csvField} size="small" sx={{ ml: 1 }} />
+          </Typography>
+
+          {samples.length > 0 && (
+            <Typography variant="caption" sx={{ color: '#64748b', display: 'block' }}>
+              Sample values: {samples.join(', ')}
+            </Typography>
+          )}
+        </Box>
+
+        {/* Mapping controls row */}
         <Box
           sx={{
             display: 'flex',
             flexDirection: { xs: 'column', md: 'row' },
             gap: 2,
-            alignItems: { xs: 'stretch', md: 'center' },
+            alignItems: { xs: 'stretch', md: 'flex-start' },
           }}
         >
-          {/* Left column: CSV field info */}
-          <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 60%' } }}>
-            <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
-              CSV Column: <Chip label={mapping.csvField} size="small" sx={{ ml: 1 }} />
-            </Typography>
-
-            {samples.length > 0 && (
-              <Typography variant="caption" sx={{ color: '#64748b', display: 'block' }}>
-                Sample values: {samples.join(', ')}
-              </Typography>
-            )}
-          </Box>
-
-          {/* Right column: Mapping dropdown */}
-          <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 40%' } }}>
+          {/* Field mapping dropdown */}
+          <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 45%' } }}>
             <FormControl fullWidth size="small">
               <Select
                 value={mapping.leadField || 'skip'}
@@ -275,8 +311,26 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
                 ))}
               </Select>
             </FormControl>
+          </Box>
 
-            {/* Per-field auto-create checkbox */}
+          {/* Entity Type dropdown */}
+          {showEntityType && (
+            <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 30%' } }}>
+              <FormControl fullWidth size="small">
+                <Select
+                  value={mapping.entityType || 'lead'}
+                  onChange={(e) => handleEntityTypeChange(mapping.csvField, e.target.value as EntityType)}
+                  sx={{ bgcolor: 'white' }}
+                >
+                  <MenuItem value="lead">Lead</MenuItem>
+                  <MenuItem value="company">Company</MenuItem>
+                </Select>
+              </FormControl>
+            </Box>
+          )}
+
+          {/* Per-field auto-create checkbox */}
+          <Box sx={{ flex: { xs: '1 1 100%', md: '1 1 25%' }, display: 'flex', alignItems: 'center' }}>
             {isSkipped && (
               <FormControlLabel
                 control={
@@ -291,7 +345,7 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
                     Auto-create as custom field
                   </Typography>
                 }
-                sx={{ mt: 1, ml: 0 }}
+                sx={{ ml: 0 }}
               />
             )}
           </Box>
@@ -435,7 +489,7 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
               control={
                 <Checkbox
                   checked={autoCreateFields}
-                  onChange={(e) => handleGlobalAutoCreateToggle(e.target.checked)}
+                  onChange={(e) => setAutoCreateFields(e.target.checked)}
                 />
               }
               label="Auto-create custom fields for unmapped columns"
@@ -482,14 +536,6 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
                     {importResult.successful} leads imported successfully
                   </Typography>
                 </Box>
-                {importResult.customFieldsCreated > 0 && (
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <InfoIcon sx={{ fontSize: 18, color: '#3b82f6' }} />
-                    <Typography variant="body2">
-                      {importResult.customFieldsCreated} custom fields created
-                    </Typography>
-                  </Box>
-                )}
                 {importResult.duplicates > 0 && (
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <WarningIcon sx={{ fontSize: 18, color: '#f59e0b' }} />

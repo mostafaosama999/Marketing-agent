@@ -14,6 +14,7 @@ import TeamMemberPerformance from './pages/team/TeamMemberPerformance';
 import ProjectMonitoring from './pages/analytics/ProjectMonitoring';
 import LeadAnalytics from './pages/analytics/LeadAnalytics';
 import CompaniesPage from './pages/companies/CompaniesPage';
+import CompanyDetailPage from './pages/companies/CompanyDetailPage';
 
 // Components
 import Navbar from './components/layout/Navbar';
@@ -80,6 +81,7 @@ function AppContent() {
         <Routes>
           <Route path="/review/:taskId" element={<TaskReview />} />
           <Route path="/companies" element={<CompaniesPage />} />
+          <Route path="/companies/:companyId" element={<CompanyDetailPage />} />
           <Route path="/team" element={<TeamManagement />} />
           <Route path="/team-member/:userId" element={<TeamMemberPerformance />} />
           <Route path="/analytics" element={<LeadAnalytics />} />

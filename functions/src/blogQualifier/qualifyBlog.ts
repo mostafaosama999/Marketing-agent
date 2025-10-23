@@ -35,10 +35,11 @@ export const qualifyCompanyBlog = functions.https.onCall(
       );
     }
 
-    if (!leadId || typeof leadId !== "string") {
+    // leadId is optional - only required when updating a lead
+    if (leadId && typeof leadId !== "string") {
       throw new functions.https.HttpsError(
         "invalid-argument",
-        "Lead ID is required and must be a string"
+        "Lead ID must be a string if provided"
       );
     }
 
@@ -78,18 +79,20 @@ export const qualifyCompanyBlog = functions.https.onCall(
         );
       }
 
-      // Save qualification result to the lead in Firestore
-      const db = admin.firestore();
-      const leadRef = db.collection("leads").doc(leadId);
+      // Save qualification result to the lead in Firestore (only if leadId provided)
+      if (leadId) {
+        const db = admin.firestore();
+        const leadRef = db.collection("leads").doc(leadId);
 
-      await leadRef.update({
-        blogQualified: result.qualified,
-        blogQualificationData: result,
-        blogQualifiedAt: FieldValue.serverTimestamp(),
-        updatedAt: FieldValue.serverTimestamp(),
-      });
+        await leadRef.update({
+          blogQualified: result.qualified,
+          blogQualificationData: result,
+          blogQualifiedAt: FieldValue.serverTimestamp(),
+          updatedAt: FieldValue.serverTimestamp(),
+        });
 
-      console.log(`Saved qualification result to lead ${leadId}`);
+        console.log(`Saved qualification result to lead ${leadId}`);
+      }
 
       return result;
     } catch (error: any) {

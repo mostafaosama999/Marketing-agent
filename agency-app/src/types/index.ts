@@ -42,16 +42,12 @@ export type {
   CompanyFormData,
   PipelineStage,
   PipelineConfig,
-  CustomField,
-  CustomFieldType,
-  CustomFieldsConfig,
   CSVRow,
   FieldMapping
 } from './crm';
 
 export {
   DEFAULT_PIPELINE_STAGES,
-  DEFAULT_CUSTOM_FIELDS,
   STATUS_TO_LEAD_STATUS,
   LEAD_STATUS_TO_LABEL
 } from './crm';

@@ -16,6 +16,49 @@ export interface Company {
   // API Cost Tracking
   totalApiCosts?: number;
   lastApiCostUpdate?: Date;
+
+  // Writing Program Analysis
+  writingProgramAnalysis?: {
+    hasProgram: boolean;
+    programUrl: string | null;
+    isOpen: boolean | null;
+    openDates: { openFrom: string; closedFrom: string } | null;
+    paymentAmount: string | null;
+    historicalPayment: string | null;
+    lastAnalyzedAt: Date;
+    aiReasoning?: string;
+    costInfo?: {
+      totalCost: number;
+      totalTokens: number;
+    };
+  };
+
+  // Blog Analysis
+  blogAnalysis?: {
+    lastActivePost: string | null; // ISO date string or relative time
+    monthlyFrequency: number; // Posts per month
+    writers: {
+      count: number;
+      areEmployees: boolean;
+      areFreelancers: boolean;
+      list: string[]; // Array of writer names
+    };
+    blogNature: {
+      isAIWritten: boolean;
+      isTechnical: boolean;
+      rating: 'low' | 'medium' | 'high';
+      hasCodeExamples: boolean;
+      hasDiagrams: boolean;
+    };
+    isDeveloperB2BSaas: boolean;
+    contentSummary: string;
+    blogUrl: string | null;
+    lastAnalyzedAt: Date;
+    costInfo?: {
+      totalCost: number;
+      totalTokens: number;
+    };
+  };
 }
 
 export interface CompanyFormData {
@@ -52,85 +95,20 @@ export const DEFAULT_PIPELINE_STAGES: Omit<PipelineStage, 'id'>[] = [
   { label: 'Lost', color: '#607d8b', order: 5, visible: true },
 ];
 
-// Custom Fields Configuration
-export type CustomFieldType =
-  | 'text'
-  | 'textarea'
-  | 'number'
-  | 'select'
-  | 'radio'
-  | 'checkbox'
-  | 'date'
-  | 'url';
-
-export interface CustomField {
-  id: string;
-  name: string; // Internal field name (e.g., "lead_owner")
-  label: string; // Display label (e.g., "Lead Owner")
-  type: CustomFieldType;
-  options?: string[]; // For select, radio, checkbox types
-  required: boolean;
-  visible: boolean; // Show in UI
-  showInTable: boolean; // Display as column in table view
-  showInCard: boolean; // Display on kanban cards
-  order: number; // Display order
-}
-
-export interface CustomFieldsConfig {
-  id: string;
-  fields: CustomField[];
-  createdAt: Date;
-  updatedAt: Date;
-}
-
-// Default custom fields
-export const DEFAULT_CUSTOM_FIELDS: Omit<CustomField, 'id'>[] = [
-  {
-    name: 'lead_owner',
-    label: 'Lead Owner',
-    type: 'select',
-    options: ['Unassigned', 'Sales Team A', 'Sales Team B', 'Sales Team C'],
-    required: false,
-    visible: true,
-    showInTable: true,
-    showInCard: true,
-    order: 0,
-  },
-  {
-    name: 'priority',
-    label: 'Priority',
-    type: 'select',
-    options: ['Low', 'Medium', 'High', 'Urgent'],
-    required: false,
-    visible: true,
-    showInTable: true,
-    showInCard: true,
-    order: 1,
-  },
-  {
-    name: 'deal_value',
-    label: 'Deal Value',
-    type: 'number',
-    required: false,
-    visible: true,
-    showInTable: true,
-    showInCard: false,
-    order: 2,
-  },
-];
-
 // CSV Import types
 export interface CSVRow {
   [key: string]: string;
 }
 
 export type FieldSection = 'general' | 'linkedin' | 'email';
+export type EntityType = 'lead' | 'company';
 
 export interface FieldMapping {
   csvField: string;
   leadField: string | null; // Lead field name or custom field name
   section?: FieldSection; // Section grouping for UI
   autoCreate?: boolean; // Whether to auto-create this field as custom field if unmapped
+  entityType?: EntityType; // Whether this field applies to lead or company entity
 }
 
 // Status to internal LeadStatus mapping

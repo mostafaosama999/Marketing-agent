@@ -1,5 +1,5 @@
 // src/components/features/crm/CRMLeadsTable.tsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useEffect } from 'react';
 import {
   Box,
   Table,
@@ -17,6 +17,7 @@ import {
   MenuItem,
   Checkbox,
   Link,
+  TablePagination,
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -93,6 +94,16 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
   const [selectedLeadForStatus, setSelectedLeadForStatus] = useState<Lead | null>(null);
   const [collapsedCompanies, setCollapsedCompanies] = useState<Set<string>>(new Set());
 
+  // Pagination state
+  const [page, setPage] = useState(() => {
+    const saved = localStorage.getItem('crm_table_page');
+    return saved ? parseInt(saved, 10) : 0;
+  });
+  const [rowsPerPage, setRowsPerPage] = useState(() => {
+    const saved = localStorage.getItem('crm_table_rows_per_page');
+    return saved ? parseInt(saved, 10) : 25;
+  });
+
   // Toggle company collapse/expand
   const toggleCompanyCollapse = (companyName: string) => {
     setCollapsedCompanies(prev => {
@@ -124,10 +135,6 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
       });
     }
   };
-
-  // Check if all leads are selected
-  const allSelected = leads.length > 0 && selectedLeadIds.length === leads.length;
-  const someSelected = selectedLeadIds.length > 0 && selectedLeadIds.length < leads.length;
 
   // Sorting handler
   const handleRequestSort = (fieldId: string) => {
@@ -244,14 +251,59 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
     return groups;
   }, [sortedLeads]);
 
-  // Get company names sorted by number of leads (descending) then alphabetically
-  const sortedCompanies = useMemo(() => {
-    return Object.keys(groupedLeads).sort((a, b) => {
-      const countDiff = groupedLeads[b].length - groupedLeads[a].length;
+  // Paginate leads (not companies)
+  const paginatedLeads = useMemo(() => {
+    const start = page * rowsPerPage;
+    const end = start + rowsPerPage;
+    return sortedLeads.slice(start, end);
+  }, [sortedLeads, page, rowsPerPage]);
+
+  // Group only the paginated leads by company
+  const paginatedGroupedLeads = useMemo(() => {
+    const groups: { [company: string]: Lead[] } = {};
+    paginatedLeads.forEach(lead => {
+      const company = lead.company || lead.companyName || 'No Company';
+      if (!groups[company]) {
+        groups[company] = [];
+      }
+      groups[company].push(lead);
+    });
+    return groups;
+  }, [paginatedLeads]);
+
+  // Get companies for current page only, sorted by lead count then alphabetically
+  const paginatedCompanies = useMemo(() => {
+    return Object.keys(paginatedGroupedLeads).sort((a, b) => {
+      const countDiff = paginatedGroupedLeads[b].length - paginatedGroupedLeads[a].length;
       if (countDiff !== 0) return countDiff;
       return a.localeCompare(b);
     });
-  }, [groupedLeads]);
+  }, [paginatedGroupedLeads]);
+
+  // Calculate current page lead IDs
+  const currentPageLeadIds = useMemo(() => {
+    return paginatedLeads.map(lead => lead.id);
+  }, [paginatedLeads]);
+
+  // Check if all leads on current page are selected
+  const allSelected = currentPageLeadIds.length > 0 &&
+                      currentPageLeadIds.every(id => selectedLeadIds.includes(id));
+  const someSelected = selectedLeadIds.length > 0 && !allSelected;
+
+  // Reset page when sorting changes
+  useEffect(() => {
+    setPage(0);
+    localStorage.setItem('crm_table_page', '0');
+  }, [orderBy, order]);
+
+  // Save pagination preferences
+  useEffect(() => {
+    localStorage.setItem('crm_table_page', page.toString());
+  }, [page]);
+
+  useEffect(() => {
+    localStorage.setItem('crm_table_rows_per_page', rowsPerPage.toString());
+  }, [rowsPerPage]);
 
   // Render cell content based on column id
   const renderCell = (columnId: string, lead: Lead) => {
@@ -259,7 +311,7 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
       case 'name':
         return (
           <TableCell key={columnId} onClick={() => onLeadClick(lead)} sx={{ cursor: 'pointer' }}>
-            <Typography variant="body2" sx={{ fontSize: '13px' }}>
+            <Typography variant="body2" sx={{ fontSize: '11px', lineHeight: 1.2 }}>
               {lead.name || '-'}
             </Typography>
           </TableCell>
@@ -268,7 +320,7 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
       case 'email':
         return (
           <TableCell key={columnId}>
-            <Typography variant="body2" sx={{ fontSize: '13px' }}>
+            <Typography variant="body2" sx={{ fontSize: '11px', lineHeight: 1.2 }}>
               {lead.email || '-'}
             </Typography>
           </TableCell>
@@ -277,7 +329,7 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
       case 'company':
         return (
           <TableCell key={columnId}>
-            <Typography variant="body2" sx={{ fontSize: '13px' }}>
+            <Typography variant="body2" sx={{ fontSize: '11px', lineHeight: 1.2 }}>
               {lead.company || lead.companyName || '-'}
             </Typography>
           </TableCell>
@@ -294,7 +346,8 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
                 bgcolor: `${getStatusColor(lead.status)}22`,
                 color: getStatusColor(lead.status),
                 fontWeight: 500,
-                fontSize: '11px',
+                fontSize: '10px',
+                height: '20px',
                 cursor: 'pointer',
                 '&:hover': {
                   bgcolor: `${getStatusColor(lead.status)}33`,
@@ -309,7 +362,7 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
         if (!status || status === 'not_sent') {
           return (
             <TableCell key={columnId}>
-              <Typography variant="body2" sx={{ fontSize: '12px', color: 'text.secondary' }}>-</Typography>
+              <Typography variant="body2" sx={{ fontSize: '11px', lineHeight: 1.2, color: 'text.secondary' }}>-</Typography>
             </TableCell>
           );
         }
@@ -329,7 +382,8 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
                 bgcolor: colors.bg,
                 color: colors.color,
                 fontWeight: 500,
-                fontSize: '11px',
+                fontSize: '10px',
+                height: '20px',
               }}
             />
           </TableCell>
@@ -341,7 +395,7 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
         if (!status || status === 'not_sent') {
           return (
             <TableCell key={columnId}>
-              <Typography variant="body2" sx={{ fontSize: '12px', color: 'text.secondary' }}>-</Typography>
+              <Typography variant="body2" sx={{ fontSize: '11px', lineHeight: 1.2, color: 'text.secondary' }}>-</Typography>
             </TableCell>
           );
         }
@@ -362,7 +416,8 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
                 bgcolor: colors.bg,
                 color: colors.color,
                 fontWeight: 500,
-                fontSize: '11px',
+                fontSize: '10px',
+                height: '20px',
               }}
             />
           </TableCell>
@@ -373,7 +428,7 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
         const date = lead.createdAt instanceof Date ? lead.createdAt : new Date(lead.createdAt);
         return (
           <TableCell key={columnId}>
-            <Typography variant="body2" sx={{ fontSize: '13px' }}>
+            <Typography variant="body2" sx={{ fontSize: '11px', lineHeight: 1.2 }}>
               {date.toLocaleDateString('en-US', {
                 month: 'short',
                 day: 'numeric',
@@ -393,7 +448,7 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
           if (!value || value === '') {
             return (
               <TableCell key={columnId}>
-                <Typography variant="body2" sx={{ fontSize: '12px', color: 'text.secondary' }}>-</Typography>
+                <Typography variant="body2" sx={{ fontSize: '11px', lineHeight: 1.2, color: 'text.secondary' }}>-</Typography>
               </TableCell>
             );
           }
@@ -410,7 +465,8 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
                   target="_blank"
                   rel="noopener noreferrer"
                   sx={{
-                    fontSize: '13px',
+                    fontSize: '11px',
+                    lineHeight: 1.2,
                     color: '#667eea',
                     textDecoration: 'none',
                     '&:hover': {
@@ -426,7 +482,7 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
 
           return (
             <TableCell key={columnId}>
-              <Typography variant="body2" sx={{ fontSize: '13px' }}>
+              <Typography variant="body2" sx={{ fontSize: '11px', lineHeight: 1.2 }}>
                 {String(value)}
               </Typography>
             </TableCell>
@@ -451,14 +507,15 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
       >
         <Table size="small">
           <TableHead>
-            <TableRow sx={{ bgcolor: '#fafafa', borderBottom: '2px solid #e0e0e0' }}>
+            <TableRow sx={{ bgcolor: '#fafafa', borderBottom: '2px solid #e0e0e0', height: '36px' }}>
               {/* Checkbox column */}
               <TableCell
                 padding="checkbox"
                 sx={{
                   width: 48,
-                  py: 1,
-                  px: 1.5,
+                  py: 0,
+                  px: 1,
+                  height: '36px',
                 }}
               >
                 <Checkbox
@@ -479,13 +536,14 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
                 <TableCell
                   key={column.id}
                   sx={{
-                    py: 1,
-                    px: 1.5,
-                    fontSize: '12px',
+                    py: 0,
+                    px: 1,
+                    fontSize: '10px',
                     fontWeight: 600,
                     color: '#64748b',
                     textTransform: 'uppercase',
                     letterSpacing: '0.5px',
+                    height: '36px',
                   }}
                 >
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
@@ -565,8 +623,8 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
                 </TableCell>
               </TableRow>
             ) : (
-              sortedCompanies.map((companyName) => {
-                const companyLeads = groupedLeads[companyName];
+              paginatedCompanies.map((companyName) => {
+                const companyLeads = paginatedGroupedLeads[companyName];
                 const isCollapsed = collapsedCompanies.has(companyName);
                 const companyLeadIds = companyLeads.map(l => l.id);
                 const allCompanySelected = companyLeadIds.every(id => selectedLeadIds.includes(id));
@@ -578,15 +636,17 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
                     <TableRow
                       sx={{
                         bgcolor: '#f8fafc',
+                        height: '36px',
                         '&:hover': { bgcolor: '#f1f5f9' },
                         '& .MuiTableCell-root': {
                           borderBottom: '2px solid #e2e8f0',
-                          py: 1.5,
-                          px: 1.5,
+                          py: 0,
+                          px: 1,
+                          height: '36px',
                         },
                       }}
                     >
-                      <TableCell padding="checkbox" sx={{ py: 1.5, px: 1.5 }}>
+                      <TableCell padding="checkbox" sx={{ py: 0, px: 1 }}>
                         <Checkbox
                           checked={allCompanySelected}
                           indeterminate={someCompanySelected}
@@ -600,23 +660,23 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
                         />
                       </TableCell>
                       <TableCell colSpan={displayColumns.length}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                           <IconButton
                             size="small"
                             onClick={() => toggleCompanyCollapse(companyName)}
-                            sx={{ p: 0.5 }}
+                            sx={{ p: 0.25 }}
                           >
-                            {isCollapsed ? <ChevronRightIcon /> : <ExpandMoreIcon />}
+                            {isCollapsed ? <ChevronRightIcon sx={{ fontSize: '16px' }} /> : <ExpandMoreIcon sx={{ fontSize: '16px' }} />}
                           </IconButton>
-                          <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '14px' }}>
+                          <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '11px', lineHeight: 1.2 }}>
                             {companyName}
                           </Typography>
                           <Chip
                             label={`${companyLeads.length} lead${companyLeads.length > 1 ? 's' : ''}`}
                             size="small"
                             sx={{
-                              height: '20px',
-                              fontSize: '11px',
+                              height: '18px',
+                              fontSize: '9px',
                               bgcolor: '#e0e7ff',
                               color: '#667eea',
                               fontWeight: 600,
@@ -638,13 +698,15 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
                           sx={{
                             cursor: 'pointer',
                             bgcolor: '#fafbfc',
+                            height: '32px',
                             '&:hover': {
                               bgcolor: '#f5f5f5',
                             },
                             '& .MuiTableCell-root': {
                               borderBottom: '1px solid #e0e0e0',
-                              py: 1,
-                              px: 1.5,
+                              py: 0,
+                              px: 1,
+                              height: '32px',
                             },
                           }}
                         >
@@ -652,7 +714,7 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
                           <TableCell
                             padding="checkbox"
                             onClick={(e) => e.stopPropagation()}
-                            sx={{ py: 1, px: 1.5, pl: 3 }}
+                            sx={{ py: 0, px: 1, pl: 2 }}
                           >
                             <Checkbox
                               checked={isSelected}
@@ -670,8 +732,8 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
                             if (index === 0 && column.id === 'name') {
                               // Add indentation to name column
                               return (
-                                <TableCell key={column.id} onClick={() => onLeadClick(lead)} sx={{ cursor: 'pointer', pl: 5 }}>
-                                  <Typography variant="body2" sx={{ fontSize: '13px' }}>
+                                <TableCell key={column.id} onClick={() => onLeadClick(lead)} sx={{ cursor: 'pointer', pl: 3 }}>
+                                  <Typography variant="body2" sx={{ fontSize: '11px', lineHeight: 1.2 }}>
                                     {lead.name || '-'}
                                   </Typography>
                                 </TableCell>
@@ -689,6 +751,32 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
           </TableBody>
         </Table>
       </TableContainer>
+
+      {/* Pagination */}
+      <TablePagination
+        component="div"
+        count={sortedLeads.length}
+        page={page}
+        onPageChange={(event, newPage) => setPage(newPage)}
+        rowsPerPage={rowsPerPage}
+        onRowsPerPageChange={(event) => {
+          setRowsPerPage(parseInt(event.target.value, 10));
+          setPage(0);
+        }}
+        rowsPerPageOptions={[10, 25, 50, 100, 250, 500, 1000]}
+        labelRowsPerPage="Leads per page:"
+        sx={{
+          borderTop: '1px solid #e2e8f0',
+          bgcolor: '#fafafa',
+          '.MuiTablePagination-toolbar': {
+            px: 2,
+          },
+          '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
+            fontSize: '13px',
+            color: '#64748b',
+          },
+        }}
+      />
 
       {/* Status Change Menu */}
       <Menu

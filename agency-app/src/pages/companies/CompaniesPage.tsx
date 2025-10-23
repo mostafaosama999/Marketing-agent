@@ -1,5 +1,6 @@
 // src/pages/companies/CompaniesPage.tsx
 import React, { useState, useEffect, useMemo } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -7,49 +8,106 @@ import {
   TextField,
   InputAdornment,
   CircularProgress,
-  Dialog,
-  DialogTitle,
-  DialogContent,
-  DialogActions,
-  Button,
-  DialogContentText,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
 import {
   Add as AddIcon,
   Search as SearchIcon,
+  ViewColumn as ViewColumnIcon,
 } from '@mui/icons-material';
 import { Company } from '../../types/crm';
 import { subscribeToCompanies, countLeadsForCompany, deleteCompany } from '../../services/api/companies';
 import { CompanyDialog } from '../../components/features/companies/CompanyDialog';
 import { CompanyTable } from '../../components/features/companies/CompanyTable';
+import { TableColumnVisibilityMenu } from '../../components/features/crm/TableColumnVisibilityMenu';
+import {
+  TableColumnConfig,
+  DEFAULT_COMPANIES_TABLE_COLUMNS,
+  COMPANIES_TABLE_COLUMNS_STORAGE_KEY,
+  applyVisibilityPreferences,
+} from '../../types/table';
+import {
+  buildCompaniesTableColumns,
+  columnsToVisibilityMap,
+} from '../../services/api/tableColumnsService';
 
 export const CompaniesPage: React.FC = () => {
+  const navigate = useNavigate();
   const [companies, setCompanies] = useState<Array<Company & { leadCount: number }>>([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [openDialog, setOpenDialog] = useState(false);
-  const [selectedCompany, setSelectedCompany] = useState<Company | null>(null);
-  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
-  const [companyToDelete, setCompanyToDelete] = useState<(Company & { leadCount: number}) | null>(null);
-  const [deleting, setDeleting] = useState(false);
+
+  // Table column visibility state
+  const [tableColumns, setTableColumns] = useState<TableColumnConfig[]>(DEFAULT_COMPANIES_TABLE_COLUMNS);
 
   // Subscribe to companies with real-time updates
   useEffect(() => {
     const unsubscribe = subscribeToCompanies(async (companiesData) => {
-      // Fetch lead counts for each company
+      // Fetch lead counts for each company and auto-delete those with 0 leads
       const companiesWithCounts = await Promise.all(
         companiesData.map(async (company) => {
           const leadCount = await countLeadsForCompany(company.id);
+
+          // Auto-delete companies with 0 leads
+          if (leadCount === 0) {
+            try {
+              await deleteCompany(company.id);
+              console.log(`Auto-deleted company with 0 leads: ${company.name}`);
+            } catch (error) {
+              console.error(`Failed to delete company ${company.name}:`, error);
+            }
+            return null; // Mark for filtering
+          }
+
           return { ...company, leadCount };
         })
       );
 
-      setCompanies(companiesWithCounts);
+      // Filter out null entries (deleted companies)
+      setCompanies(companiesWithCounts.filter((c): c is Company & { leadCount: number } => c !== null));
       setLoading(false);
     });
 
     return () => unsubscribe();
   }, []);
+
+  // Load table columns (default + custom fields from companies)
+  useEffect(() => {
+    async function initializeTableColumns() {
+      try {
+        // Build complete column list from default + company custom fields
+        const allColumns = await buildCompaniesTableColumns(companies);
+
+        // Load saved visibility preferences from localStorage
+        const savedPrefs = localStorage.getItem(COMPANIES_TABLE_COLUMNS_STORAGE_KEY);
+        let visibilityMap: Record<string, boolean> | null = null;
+
+        if (savedPrefs) {
+          try {
+            visibilityMap = JSON.parse(savedPrefs);
+          } catch (e) {
+            console.error('Error parsing saved column preferences:', e);
+          }
+        }
+
+        // Apply saved preferences to columns
+        const columnsWithPreferences = applyVisibilityPreferences(allColumns, visibilityMap);
+
+        setTableColumns(columnsWithPreferences);
+      } catch (error) {
+        console.error('Error loading table columns:', error);
+        // Fallback to default columns
+        setTableColumns(DEFAULT_COMPANIES_TABLE_COLUMNS);
+      }
+    }
+
+    // Only initialize once companies are loaded
+    if (companies.length > 0) {
+      initializeTableColumns();
+    }
+  }, [companies]);
 
   // Filter companies based on search term
   const filteredCompanies = useMemo(() => {
@@ -66,39 +124,69 @@ export const CompaniesPage: React.FC = () => {
   }, [companies, searchTerm]);
 
   const handleAddCompany = () => {
-    setSelectedCompany(null);
     setOpenDialog(true);
   };
 
-  const handleEditCompany = (company: Company) => {
-    setSelectedCompany(company);
-    setOpenDialog(true);
-  };
-
-  const handleDeleteCompany = (company: Company & { leadCount: number }) => {
-    setCompanyToDelete(company);
-    setDeleteDialogOpen(true);
-  };
-
-  const confirmDelete = async () => {
-    if (!companyToDelete) return;
-
-    setDeleting(true);
-    try {
-      await deleteCompany(companyToDelete.id);
-      setDeleteDialogOpen(false);
-      setCompanyToDelete(null);
-    } catch (error) {
-      console.error('Error deleting company:', error);
-      alert('Failed to delete company. Please try again.');
-    } finally {
-      setDeleting(false);
-    }
+  const handleViewCompany = (company: Company) => {
+    navigate(`/companies/${company.id}`);
   };
 
   const handleDialogClose = () => {
     setOpenDialog(false);
-    setSelectedCompany(null);
+  };
+
+  // Column visibility handlers
+  const handleColumnVisibilityChange = (columnId: string, visible: boolean) => {
+    const updatedColumns = tableColumns.map(col =>
+      col.id === columnId ? { ...col, visible } : col
+    );
+    setTableColumns(updatedColumns);
+
+    // Save to localStorage
+    const visibilityMap = columnsToVisibilityMap(updatedColumns);
+    localStorage.setItem(COMPANIES_TABLE_COLUMNS_STORAGE_KEY, JSON.stringify(visibilityMap));
+  };
+
+  const handleMoveColumnLeft = (columnId: string) => {
+    const columnIndex = tableColumns.findIndex(col => col.id === columnId);
+    if (columnIndex <= 0) return; // Already at start or not found
+
+    const newColumns = [...tableColumns];
+    const temp = newColumns[columnIndex];
+    newColumns[columnIndex] = newColumns[columnIndex - 1];
+    newColumns[columnIndex - 1] = temp;
+
+    // Update order values
+    newColumns.forEach((col, idx) => {
+      col.order = idx;
+    });
+
+    setTableColumns(newColumns);
+
+    // Save to localStorage
+    const visibilityMap = columnsToVisibilityMap(newColumns);
+    localStorage.setItem(COMPANIES_TABLE_COLUMNS_STORAGE_KEY, JSON.stringify(visibilityMap));
+  };
+
+  const handleMoveColumnRight = (columnId: string) => {
+    const columnIndex = tableColumns.findIndex(col => col.id === columnId);
+    if (columnIndex === -1 || columnIndex >= tableColumns.length - 1) return; // Already at end or not found
+
+    const newColumns = [...tableColumns];
+    const temp = newColumns[columnIndex];
+    newColumns[columnIndex] = newColumns[columnIndex + 1];
+    newColumns[columnIndex + 1] = temp;
+
+    // Update order values
+    newColumns.forEach((col, idx) => {
+      col.order = idx;
+    });
+
+    setTableColumns(newColumns);
+
+    // Save to localStorage
+    const visibilityMap = columnsToVisibilityMap(newColumns);
+    localStorage.setItem(COMPANIES_TABLE_COLUMNS_STORAGE_KEY, JSON.stringify(visibilityMap));
   };
 
   if (loading) {
@@ -161,35 +249,43 @@ export const CompaniesPage: React.FC = () => {
           </Box>
         </Box>
 
-        {/* Search Bar */}
-        <TextField
-          fullWidth
-          placeholder="Search companies by name, industry, or website..."
-          value={searchTerm}
-          onChange={(e) => setSearchTerm(e.target.value)}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon sx={{ color: '#94a3b8' }} />
-              </InputAdornment>
-            ),
-          }}
-          sx={{
-            '& .MuiOutlinedInput-root': {
-              backgroundColor: 'white',
-              borderRadius: 2,
-              '& fieldset': {
-                borderColor: '#e2e8f0',
+        {/* Search Bar and Column Visibility */}
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+          <TextField
+            fullWidth
+            placeholder="Search companies by name, industry, or website..."
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon sx={{ color: '#94a3b8' }} />
+                </InputAdornment>
+              ),
+            }}
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                backgroundColor: 'white',
+                borderRadius: 2,
+                '& fieldset': {
+                  borderColor: '#e2e8f0',
+                },
+                '&:hover fieldset': {
+                  borderColor: '#667eea',
+                },
+                '&.Mui-focused fieldset': {
+                  borderColor: '#667eea',
+                },
               },
-              '&:hover fieldset': {
-                borderColor: '#667eea',
-              },
-              '&.Mui-focused fieldset': {
-                borderColor: '#667eea',
-              },
-            },
-          }}
-        />
+            }}
+          />
+
+          {/* Column Visibility Menu */}
+          <TableColumnVisibilityMenu
+            columns={tableColumns}
+            onToggleVisibility={handleColumnVisibilityChange}
+          />
+        </Box>
       </Box>
 
       {/* Company Count */}
@@ -203,8 +299,10 @@ export const CompaniesPage: React.FC = () => {
       {/* Companies Table */}
       <CompanyTable
         companies={filteredCompanies}
-        onEdit={handleEditCompany}
-        onDelete={handleDeleteCompany}
+        onView={handleViewCompany}
+        visibleColumns={tableColumns}
+        onMoveColumnLeft={handleMoveColumnLeft}
+        onMoveColumnRight={handleMoveColumnRight}
       />
 
       {/* Add Company FAB */}
@@ -227,63 +325,15 @@ export const CompaniesPage: React.FC = () => {
         <AddIcon />
       </Fab>
 
-      {/* Add/Edit Company Dialog */}
+      {/* Add Company Dialog (Create mode only) */}
       <CompanyDialog
         open={openDialog}
         onClose={handleDialogClose}
-        company={selectedCompany}
         onSuccess={() => {
           // Dialog will close automatically
           // Companies list will update automatically via subscription
         }}
       />
-
-      {/* Delete Confirmation Dialog */}
-      <Dialog
-        open={deleteDialogOpen}
-        onClose={() => !deleting && setDeleteDialogOpen(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle sx={{ fontWeight: 700 }}>
-          {companyToDelete?.leadCount === 0 ? 'Delete Company?' : 'Cannot Delete Company'}
-        </DialogTitle>
-        <DialogContent>
-          {companyToDelete?.leadCount === 0 ? (
-            <DialogContentText>
-              Are you sure you want to delete <strong>{companyToDelete?.name}</strong>?
-              This action cannot be undone.
-            </DialogContentText>
-          ) : (
-            <DialogContentText>
-              Cannot delete <strong>{companyToDelete?.name}</strong> because it has{' '}
-              <strong>{companyToDelete?.leadCount} associated lead{companyToDelete?.leadCount !== 1 ? 's' : ''}</strong>.
-              <br /><br />
-              Please delete or reassign all leads first, then try again.
-            </DialogContentText>
-          )}
-        </DialogContent>
-        <DialogActions sx={{ px: 3, pb: 3 }}>
-          <Button
-            onClick={() => setDeleteDialogOpen(false)}
-            disabled={deleting}
-            sx={{ textTransform: 'none', fontWeight: 600 }}
-          >
-            {companyToDelete?.leadCount === 0 ? 'Cancel' : 'Close'}
-          </Button>
-          {companyToDelete?.leadCount === 0 && (
-            <Button
-              onClick={confirmDelete}
-              disabled={deleting}
-              variant="contained"
-              color="error"
-              sx={{ textTransform: 'none', fontWeight: 600 }}
-            >
-              {deleting ? <CircularProgress size={24} /> : 'Delete'}
-            </Button>
-          )}
-        </DialogActions>
-      </Dialog>
     </Box>
   );
 };
