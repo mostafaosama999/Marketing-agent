@@ -275,23 +275,36 @@ export const enrichOrganizationCloud = functions.https.onCall(
                 symbol: organization.publicly_traded_symbol,
                 exchange: organization.publicly_traded_exchange || null,
               } : null,
-              lastEnrichedAt: new Date(),
+              lastEnrichedAt: new Date().toISOString(),
               costInfo: {
                 credits: 1,
-                timestamp: new Date(),
+                timestamp: new Date().toISOString(),
               },
             },
-            updatedAt: new Date(),
+            updatedAt: new Date().toISOString(),
           };
 
-          await companyRef.update(enrichmentData);
+          // Use set with merge instead of update to avoid issues with non-existent documents
+          await companyRef.set(enrichmentData, { merge: true });
 
           functions.logger.info("Apollo API: Updated company record in Firestore", {
             companyId: data.companyId,
           });
         } catch (firestoreError) {
-          functions.logger.error("Apollo API: Error updating Firestore", firestoreError);
-          // Don't fail the whole request if Firestore update fails
+          functions.logger.error("Apollo API: Error updating Firestore", {
+            error: firestoreError,
+            companyId: data.companyId,
+            errorMessage: firestoreError instanceof Error ? firestoreError.message : "Unknown error",
+          });
+          // Return error info to client
+          return {
+            organization,
+            enriched: true,
+            costInfo,
+            error: `Apollo enrichment succeeded but failed to save to Firestore: ${
+              firestoreError instanceof Error ? firestoreError.message : "Unknown error"
+            }`,
+          };
         }
       }
 

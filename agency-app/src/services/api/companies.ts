@@ -50,6 +50,22 @@ function convertToCompany(id: string, data: any): Company {
         ? data.blogAnalysis.lastAnalyzedAt.toDate()
         : new Date(data.blogAnalysis.lastAnalyzedAt),
     } : undefined,
+    apolloEnrichment: data.apolloEnrichment ? {
+      ...data.apolloEnrichment,
+      lastEnrichedAt: data.apolloEnrichment.lastEnrichedAt?.toDate
+        ? data.apolloEnrichment.lastEnrichedAt.toDate()
+        : data.apolloEnrichment.lastEnrichedAt
+        ? new Date(data.apolloEnrichment.lastEnrichedAt)
+        : undefined,
+      costInfo: data.apolloEnrichment.costInfo ? {
+        ...data.apolloEnrichment.costInfo,
+        timestamp: data.apolloEnrichment.costInfo.timestamp?.toDate
+          ? data.apolloEnrichment.costInfo.timestamp.toDate()
+          : data.apolloEnrichment.costInfo.timestamp
+          ? new Date(data.apolloEnrichment.costInfo.timestamp)
+          : undefined,
+      } : undefined,
+    } : undefined,
   };
 }
 
