@@ -31,8 +31,8 @@ export const findWritingProgramCloud = functions.https.onCall(
 
       const result = await findProgram(website, {
         useAiFallback: useAiFallback !== undefined ? useAiFallback : true,
-        concurrent: concurrent || 5,
-        timeout: timeout || 5000,
+        concurrent: concurrent || 30,
+        timeout: timeout || 3000,
       });
 
       console.log(`Found ${result.validUrls.length} URLs for ${website}`);

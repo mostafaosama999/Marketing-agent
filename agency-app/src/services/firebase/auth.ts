@@ -1,7 +1,7 @@
 // src/config/firebase.ts
 import { initializeApp } from 'firebase/app';
 import { getFirestore } from 'firebase/firestore';
-import { getFunctions } from 'firebase/functions';
+import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
 import { getAuth } from 'firebase/auth';
 
 // Firebase configuration for marketing-app-cc237 project
@@ -21,5 +21,13 @@ const app = initializeApp(firebaseConfig);
 export const db = getFirestore(app);
 export const functions = getFunctions(app);
 export const auth = getAuth(app);
+
+// Connect to Functions emulator in development mode
+// Auth and Firestore remain connected to production for real user access
+if (process.env.REACT_APP_USE_EMULATOR === 'true') {
+  console.log('🔧 Connecting Functions to local emulator...');
+  connectFunctionsEmulator(functions, 'localhost', 5001);
+  console.log('✅ Functions connected to emulator (Auth & Firestore using production)');
+}
 
 export default app;

@@ -476,18 +476,31 @@ async function deleteLeadTimeline(leadId: string): Promise<void> {
  * Also deletes all subcollections (timeline)
  */
 export async function deleteLead(leadId: string): Promise<void> {
+  console.log('🗑️ [LEAD DELETE] Starting lead deletion:', {
+    leadId,
+    timestamp: new Date().toISOString(),
+  });
+
   try {
     // Get the lead first to find its companyId
     const leadRef = doc(db, LEADS_COLLECTION, leadId);
     const leadDoc = await getDoc(leadRef);
 
     if (!leadDoc.exists()) {
-      console.warn('Lead not found:', leadId);
+      console.warn('⚠️ [LEAD DELETE] Lead not found:', leadId);
       return;
     }
 
     const leadData = leadDoc.data();
     const companyId = leadData.companyId;
+    const leadName = leadData.name;
+
+    console.log('🔍 [LEAD DELETE] Lead info:', {
+      leadId,
+      leadName,
+      companyId,
+      hasCompany: !!companyId,
+    });
 
     // Delete timeline subcollection first
     await deleteLeadTimeline(leadId);
@@ -495,17 +508,31 @@ export async function deleteLead(leadId: string): Promise<void> {
     // Delete the lead document
     await deleteDoc(leadRef);
 
+    console.log('✅ [LEAD DELETE] Lead deleted:', { leadId, leadName });
+
     // If lead had a company, check if we should delete the company too
     if (companyId) {
       const remainingLeads = await countLeadsForCompany(companyId);
 
+      console.log('🔍 [LEAD DELETE] Company cleanup check:', {
+        leadId,
+        companyId,
+        remainingLeads,
+        willDeleteCompany: remainingLeads === 0,
+      });
+
       if (remainingLeads === 0) {
+        console.log('⚠️ [LEAD DELETE] Triggering company auto-delete:', {
+          companyId,
+          reason: 'Last lead deleted',
+          deletedLeadId: leadId,
+        });
         // This was the last lead for this company, delete the company
         await deleteCompany(companyId);
       }
     }
   } catch (error) {
-    console.error('Error deleting lead:', error);
+    console.error('❌ [LEAD DELETE] Error deleting lead:', error);
     throw error;
   }
 }
@@ -610,6 +637,12 @@ export async function bulkUpdateLeadFields(
  * Also handles company cleanup
  */
 export async function bulkDeleteLeads(leadIds: string[]): Promise<void> {
+  console.log('🗑️ [BULK DELETE] Starting bulk lead deletion:', {
+    count: leadIds.length,
+    leadIds,
+    timestamp: new Date().toISOString(),
+  });
+
   try {
     // Get all lead documents first to find their companies
     const leadDocs = await Promise.all(
@@ -624,6 +657,11 @@ export async function bulkDeleteLeads(leadIds: string[]): Promise<void> {
           companyIds.add(companyId);
         }
       }
+    });
+
+    console.log('🔍 [BULK DELETE] Found affected companies:', {
+      companyCount: companyIds.size,
+      companyIds: Array.from(companyIds),
     });
 
     // Delete timeline subcollections first (in parallel for better performance)
@@ -643,17 +681,33 @@ export async function bulkDeleteLeads(leadIds: string[]): Promise<void> {
       await batch.commit();
     }
 
+    console.log('✅ [BULK DELETE] Leads deleted, checking company cleanup');
+
     // Check and clean up companies that no longer have leads
     const companyCleanupPromises = Array.from(companyIds).map(async (companyId) => {
       const remainingLeads = await countLeadsForCompany(companyId);
+
+      console.log('🔍 [BULK DELETE] Company check:', {
+        companyId,
+        remainingLeads,
+        willDelete: remainingLeads === 0,
+      });
+
       if (remainingLeads === 0) {
+        console.log('⚠️ [BULK DELETE] Triggering company auto-delete:', {
+          companyId,
+          reason: 'All leads deleted in bulk operation',
+          deletedLeadCount: leadIds.length,
+        });
         await deleteCompany(companyId);
       }
     });
 
     await Promise.all(companyCleanupPromises);
+
+    console.log('✅ [BULK DELETE] Bulk deletion complete');
   } catch (error) {
-    console.error('Error bulk deleting leads:', error);
+    console.error('❌ [BULK DELETE] Error bulk deleting leads:', error);
     throw error;
   }
 }

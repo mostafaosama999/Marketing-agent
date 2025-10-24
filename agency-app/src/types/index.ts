@@ -71,7 +71,11 @@ export type {
   ApolloPeopleSearchResponse,
   ApolloSearchPerson,
   SearchPeopleRequest,
-  SearchPeopleResponse
+  SearchPeopleResponse,
+  ApolloOrganizationEnrichmentRequest,
+  ApolloOrganizationEnrichmentResponse,
+  EnrichOrganizationRequest,
+  EnrichOrganizationResponse
 } from './apollo';
 
 // Filter and Preset types

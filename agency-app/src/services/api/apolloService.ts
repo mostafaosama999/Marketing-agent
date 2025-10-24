@@ -17,6 +17,8 @@ import {
   SearchPeopleRequest,
   SearchPeopleResponse,
   ApolloSearchPerson,
+  EnrichOrganizationRequest,
+  EnrichOrganizationResponse,
 } from '../../types';
 
 /**
@@ -122,7 +124,7 @@ export async function enrichEmail(
       person: null,
       organization: null,
       matched: false,
-      error: 'Missing Apollo API key. Please set REACT_APP_APOLLO_API_KEY environment variable.',
+      error: 'Missing Apollo API key. Configure via: firebase functions:config:set apollo.api_key="YOUR_KEY"',
     };
   }
 
@@ -195,7 +197,7 @@ export async function enrichEmail(
           person: null,
           organization: null,
           matched: false,
-          error: 'Invalid Apollo API key. Please check your REACT_APP_APOLLO_API_KEY.',
+          error: 'Invalid Apollo API key. Please check Firebase Functions config (apollo.api_key).',
         };
       }
 
@@ -274,7 +276,7 @@ export async function searchPeople(
         totalPages: 0,
       },
       success: false,
-      error: 'Missing Apollo API key. Please set REACT_APP_APOLLO_API_KEY environment variable.',
+      error: 'Missing Apollo API key. Configure via: firebase functions:config:set apollo.api_key="YOUR_KEY"',
     };
   }
 
@@ -432,7 +434,7 @@ export async function searchPeople(
             totalPages: 0,
           },
           success: false,
-          error: 'Invalid Apollo API key. Please check your REACT_APP_APOLLO_API_KEY.',
+          error: 'Invalid Apollo API key. Please check Firebase Functions config (apollo.api_key).',
         };
       }
 
@@ -471,6 +473,68 @@ export async function searchPeople(
 }
 
 /**
+ * Enrich organization data using Apollo.io Organization Enrichment API
+ *
+ * This function calls a Firebase Cloud Function that proxies the request to Apollo.io,
+ * solving CORS issues and keeping API keys secure on the server.
+ *
+ * Cost: 1 Apollo credit per enrichment
+ *
+ * Returns detailed company information including:
+ * - Employee count and funding details
+ * - Technologies used
+ * - Industry and keywords
+ * - Social media links
+ * - Contact information
+ *
+ * @param request - Organization enrichment request with domain
+ * @returns Enriched organization information
+ *
+ * @example
+ * ```typescript
+ * const result = await enrichOrganization({
+ *   domain: 'anthropic.com',
+ *   companyId: 'abc123' // Optional: updates Firestore automatically
+ * });
+ *
+ * if (result.enriched) {
+ *   console.log('Company:', result.organization?.name);
+ *   console.log('Employees:', result.organization?.estimated_num_employees);
+ *   console.log('Founded:', result.organization?.founded_year);
+ *   console.log('Technologies:', result.organization?.technology_names);
+ * }
+ * ```
+ */
+export async function enrichOrganization(
+  request: EnrichOrganizationRequest
+): Promise<EnrichOrganizationResponse> {
+  console.log('Apollo API: Enriching organization for domain', request.domain);
+
+  try {
+    // Call Firebase Cloud Function to proxy the Apollo API request
+    const functions = getFunctions();
+    const enrichOrg = httpsCallable<EnrichOrganizationRequest, EnrichOrganizationResponse>(
+      functions,
+      'enrichOrganizationCloud'
+    );
+
+    const result = await enrichOrg(request);
+
+    console.log('Apollo API: Cloud Function response:', result.data.enriched ? 'Organization enriched' : 'No match');
+
+    return result.data;
+  } catch (error) {
+    console.error('Apollo API: Error calling Cloud Function', error);
+
+    return {
+      organization: null,
+      enriched: false,
+      error: error instanceof Error ? error.message : 'Failed to enrich organization. Please try again.',
+    };
+  }
+}
+
+/**
  * Apollo Service object with all available methods
  *
  * This provides a clean interface for importing and using Apollo functionality:
@@ -481,10 +545,12 @@ export async function searchPeople(
  *
  * const result = await apolloService.fetchEmail({...}, apiKey);
  * const searchResults = await apolloService.searchPeople({...}, apiKey);
+ * const orgData = await apolloService.enrichOrganization({...});
  * ```
  */
 export const apolloService = {
   fetchEmail,
   enrichEmail,
   searchPeople,
+  enrichOrganization,
 };

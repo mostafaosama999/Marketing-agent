@@ -226,7 +226,13 @@ export const CompanyDialog: React.FC<CompanyDialogProps> = ({
       }
 
       if (isEditMode && company) {
+        console.log('📝 [COMPANY DIALOG] Updating existing company:', {
+          id: company.id,
+          name: companyData.name,
+          timestamp: new Date().toISOString(),
+        });
         await updateCompany(company.id, companyData);
+        console.log('✅ [COMPANY DIALOG] Company updated successfully');
       } else {
         await createCompany(companyData);
       }

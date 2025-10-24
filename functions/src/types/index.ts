@@ -134,9 +134,26 @@ export interface BlogQualificationResult {
   contentSummary: string;
   blogLinkUsed: string;
   rssFeedFound: boolean;
-  analysisMethod: "RSS" | "AI" | "RSS + AI (authors)" | "None";
+  analysisMethod: "RSS" | "AI" | "RSS + AI (authors)" | "RSS + AI (content)" | "None";
   qualified: boolean;
   costInfo?: ApiCostInfo;
+  // Content quality fields
+  contentQualityRating?: "low" | "medium" | "high";
+  contentQualityReasoning?: string;
+  lastPostUrl?: string;
+  rssFeedUrl?: string;
+  // Enhanced content analysis fields
+  isAIWritten?: boolean;
+  aiWrittenConfidence?: "low" | "medium" | "high";
+  aiWrittenEvidence?: string;
+  hasCodeExamples?: boolean;
+  codeExamplesCount?: number;
+  codeLanguages?: string[];
+  hasDiagrams?: boolean;
+  diagramsCount?: number;
+  technicalDepth?: "beginner" | "intermediate" | "advanced";
+  funnelStage?: "top" | "middle" | "bottom";
+  exampleQuotes?: string[];
 }
 
 export interface CompanyInput {
@@ -163,6 +180,20 @@ export interface AIBlogAnalysis {
   authorsAreEmployees: "employees" | "freelancers" | "mixed" | "unknown";
   coversAiTopics: boolean;
   contentSummary: string;
+  contentQualityRating?: "low" | "medium" | "high";
+  contentQualityReasoning?: string;
+  // Enhanced content analysis
+  isAIWritten?: boolean;
+  aiWrittenConfidence?: "low" | "medium" | "high";
+  aiWrittenEvidence?: string;
+  hasCodeExamples?: boolean;
+  codeExamplesCount?: number;
+  codeLanguages?: string[];
+  hasDiagrams?: boolean;
+  diagramsCount?: number;
+  technicalDepth?: "beginner" | "intermediate" | "advanced";
+  funnelStage?: "top" | "middle" | "bottom";
+  exampleQuotes?: string[];
 }
 
 // Writing Program Finder Types
@@ -222,4 +253,30 @@ export interface CustomIdeaResponse {
   totalGenerated: number;
   costInfo?: ApiCostInfo;
   sessionId: string; // For tracking
+}
+
+// Writing Program Analysis Types (detailed analysis of a specific URL)
+export interface WritingProgramAnalysisResult {
+  programUrl: string;
+  hasProgram: boolean;
+  isOpen: boolean | null;
+  openDates?: {
+    openFrom: string;
+    closedFrom: string;
+  } | null;
+  payment: {
+    amount: string | null;           // e.g., "$300 to $500"
+    method: string | null;            // e.g., "Deel", "PayPal", "gift cards"
+    details: string | null;           // Additional info: bonuses, performance-based, etc.
+    sourceSnippet: string | null;     // Quoted proof from the page (max ~200 chars)
+    historical: string | null;        // Previous payment rates if mentioned
+  };
+  requirements?: string[];
+  requirementTypes?: string[]; // Classified categories: "Idea", "Case study", "Keyword analysis", etc.
+  submissionGuidelines?: string;
+  contactEmail?: string;
+  responseTime?: string;
+  programDetails: string;
+  aiReasoning: string;
+  costInfo?: ApiCostInfo;
 }

@@ -31,13 +31,20 @@ import {
   buildCompaniesTableColumns,
   columnsToVisibilityMap,
 } from '../../services/api/tableColumnsService';
+import { CompanyFilterState, DEFAULT_COMPANY_FILTER_STATE } from '../../types/companyFilter';
+import { FilterRule } from '../../types/filter';
+import { applyCompanyAdvancedFilters } from '../../services/api/companyFilterService';
+import { CollapsibleFilterBar } from '../../components/features/crm/filters';
 
 export const CompaniesPage: React.FC = () => {
   const navigate = useNavigate();
   const [companies, setCompanies] = useState<Array<Company & { leadCount: number }>>([]);
   const [loading, setLoading] = useState(true);
-  const [searchTerm, setSearchTerm] = useState('');
   const [openDialog, setOpenDialog] = useState(false);
+
+  // Filter state
+  const [filters, setFilters] = useState<CompanyFilterState>(DEFAULT_COMPANY_FILTER_STATE);
+  const [advancedFilterRules, setAdvancedFilterRules] = useState<FilterRule[]>([]);
 
   // Table column visibility state
   const [tableColumns, setTableColumns] = useState<TableColumnConfig[]>(DEFAULT_COMPANIES_TABLE_COLUMNS);
@@ -45,28 +52,15 @@ export const CompaniesPage: React.FC = () => {
   // Subscribe to companies with real-time updates
   useEffect(() => {
     const unsubscribe = subscribeToCompanies(async (companiesData) => {
-      // Fetch lead counts for each company and auto-delete those with 0 leads
+      // Fetch lead counts for each company
       const companiesWithCounts = await Promise.all(
         companiesData.map(async (company) => {
           const leadCount = await countLeadsForCompany(company.id);
-
-          // Auto-delete companies with 0 leads
-          if (leadCount === 0) {
-            try {
-              await deleteCompany(company.id);
-              console.log(`Auto-deleted company with 0 leads: ${company.name}`);
-            } catch (error) {
-              console.error(`Failed to delete company ${company.name}:`, error);
-            }
-            return null; // Mark for filtering
-          }
-
           return { ...company, leadCount };
         })
       );
 
-      // Filter out null entries (deleted companies)
-      setCompanies(companiesWithCounts.filter((c): c is Company & { leadCount: number } => c !== null));
+      setCompanies(companiesWithCounts);
       setLoading(false);
     });
 
@@ -109,19 +103,49 @@ export const CompaniesPage: React.FC = () => {
     }
   }, [companies]);
 
-  // Filter companies based on search term
+  // Filter companies based on all filters
   const filteredCompanies = useMemo(() => {
-    if (!searchTerm.trim()) {
-      return companies;
+    let filtered: Array<Company & { leadCount: number }> = [...companies];
+
+    // Apply search filter
+    if (filters.search.trim()) {
+      const term = filters.search.toLowerCase();
+      filtered = filtered.filter(company =>
+        company.name.toLowerCase().includes(term) ||
+        company.industry?.toLowerCase().includes(term) ||
+        company.website?.toLowerCase().includes(term) ||
+        company.description?.toLowerCase().includes(term)
+      );
     }
 
-    const term = searchTerm.toLowerCase();
-    return companies.filter(company =>
-      company.name.toLowerCase().includes(term) ||
-      company.industry?.toLowerCase().includes(term) ||
-      company.website?.toLowerCase().includes(term)
-    );
-  }, [companies, searchTerm]);
+    // Apply industry filter
+    if (filters.industry) {
+      filtered = filtered.filter(company =>
+        company.industry?.toLowerCase() === filters.industry.toLowerCase()
+      );
+    }
+
+    // Apply employee range filter (from Apollo enrichment)
+    if (filters.employeeRange) {
+      filtered = filtered.filter(company =>
+        company.apolloEnrichment?.employeeRange === filters.employeeRange
+      );
+    }
+
+    // Apply funding stage filter (from Apollo enrichment)
+    if (filters.fundingStage) {
+      filtered = filtered.filter(company =>
+        company.apolloEnrichment?.latestFundingStage === filters.fundingStage
+      );
+    }
+
+    // Apply advanced filters if any rules are set
+    if (advancedFilterRules.length > 0) {
+      filtered = applyCompanyAdvancedFilters(filtered, advancedFilterRules) as Array<Company & { leadCount: number }>;
+    }
+
+    return filtered;
+  }, [companies, filters, advancedFilterRules]);
 
   const handleAddCompany = () => {
     setOpenDialog(true);
@@ -189,6 +213,20 @@ export const CompaniesPage: React.FC = () => {
     localStorage.setItem(COMPANIES_TABLE_COLUMNS_STORAGE_KEY, JSON.stringify(visibilityMap));
   };
 
+  // Filter handlers
+  const handleFiltersChange = (updates: Partial<CompanyFilterState>) => {
+    setFilters(prev => ({ ...prev, ...updates }));
+  };
+
+  const handleClearAllFilters = () => {
+    setFilters(DEFAULT_COMPANY_FILTER_STATE);
+    setAdvancedFilterRules([]);
+  };
+
+  const handleApplyAdvancedFilters = (rules: FilterRule[]) => {
+    setAdvancedFilterRules(rules);
+  };
+
   if (loading) {
     return (
       <Box
@@ -228,7 +266,7 @@ export const CompaniesPage: React.FC = () => {
           boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
         }}
       >
-        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 3 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
           <Box>
             <Typography
               variant="h4"
@@ -249,51 +287,29 @@ export const CompaniesPage: React.FC = () => {
           </Box>
         </Box>
 
-        {/* Search Bar and Column Visibility */}
+        {/* Filter Bar and Column Visibility */}
         <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-          <TextField
-            fullWidth
-            placeholder="Search companies by name, industry, or website..."
-            value={searchTerm}
-            onChange={(e) => setSearchTerm(e.target.value)}
-            InputProps={{
-              startAdornment: (
-                <InputAdornment position="start">
-                  <SearchIcon sx={{ color: '#94a3b8' }} />
-                </InputAdornment>
-              ),
-            }}
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                backgroundColor: 'white',
-                borderRadius: 2,
-                '& fieldset': {
-                  borderColor: '#e2e8f0',
-                },
-                '&:hover fieldset': {
-                  borderColor: '#667eea',
-                },
-                '&.Mui-focused fieldset': {
-                  borderColor: '#667eea',
-                },
-              },
-            }}
-          />
-
-          {/* Column Visibility Menu */}
+          <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap' }}>
+            Showing {filteredCompanies.length} {filteredCompanies.length === 1 ? 'company' : 'companies'}
+          </Typography>
+          <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
           <TableColumnVisibilityMenu
             columns={tableColumns}
             onToggleVisibility={handleColumnVisibilityChange}
           />
-        </Box>
-      </Box>
+          <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
 
-      {/* Company Count */}
-      <Box sx={{ mb: 3 }}>
-        <Typography variant="body2" sx={{ color: 'rgba(255, 255, 255, 0.9)', fontWeight: 500 }}>
-          Showing {filteredCompanies.length} {filteredCompanies.length === 1 ? 'company' : 'companies'}
-          {searchTerm && ` matching "${searchTerm}"`}
-        </Typography>
+          {/* Collapsible Filter Bar */}
+          <CollapsibleFilterBar
+            filters={filters}
+            onFiltersChange={handleFiltersChange}
+            onClearAll={handleClearAllFilters}
+            onApplyAdvancedFilters={handleApplyAdvancedFilters}
+            data={companies}
+            entityType="company"
+            searchPlaceholder="Search companies..."
+          />
+        </Box>
       </Box>
 
       {/* Companies Table */}

@@ -52,8 +52,57 @@ export interface BlogQualificationResult {
   contentSummary: string;
   blogLinkUsed: string;
   rssFeedFound: boolean;
-  analysisMethod: 'RSS' | 'AI' | 'RSS + AI (authors)' | 'None';
+  analysisMethod: 'RSS' | 'AI' | 'RSS + AI (authors)' | 'RSS + AI (content)' | 'None';
   qualified: boolean;
+  costInfo?: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    inputCost: number;
+    outputCost: number;
+    totalCost: number;
+  };
+  // Content quality fields
+  contentQualityRating?: 'low' | 'medium' | 'high';
+  contentQualityReasoning?: string;
+  lastPostUrl?: string;
+  rssFeedUrl?: string;
+  // Enhanced content analysis fields
+  isAIWritten?: boolean;
+  aiWrittenConfidence?: 'low' | 'medium' | 'high';
+  aiWrittenEvidence?: string;
+  hasCodeExamples?: boolean;
+  codeExamplesCount?: number;
+  codeLanguages?: string[];
+  hasDiagrams?: boolean;
+  diagramsCount?: number;
+  technicalDepth?: 'beginner' | 'intermediate' | 'advanced';
+  funnelStage?: 'top' | 'middle' | 'bottom';
+  exampleQuotes?: string[];
+}
+
+export interface WritingProgramAnalysisResult {
+  programUrl: string;
+  hasProgram: boolean;
+  isOpen: boolean | null;
+  openDates?: {
+    openFrom: string;
+    closedFrom: string;
+  } | null;
+  payment: {
+    amount: string | null;           // e.g., "$300 to $500"
+    method: string | null;            // e.g., "Deel", "PayPal", "gift cards"
+    details: string | null;           // Additional info: bonuses, performance-based, etc.
+    sourceSnippet: string | null;     // Quoted proof from the page (max ~200 chars)
+    historical: string | null;        // Previous payment rates if mentioned
+  };
+  requirements?: string[];
+  requirementTypes?: string[]; // Classified categories: "Idea", "Case study", etc.
+  submissionGuidelines?: string;
+  contactEmail?: string;
+  responseTime?: string;
+  programDetails: string;
+  aiReasoning: string;
   costInfo?: {
     inputTokens: number;
     outputTokens: number;
@@ -108,6 +157,33 @@ export async function analyzeBlog(
   } catch (error: any) {
     console.error('Error analyzing blog:', error);
     throw new Error(error.message || 'Failed to analyze blog');
+  }
+}
+
+/**
+ * Analyze detailed information for a specific writing program URL
+ */
+export async function analyzeWritingProgramDetails(
+  programUrl: string,
+  companyId?: string,
+  leadId?: string
+): Promise<WritingProgramAnalysisResult> {
+  try {
+    const analyzeDetails = httpsCallable<
+      { programUrl: string; companyId?: string; leadId?: string },
+      WritingProgramAnalysisResult
+    >(functions, 'analyzeWritingProgramDetailsCloud');
+
+    const result = await analyzeDetails({
+      programUrl,
+      companyId,
+      leadId,
+    });
+
+    return result.data;
+  } catch (error: any) {
+    console.error('Error analyzing writing program details:', error);
+    throw new Error(error.message || 'Failed to analyze writing program details');
   }
 }
 

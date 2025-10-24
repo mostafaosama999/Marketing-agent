@@ -299,3 +299,45 @@ export interface SearchPeopleResponse {
   error?: string;
   costInfo?: ApolloCostInfo;
 }
+
+// ============================================================================
+// Organization Enrichment API Types
+// ============================================================================
+
+/**
+ * Request payload for Apollo Organization Enrichment API
+ *
+ * Enriches company data using their domain name.
+ */
+export interface ApolloOrganizationEnrichmentRequest {
+  domain: string;
+  companyId?: string; // Optional: to update company record in Firestore
+}
+
+/**
+ * Response from Apollo Organization Enrichment API
+ */
+export interface ApolloOrganizationEnrichmentResponse {
+  organization: ApolloOrganization | null;
+  enriched: boolean;
+  error?: string;
+  costInfo?: ApolloCostInfo;
+}
+
+/**
+ * Simplified request for Organization Enrichment
+ */
+export interface EnrichOrganizationRequest {
+  domain: string;
+  companyId?: string;
+}
+
+/**
+ * Simplified response for Organization Enrichment
+ */
+export interface EnrichOrganizationResponse {
+  organization: ApolloOrganization | null;
+  enriched: boolean;
+  error?: string;
+  costInfo?: ApolloCostInfo;
+}

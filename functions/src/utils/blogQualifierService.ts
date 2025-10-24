@@ -271,6 +271,164 @@ function parseEntryDate(item: any): Date | null {
 }
 
 /**
+ * Detect programming language from code snippet or class names
+ */
+function detectLanguageFromCode(codeText: string, className?: string): string | null {
+  // Check class names first (most reliable)
+  if (className) {
+    const langMatch = className.match(/language-(\w+)|lang-(\w+)|highlight-(\w+)|brush:\s*(\w+)/i);
+    if (langMatch) {
+      const lang = (langMatch[1] || langMatch[2] || langMatch[3] || langMatch[4]).toLowerCase();
+      // Normalize common language names
+      const langMap: Record<string, string> = {
+        js: "JavaScript",
+        javascript: "JavaScript",
+        ts: "TypeScript",
+        typescript: "TypeScript",
+        py: "Python",
+        python: "Python",
+        go: "Go",
+        golang: "Go",
+        java: "Java",
+        rb: "Ruby",
+        ruby: "Ruby",
+        php: "PHP",
+        cpp: "C++",
+        c: "C",
+        cs: "C#",
+        csharp: "C#",
+        rust: "Rust",
+        swift: "Swift",
+        kotlin: "Kotlin",
+        sql: "SQL",
+        bash: "Bash",
+        shell: "Bash",
+        yaml: "YAML",
+        json: "JSON",
+        xml: "XML",
+        html: "HTML",
+        css: "CSS",
+      };
+      return langMap[lang] || lang.charAt(0).toUpperCase() + lang.slice(1);
+    }
+  }
+
+  // Heuristic detection based on code patterns
+  const code = codeText.toLowerCase().trim();
+  if (code.includes("import ") && code.includes("from ") || code.includes("def ") || code.includes("print(")) return "Python";
+  if (code.includes("const ") || code.includes("let ") || code.includes("function ") || code.includes("=>")) return "JavaScript";
+  if (code.includes("interface ") || code.includes(": string") || code.includes(": number")) return "TypeScript";
+  if (code.includes("func ") || code.includes("package main") || code.includes(":=")) return "Go";
+  if (code.includes("public class ") || code.includes("public static void")) return "Java";
+  if (code.includes("<?php") || code.includes("$") && code.includes("->")) return "PHP";
+  if (code.includes("SELECT ") || code.includes("FROM ") || code.includes("WHERE ")) return "SQL";
+
+  return null;
+}
+
+/**
+ * Fetch and extract content from a blog post URL
+ * Returns cleaned text content with metadata about code blocks and structure
+ */
+async function fetchBlogPostContent(
+  postUrl: string
+): Promise<{
+  content: string;
+  hasCode: boolean;
+  codeBlockCount: number;
+  codeLanguages: string[];
+  codeSamples: string[];
+  hasDiagrams: boolean;
+  imageCount: number;
+  headingCount: number;
+} | null> {
+  try {
+    const response = await axios.get(postUrl, {
+      timeout: 15000,
+      headers: {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+      },
+    });
+
+    if (response.status !== 200) {
+      return null;
+    }
+
+    const $ = cheerio.load(response.data);
+
+    // Remove unwanted elements
+    $("script, style, nav, header, footer, aside, .advertisement, .ad, .social-share").remove();
+
+    // Extract code blocks with language detection
+    const codeBlocks = $("pre, code, .highlight, .code-block, [class*='code']");
+    const detectedLanguages = new Set<string>();
+    const codeSamples: string[] = [];
+    let substantialCodeCount = 0;
+
+    codeBlocks.each((_, elem) => {
+      const codeText = $(elem).text().trim();
+      const className = $(elem).attr("class") || "";
+
+      // Only count blocks with >3 lines of code
+      const lines = codeText.split("\n").filter(line => line.trim().length > 0);
+      if (lines.length > 3) {
+        substantialCodeCount++;
+        codeSamples.push(codeText.substring(0, 200)); // First 200 chars
+
+        const lang = detectLanguageFromCode(codeText, className);
+        if (lang) {
+          detectedLanguages.add(lang);
+        }
+      }
+    });
+
+    const codeBlockCount = substantialCodeCount;
+    const hasCode = codeBlockCount > 0;
+    const codeLanguages = Array.from(detectedLanguages);
+
+    // Count images (potential diagrams)
+    const images = $("img, svg, [class*='diagram'], [class*='chart']");
+    const imageCount = images.length;
+    const hasDiagrams = imageCount > 2; // More than 2 images suggests diagrams
+
+    // Count headings (indicates structure)
+    const headings = $("h1, h2, h3, h4, h5, h6");
+    const headingCount = headings.length;
+
+    // Extract main content (try common article selectors)
+    let contentElement = $("article").first();
+    if (contentElement.length === 0) {
+      contentElement = $("[class*='post-content'], [class*='article-content'], [class*='entry-content'], main").first();
+    }
+    if (contentElement.length === 0) {
+      contentElement = $("body");
+    }
+
+    // Get text content
+    const text = contentElement.text();
+    const lines = text.split("\n").map((line) => line.trim());
+    const cleanText = lines.filter((line) => line.length > 0).join(" ");
+
+    // Limit to 5000 characters per post (increased for better analysis)
+    const content = cleanText.substring(0, 5000);
+
+    return {
+      content,
+      hasCode,
+      codeBlockCount,
+      codeLanguages,
+      codeSamples,
+      hasDiagrams,
+      imageCount,
+      headingCount,
+    };
+  } catch (error) {
+    console.error(`Error fetching blog post ${postUrl}:`, error);
+    return null;
+  }
+}
+
+/**
  * Check blog activity using RSS feed
  */
 async function checkBlogActivity(
@@ -393,11 +551,12 @@ function checkMultipleAuthors(
 }
 
 /**
- * Analyze blog with AI when RSS fails
+ * Analyze blog with AI - optionally with actual blog post content
  */
 async function analyzeBlogWithAI(
   website: string,
-  openaiApiKey: string
+  openaiApiKey: string,
+  postUrls?: string[]
 ): Promise<{
   aiActive: boolean;
   aiPosts: number;
@@ -410,103 +569,277 @@ async function analyzeBlogWithAI(
   authEmployees: "employees" | "freelancers" | "mixed" | "unknown";
   coversAi: boolean;
   contentSumm: string;
+  contentQualityRating: "low" | "medium" | "high" | null;
+  contentQualityReasoning: string;
+  isAIWritten: boolean;
+  aiWrittenConfidence: "low" | "medium" | "high";
+  aiWrittenEvidence: string;
+  hasCodeExamples: boolean;
+  codeExamplesCount: number;
+  codeLanguages: string[];
+  hasDiagrams: boolean;
+  diagramsCount: number;
+  technicalDepth: "beginner" | "intermediate" | "advanced";
+  funnelStage: "top" | "middle" | "bottom";
+  exampleQuotes: string[];
   costInfo: CostInfo | null;
 }> {
-  console.log("RSS not found, trying AI analysis of blog page...");
+  console.log(postUrls ? `Analyzing ${postUrls.length} blog posts with AI...` : "RSS not found, trying AI analysis of blog page...");
 
-  // Try to find blog page
+  // If blog post URLs provided, fetch their content
+  let blogPostsContent: Array<{url: string; content: string; metadata: any}> = [];
+  let totalCodeBlocks = 0;
+  let totalDiagrams = 0;
+  const allDetectedLanguages = new Set<string>();
+
+  if (postUrls && postUrls.length > 0) {
+    console.log(`Fetching content from ${postUrls.length} blog posts...`);
+    const fetchPromises = postUrls.slice(0, 5).map(async (url) => {
+      const postData = await fetchBlogPostContent(url);
+      if (postData) {
+        totalCodeBlocks += postData.codeBlockCount;
+        totalDiagrams += postData.imageCount;
+        postData.codeLanguages.forEach(lang => allDetectedLanguages.add(lang));
+        return {url, content: postData.content, metadata: postData};
+      }
+      return null;
+    });
+
+    const results = await Promise.all(fetchPromises);
+    blogPostsContent = results.filter((r): r is NonNullable<typeof r> => r !== null);
+    console.log(`Successfully fetched ${blogPostsContent.length} blog posts`);
+    console.log(`Total code blocks found: ${totalCodeBlocks}`);
+    console.log(`Total images found: ${totalDiagrams}`);
+    if (allDetectedLanguages.size > 0) {
+      console.log(`Languages detected: ${Array.from(allDetectedLanguages).join(", ")}`);
+    }
+  }
+
+  // Try to find blog page (for general analysis if no post URLs provided)
   const baseUrl = website.replace(/\/$/, "");
   const blogPages = ["/blog", "/blogs", "/news", "/articles", "/resources", "/insights", "/posts", ""];
 
   let blogContent: string | null = null;
   let blogUrl: string | null = null;
 
-  for (const blogPath of blogPages) {
-    try {
-      const testUrl = blogPath ? baseUrl + blogPath : baseUrl;
-      const response = await axios.get(testUrl, {
-        timeout: 10000,
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        },
-      });
+  // Only scrape blog index if we don't have post content
+  if (blogPostsContent.length === 0) {
+    for (const blogPath of blogPages) {
+      try {
+        const testUrl = blogPath ? baseUrl + blogPath : baseUrl;
+        const response = await axios.get(testUrl, {
+          timeout: 10000,
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          },
+        });
 
-      if (response.status === 200) {
-        blogContent = await scrapeWebsite(testUrl);
-        if (blogContent && blogContent.length > 200) {
-          blogUrl = testUrl;
-          console.log(`Found blog page: ${blogUrl}`);
-          break;
+        if (response.status === 200) {
+          blogContent = await scrapeWebsite(testUrl);
+          if (blogContent && blogContent.length > 200) {
+            blogUrl = testUrl;
+            console.log(`Found blog page: ${blogUrl}`);
+            break;
+          }
         }
+      } catch {
+        // Continue to next path
       }
-    } catch {
-      // Continue to next path
     }
-  }
 
-  if (!blogContent) {
-    console.log("Could not find or scrape blog page");
-    return {
-      aiActive: false,
-      aiPosts: 0,
-      aiMultiAuth: false,
-      aiAuthCount: 0,
-      aiAuthors: "",
-      blogUrl: null,
-      aiLastPost: null,
-      isDevSaas: false,
-      authEmployees: "unknown",
-      coversAi: false,
-      contentSumm: "",
-      costInfo: null,
-    };
+    if (!blogContent) {
+      console.log("Could not find or scrape blog page");
+      return {
+        aiActive: false,
+        aiPosts: 0,
+        aiMultiAuth: false,
+        aiAuthCount: 0,
+        aiAuthors: "",
+        blogUrl: null,
+        aiLastPost: null,
+        isDevSaas: false,
+        authEmployees: "unknown",
+        coversAi: false,
+        contentSumm: "",
+        contentQualityRating: null,
+        contentQualityReasoning: "",
+        isAIWritten: false,
+        aiWrittenConfidence: "low",
+        aiWrittenEvidence: "",
+        hasCodeExamples: false,
+        codeExamplesCount: 0,
+        codeLanguages: [],
+        hasDiagrams: false,
+        diagramsCount: 0,
+        technicalDepth: "beginner",
+        funnelStage: "top",
+        exampleQuotes: [],
+        costInfo: null,
+      };
+    }
   }
 
   // Call OpenAI
   const openai = new OpenAI({apiKey: openaiApiKey});
 
-  const prompt = `Analyze this blog page content and extract comprehensive information about the company and blog.
+  // Build comprehensive prompt with blog post content if available
+  let contentSection = "";
+  if (blogPostsContent.length > 0) {
+    contentSection = `\n${"=".repeat(60)}\nRECENT BLOG POSTS (${blogPostsContent.length} posts analyzed):\n${"=".repeat(60)}\n\n`;
+    blogPostsContent.forEach((post, i) => {
+      contentSection += `[POST ${i + 1}] ${post.url}\n`;
+      contentSection += `Content: ${post.content}\n`;
+      contentSection += `Metadata: ${post.metadata.codeBlockCount} code blocks, ${post.metadata.imageCount} images, ${post.metadata.headingCount} headings\n`;
+      contentSection += `Has code: ${post.metadata.hasCode ? "YES" : "NO"}\n`;
+      if (post.metadata.codeLanguages && post.metadata.codeLanguages.length > 0) {
+        contentSection += `Languages detected: ${post.metadata.codeLanguages.join(", ")}\n`;
+      }
+      if (post.metadata.codeSamples && post.metadata.codeSamples.length > 0) {
+        contentSection += `Code sample preview: ${post.metadata.codeSamples[0].substring(0, 100)}...\n`;
+      }
+      contentSection += `${"-".repeat(60)}\n\n`;
+    });
+  } else if (blogContent) {
+    contentSection = `\nBlog URL: ${blogUrl}\nContent (first 12000 chars):\n${blogContent.substring(0, 12000)}\n`;
+  }
 
-Blog URL: ${blogUrl}
-Content (first 8000 chars):
-${blogContent.substring(0, 8000)}
+  const prompt = `You are an expert content analyst evaluating B2B SaaS blog quality for partnership opportunities.
 
-Instructions:
-1. Count blog posts published in the last 30 days
-2. Identify all unique author names
-3. Find the most recent blog post date
-4. Determine if this is a developer-first B2B SaaS company (look for: APIs, SDKs, developer tools, infrastructure, platforms for developers)
-5. Analyze if authors are employees or freelancers (look for: company email domains, "team member", employee titles, vs. "guest author", "contributor")
-6. Check if blog covers recent AI/ML topics (LLMs, RAG, AI agents, machine learning, transformers, neural networks, GPT, Claude, embeddings, vector databases)
-7. Summarize the main topics as bullet points
+COMPANY: ${website}
+ANALYSIS TYPE: ${blogPostsContent.length > 0 ? `Detailed analysis of ${blogPostsContent.length} actual blog posts` : "Blog index page analysis"}
+${blogPostsContent.length > 0 ? `DETECTED: ${totalCodeBlocks} total code blocks, ${totalDiagrams} total images/diagrams` : ""}
+${contentSection}
 
-IMPORTANT: You MUST respond with ONLY valid JSON in this EXACT format:
+⚠️ CRITICAL REQUIREMENTS ⚠️
+1. NEVER return empty strings ("") for reasoning/evidence/summary fields
+2. ALL reasoning fields MUST be at least 100 characters long with SPECIFIC examples
+3. If you cannot determine something, say "Unable to determine" with explanation - NOT empty string
+4. Quote actual phrases from the content to support your analysis
+5. Be HARSH but FAIR in your ratings - don't inflate scores
+
+YOUR TASK:
+Perform a rigorous content quality analysis. We need to distinguish between:
+- HIGH-quality: Deep technical content that experienced developers value
+- LOW-quality: Generic marketing fluff or AI-generated surface-level content
+
+ANALYSIS CRITERIA:
+
+1. TECHNICAL DEPTH
+   - Are there code examples? (actual implementations, not just snippets)
+   - What technical concepts are covered? (algorithms, architecture, protocols?)
+   - Does it explain HOW things work internally, not just WHAT they are?
+   - Target audience: beginners vs. experienced developers?
+   - Product internals and implementation details shown?
+
+2. AI-GENERATED CONTENT DETECTION (Be thorough - this is critical!)
+   🚨 STRONG AI-writing indicators (if 3+ present, likely AI-written):
+   - Generic intros: "In today's fast-paced world", "In the ever-evolving landscape", "In recent years"
+   - Repetitive sentence structures: Every paragraph starts same way
+   - Overly polished without personality: No humor, no opinions, no "I" or "we"
+   - Lack of specifics: No real metrics, dates, company names, or concrete examples
+   - Surface-level only: Explains WHAT but never HOW or WHY at technical level
+   - Listicles without depth: "5 ways to...", "10 tips for..." with 2-3 sentences each
+   - Generic conclusions: "In conclusion...", "As we've seen...", restate intro without adding value
+   - Buzzword density: Every sentence has "innovative", "seamless", "cutting-edge", "robust"
+   - No code examples despite technical topic
+   - No controversy or strong opinions (AI plays it safe)
+
+   🎯 Human-written indicators:
+   - Specific war stories: "When we tried X at Company Y, Z happened"
+   - Strong opinions: "X is terrible because...", "Everyone says Y but they're wrong"
+   - Actual code with comments explaining decisions
+   - Real metrics/data: "We reduced latency from 500ms to 50ms"
+   - Personality/humor: Jokes, sarcasm, colloquialisms
+   - Multiple authors with different writing styles
+
+3. CONTENT TYPE & FUNNEL STAGE
+   - Top-of-funnel: "What is X?" content, generic tutorials, listicles
+   - Middle-funnel: Use cases, comparisons, best practices with some depth
+   - Bottom-funnel: Deep dives, architecture, product internals, advanced concepts
+
+4. CODE & DIAGRAMS
+   - Count actual code blocks with real implementations
+   - What languages/frameworks? (Python, Go, JavaScript, etc.)
+   - Are there system diagrams, architecture diagrams, data flows?
+   - Technical illustrations showing how things work?
+
+5. EVIDENCE & EXAMPLES
+   - Quote specific passages that demonstrate quality (or lack of it)
+   - Identify real technical topics mentioned
+   - Note any AI-writing red flags found
+
+RESPONSE FORMAT (JSON ONLY - MUST be valid JSON):
 {
-  "active_blog": true or false,
-  "post_count": <number of posts in last 30 days>,
-  "multiple_authors": true or false,
-  "author_count": <number of unique authors>,
-  "authors": ["Author Name 1", "Author Name 2", "Author Name 3"],
-  "last_post_date": "YYYY-MM-DD",
-  "is_developer_b2b_saas": true or false,
-  "authors_are_employees": "employees" or "freelancers" or "mixed" or "unknown",
-  "covers_ai_topics": true or false,
-  "content_summary": "• Topic 1\\n• Topic 2\\n• Topic 3"
+  "active_blog": boolean,
+  "post_count": number,
+  "multiple_authors": boolean,
+  "author_count": number,
+  "authors": ["Name 1", "Name 2"],
+  "last_post_date": "YYYY-MM-DD" or null,
+  "is_developer_b2b_saas": boolean,
+  "authors_are_employees": "employees"|"freelancers"|"mixed"|"unknown",
+  "covers_ai_topics": boolean,
+  "content_summary": "REQUIRED: Bullet list of 3-5 main topics covered. Min 50 chars. Use • Topic format.",
+
+  "content_quality_rating": "low"|"medium"|"high" (REQUIRED - pick one),
+  "content_quality_reasoning": "REQUIRED: Min 150 chars. Must include: (1) Specific topics mentioned (2) Code languages if any (3) Quoted phrases showing quality level (4) Why you chose this rating. Example: 'Posts cover data ingestion architecture with Python examples. Quote: \"We implemented CDC using Debezium...\" Shows intermediate depth but lacks advanced system design.'",
+
+  "is_ai_written": boolean (REQUIRED),
+  "ai_written_confidence": "low"|"medium"|"high" (REQUIRED),
+  "ai_written_evidence": "REQUIRED: Min 100 chars. If AI: List specific patterns found with quotes. If human: Explain why (specific examples, personality, real data). Example: 'Generic intro detected: \"In today\\'s digital landscape\". No specific metrics or war stories. Repetitive structure across posts.' OR 'Human indicators: Real metrics (\"500ms → 50ms\"), specific company examples (Stripe, AWS), author personality.'",
+
+  "has_code_examples": boolean,
+  "code_examples_count": number (count actual code blocks with >3 lines),
+  "code_languages": ["Python", "JavaScript", "Go"] (extract from code blocks, empty [] if none),
+
+  "has_diagrams": boolean,
+  "diagrams_count": number,
+
+  "technical_depth": "beginner"|"intermediate"|"advanced" (REQUIRED),
+  "funnel_stage": "top"|"middle"|"bottom" (REQUIRED),
+
+  "example_quotes": ["Quote 1 showing quality/issues", "Quote 2", "Quote 3"] (REQUIRED: Provide 2-3 actual quotes from content)
 }
 
-Rules:
-- "authors" must be an array of actual author names (e.g., ["Anna Geller", "Benoit Pimpaud"])
-- Do NOT use placeholder text like "Multiple authors" or "Yes"
-- If you cannot find author names, use an empty array: []
-- If you cannot find the date, use null for last_post_date
-- active_blog is true if post_count >= 1
-- multiple_authors is true if author_count >= 2
-- is_developer_b2b_saas: true if company builds tools/platforms FOR developers (APIs, infrastructure, dev tools)
-- authors_are_employees: "employees" if most are staff, "freelancers" if guests, "mixed" if both, "unknown" if unclear
-- covers_ai_topics: true if blog discusses AI/ML topics, frameworks, or implementations
-- content_summary: If covers AI, list the AI topics. If not, list what the blog covers instead. Use bullet points (• Topic)
+RATING GUIDELINES (Be HARSH but FAIR):
 
-Respond with ONLY the JSON object, no other text.`;
+HIGH (⭐⭐⭐⭐):
+- 3+ code examples per post with real implementations
+- Architecture/system diagrams present
+- Advanced technical concepts (distributed systems, algorithms, protocols)
+- Real product implementation details and internals
+- Targets experienced developers
+- NOT AI-generated
+- Bottom-of-funnel content
+Example topics: "Implementing Raft consensus in Go", "Our database query optimizer internals"
+
+MEDIUM (⭐⭐⭐):
+- 1-2 code examples per post
+- Solid technical explanations with some depth
+- Practical but not deeply advanced
+- May mix some marketing with technical content
+- Intermediate developers can learn from it
+Example topics: "Building a REST API with error handling", "Deploying with Docker best practices"
+
+LOW (⭐⭐):
+- No or minimal code examples
+- Generic marketing language
+- Surface-level "What is X?" content
+- AI-generated patterns detected (generic intros, repetitive structure)
+- Top-of-funnel only
+- Could be written by someone with no deep expertise
+Example topics: "5 Benefits of Cloud Computing", "Why You Need Event-Driven Architecture"
+
+⚠️ BEFORE SUBMITTING YOUR RESPONSE, VERIFY:
+✓ content_quality_reasoning is at least 150 characters with specific examples
+✓ ai_written_evidence is at least 100 characters with specific examples
+✓ content_summary is at least 50 characters
+✓ example_quotes has 2-3 actual quotes from the content
+✓ NO empty strings ("") in any field
+✓ All REQUIRED fields are filled
+
+RESPOND WITH ONLY THE JSON OBJECT - no markdown, no explanation, just valid JSON.`;
+
 
   let costInfo: CostInfo | null = null;
 
@@ -534,6 +867,30 @@ Respond with ONLY the JSON object, no other text.`;
 
     const data: AIBlogAnalysis = JSON.parse(jsonMatch[0]);
 
+    // Validate response quality
+    const validationErrors: string[] = [];
+
+    if (!data.contentQualityReasoning || data.contentQualityReasoning.length < 100) {
+      validationErrors.push("content_quality_reasoning too short or missing");
+    }
+    if (!data.aiWrittenEvidence || data.aiWrittenEvidence.length < 80) {
+      validationErrors.push("ai_written_evidence too short or missing");
+    }
+    if (!data.contentSummary || data.contentSummary.length < 30) {
+      validationErrors.push("content_summary too short or missing");
+    }
+    if (!data.exampleQuotes || data.exampleQuotes.length < 1) {
+      validationErrors.push("example_quotes missing or empty");
+    }
+    if (!data.contentQualityRating) {
+      validationErrors.push("content_quality_rating missing");
+    }
+
+    if (validationErrors.length > 0) {
+      console.warn(`⚠️  AI response validation warnings: ${validationErrors.join(", ")}`);
+      console.warn("   Response quality may be suboptimal - consider retrying or using defaults");
+    }
+
     const aiActive = data.activeBlog || false;
     const aiPosts = data.postCount || 0;
     const aiMultiAuth = data.multipleAuthors || false;
@@ -543,7 +900,22 @@ Respond with ONLY the JSON object, no other text.`;
     const isDevSaas = data.isDeveloperB2BSaas || false;
     const authEmployees = data.authorsAreEmployees || "unknown";
     const coversAi = data.coversAiTopics || false;
-    const contentSumm = data.contentSummary || "";
+    const contentSumm = data.contentSummary || "No summary provided";
+    const contentQualityRating = data.contentQualityRating || null;
+    const contentQualityReasoning = data.contentQualityReasoning || "No reasoning provided";
+
+    // Parse enhanced content analysis fields
+    const isAIWritten = data.isAIWritten || false;
+    const aiWrittenConfidence = data.aiWrittenConfidence || "low";
+    const aiWrittenEvidence = data.aiWrittenEvidence || "No evidence provided";
+    const hasCodeExamples = data.hasCodeExamples || false;
+    const codeExamplesCount = data.codeExamplesCount || 0;
+    const codeLanguages = data.codeLanguages || [];
+    const hasDiagrams = data.hasDiagrams || false;
+    const diagramsCount = data.diagramsCount || 0;
+    const technicalDepth = data.technicalDepth || "beginner";
+    const funnelStage = data.funnelStage || "top";
+    const exampleQuotes = data.exampleQuotes || [];
 
     const aiAuthors = authorsList.join(", ");
 
@@ -562,6 +934,31 @@ Respond with ONLY the JSON object, no other text.`;
       const summaryPreview = contentSumm.replace(/\n/g, " ").substring(0, 100);
       console.log(`   Content: ${summaryPreview}${contentSumm.length > 100 ? "..." : ""}`);
     }
+    if (contentQualityRating) {
+      console.log(`⭐ Content Quality: ${contentQualityRating.toUpperCase()}`);
+      if (contentQualityReasoning) {
+        console.log(`   Reasoning: ${contentQualityReasoning.substring(0, 150)}${contentQualityReasoning.length > 150 ? "..." : ""}`);
+      }
+    }
+
+    // Log enhanced content analysis
+    console.log(`🤖 AI Written: ${isAIWritten ? "YES" : "NO"} (confidence: ${aiWrittenConfidence})`);
+    if (aiWrittenEvidence) {
+      console.log(`   Evidence: ${aiWrittenEvidence.substring(0, 100)}${aiWrittenEvidence.length > 100 ? "..." : ""}`);
+    }
+    console.log(`💻 Code Examples: ${hasCodeExamples ? "YES" : "NO"} (${codeExamplesCount} found)`);
+    if (codeLanguages.length > 0) {
+      console.log(`   Languages: ${codeLanguages.join(", ")}`);
+    }
+    console.log(`📊 Diagrams: ${hasDiagrams ? "YES" : "NO"} (${diagramsCount} found)`);
+    console.log(`🎯 Technical Depth: ${technicalDepth.toUpperCase()}`);
+    console.log(`📈 Funnel Stage: ${funnelStage.toUpperCase()}-of-funnel`);
+    if (exampleQuotes.length > 0) {
+      console.log(`📝 Example Quotes:`);
+      exampleQuotes.slice(0, 2).forEach((quote, idx) => {
+        console.log(`   ${idx + 1}. "${quote.substring(0, 80)}${quote.length > 80 ? "..." : ""}"`);
+      });
+    }
 
     return {
       aiActive,
@@ -575,6 +972,19 @@ Respond with ONLY the JSON object, no other text.`;
       authEmployees,
       coversAi,
       contentSumm,
+      contentQualityRating,
+      contentQualityReasoning,
+      isAIWritten,
+      aiWrittenConfidence,
+      aiWrittenEvidence,
+      hasCodeExamples,
+      codeExamplesCount,
+      codeLanguages,
+      hasDiagrams,
+      diagramsCount,
+      technicalDepth,
+      funnelStage,
+      exampleQuotes,
       costInfo,
     };
   } catch (error) {
@@ -591,6 +1001,19 @@ Respond with ONLY the JSON object, no other text.`;
       authEmployees: "unknown",
       coversAi: false,
       contentSumm: "",
+      contentQualityRating: null,
+      contentQualityReasoning: "",
+      isAIWritten: false,
+      aiWrittenConfidence: "low",
+      aiWrittenEvidence: "",
+      hasCodeExamples: false,
+      codeExamplesCount: 0,
+      codeLanguages: [],
+      hasDiagrams: false,
+      diagramsCount: 0,
+      technicalDepth: "beginner",
+      funnelStage: "top",
+      exampleQuotes: [],
       costInfo: null,
     };
   }
@@ -638,17 +1061,38 @@ export async function qualifyCompany(
     result.hasActiveBlog = aiResult.aiActive;
     result.blogPostCount = aiResult.aiPosts;
     result.lastBlogCreatedAt = aiResult.aiLastPost || "";
-    result.hasMultipleAuthors = aiResult.aiMultiAuth;
-    result.authorCount = aiResult.aiAuthCount;
     result.authorNames = aiResult.aiAuthors;
+
+    // Count authors programmatically from the comma-separated string (more reliable than LLM count)
+    const authorCount = result.authorNames
+      ? result.authorNames.split(",").map((a) => a.trim()).filter((a) => a.length > 0).length
+      : 0;
+
+    result.authorCount = authorCount;
+    result.hasMultipleAuthors = authorCount >= 2;
     result.isDeveloperB2BSaas = aiResult.isDevSaas;
     result.authorsAreEmployees = aiResult.authEmployees;
     result.coversAiTopics = aiResult.coversAi;
     result.contentSummary = aiResult.contentSumm;
+    result.contentQualityRating = aiResult.contentQualityRating || undefined;
+    result.contentQualityReasoning = aiResult.contentQualityReasoning || undefined;
     result.blogLinkUsed = aiResult.blogUrl || "";
     result.rssFeedFound = false;
     result.analysisMethod = "AI";
     result.costInfo = aiResult.costInfo || undefined;
+
+    // Populate enhanced content analysis fields
+    result.isAIWritten = aiResult.isAIWritten;
+    result.aiWrittenConfidence = aiResult.aiWrittenConfidence;
+    result.aiWrittenEvidence = aiResult.aiWrittenEvidence;
+    result.hasCodeExamples = aiResult.hasCodeExamples;
+    result.codeExamplesCount = aiResult.codeExamplesCount;
+    result.codeLanguages = aiResult.codeLanguages;
+    result.hasDiagrams = aiResult.hasDiagrams;
+    result.diagramsCount = aiResult.diagramsCount;
+    result.technicalDepth = aiResult.technicalDepth;
+    result.funnelStage = aiResult.funnelStage;
+    result.exampleQuotes = aiResult.exampleQuotes;
 
     console.log("\n2️⃣  Author check completed via AI analysis");
   } else {
@@ -657,8 +1101,15 @@ export async function qualifyCompany(
     result.blogPostCount = blogActivity.postCount;
     result.lastBlogCreatedAt = blogActivity.lastPostDate || "";
     result.blogLinkUsed = blogActivity.rssUrl || "";
+    result.rssFeedUrl = blogActivity.rssUrl || undefined;
     result.rssFeedFound = blogActivity.recentPosts.length > 0;
     result.analysisMethod = "RSS";
+
+    // Extract lastPostUrl from most recent post
+    if (blogActivity.recentPosts.length > 0) {
+      const sortedPosts = [...blogActivity.recentPosts].sort((a, b) => b.date.getTime() - a.date.getTime());
+      result.lastPostUrl = sortedPosts[0].link || undefined;
+    }
 
     // Check 2: Multiple authors
     console.log("\n2️⃣  Checking for multiple authors (2+)...");
@@ -667,19 +1118,57 @@ export async function qualifyCompany(
     result.authorCount = authorsResult.authorCount;
     result.authorNames = authorsResult.authorList.slice(0, 5).join(", ");
 
-    // If RSS feed had no author information, use AI
-    if (result.authorCount === 0) {
-      console.log("   → No author info in RSS feed, checking blog page with AI...");
-      const aiResult = await analyzeBlogWithAI(company.website, openaiApiKey);
-      result.hasMultipleAuthors = aiResult.aiMultiAuth;
-      result.authorCount = aiResult.aiAuthCount;
-      result.authorNames = aiResult.aiAuthors;
+    // ALWAYS run content quality analysis with actual blog post URLs
+    console.log("\n3️⃣  Analyzing blog content quality...");
+    const postUrls = blogActivity.recentPosts
+      .sort((a, b) => b.date.getTime() - a.date.getTime())
+      .slice(0, 5)
+      .map(post => post.link)
+      .filter((link): link is string => !!link);
+
+    if (postUrls.length > 0) {
+      console.log(`   → Analyzing ${postUrls.length} recent blog posts for content quality...`);
+      const aiResult = await analyzeBlogWithAI(company.website, openaiApiKey, postUrls);
+
+      // If RSS feed had no author information, use AI author data
+      if (result.authorCount === 0) {
+        console.log("   → No author info in RSS feed, using AI author analysis...");
+        result.authorNames = aiResult.aiAuthors;
+
+        // Count authors programmatically from the comma-separated string (more reliable than LLM count)
+        const authorCount = result.authorNames
+          ? result.authorNames.split(",").map((a) => a.trim()).filter((a) => a.length > 0).length
+          : 0;
+
+        result.authorCount = authorCount;
+        result.hasMultipleAuthors = authorCount >= 2;
+      }
+
+      // Always populate content analysis fields
       result.isDeveloperB2BSaas = aiResult.isDevSaas;
       result.authorsAreEmployees = aiResult.authEmployees;
       result.coversAiTopics = aiResult.coversAi;
       result.contentSummary = aiResult.contentSumm;
-      result.analysisMethod = "RSS + AI (authors)";
+      result.contentQualityRating = aiResult.contentQualityRating || undefined;
+      result.contentQualityReasoning = aiResult.contentQualityReasoning || undefined;
+
+      // Populate enhanced content analysis fields
+      result.isAIWritten = aiResult.isAIWritten;
+      result.aiWrittenConfidence = aiResult.aiWrittenConfidence;
+      result.aiWrittenEvidence = aiResult.aiWrittenEvidence;
+      result.hasCodeExamples = aiResult.hasCodeExamples;
+      result.codeExamplesCount = aiResult.codeExamplesCount;
+      result.codeLanguages = aiResult.codeLanguages;
+      result.hasDiagrams = aiResult.hasDiagrams;
+      result.diagramsCount = aiResult.diagramsCount;
+      result.technicalDepth = aiResult.technicalDepth;
+      result.funnelStage = aiResult.funnelStage;
+      result.exampleQuotes = aiResult.exampleQuotes;
+
+      result.analysisMethod = result.authorCount === 0 ? "RSS + AI (authors)" : "RSS + AI (content)";
       result.costInfo = aiResult.costInfo || undefined;
+    } else {
+      console.log("   → No valid post URLs found in RSS feed for content analysis");
     }
   }
 

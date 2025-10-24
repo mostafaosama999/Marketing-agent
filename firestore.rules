@@ -2,39 +2,9 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Research sessions - for now allow all operations for development
-    match /research_sessions/{sessionId} {
-      allow read, write: if true;
-    }
-
-    // Allow reading/writing user data (future use)
-    match /users/{userId} {
-      allow read, write: if true;
-    }
-
-    // CRM leads - allow all operations for development
-    match /leads/{leadId} {
-      allow read, write: if true;
-    }
-
-    // CRM companies - allow all operations for development
-    match /companies/{companyId} {
-      allow read, write: if true;
-    }
-
-    // CRM pipeline configuration - allow all operations for development
-    match /pipeline_config/{configId} {
-      allow read, write: if true;
-    }
-
-    // CRM custom fields configuration - allow all operations for development
-    match /custom_fields/{configId} {
-      allow read, write: if true;
-    }
-
-    // Default deny for security
+    // ⚠️ DEVELOPMENT MODE: allow everything
     match /{document=**} {
-      allow read, write: if false;
+      allow read, write: if true;
     }
   }
 }

@@ -147,6 +147,21 @@ export const BlogAnalysisSection: React.FC<BlogAnalysisSectionProps> = ({
           <Typography variant="body2" color="text.secondary">
             Comprehensive analysis of blog activity, writers, and content quality
           </Typography>
+
+          {/* RSS Feed Display */}
+          {analysis?.rssFeedUrl && (
+            <Typography variant="caption" sx={{ display: 'block', mt: 1, color: '#64748b' }}>
+              RSS Feed Used:{' '}
+              <a
+                href={analysis.rssFeedUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: '#667eea', textDecoration: 'none' }}
+              >
+                {analysis.rssFeedUrl}
+              </a>
+            </Typography>
+          )}
         </Box>
 
         <Box sx={{ textAlign: 'right' }}>
@@ -250,7 +265,7 @@ export const BlogAnalysisSection: React.FC<BlogAnalysisSectionProps> = ({
                   : 'No recent posts found'
               }
               status={getLastPostStatus()}
-              link={analysis.blogUrl || undefined}
+              link={analysis.lastPostUrl || analysis.blogUrl || undefined}
             />
           </Grid>
 
@@ -308,9 +323,9 @@ export const BlogAnalysisSection: React.FC<BlogAnalysisSectionProps> = ({
                       mb: 0.5,
                     }}
                   >
-                    Top Writers:
+                    Writers:
                   </Typography>
-                  {analysis.writers.list.slice(0, 3).map((writer, index) => (
+                  {analysis.writers.list.map((writer, index) => (
                     <Chip
                       key={index}
                       label={writer}
@@ -323,19 +338,6 @@ export const BlogAnalysisSection: React.FC<BlogAnalysisSectionProps> = ({
                       }}
                     />
                   ))}
-                  {analysis.writers.list.length > 3 && (
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        color: '#64748b',
-                        fontSize: '10px',
-                        display: 'block',
-                        mt: 0.5,
-                      }}
-                    >
-                      +{analysis.writers.list.length - 3} more
-                    </Typography>
-                  )}
                 </Box>
               )}
             </AnalysisCard>
@@ -348,9 +350,10 @@ export const BlogAnalysisSection: React.FC<BlogAnalysisSectionProps> = ({
               title="Content Quality"
               value={`${getRatingStars(analysis.blogNature.rating)} ${analysis.blogNature.rating.toUpperCase()}`}
               subtitle={
-                analysis.blogNature.isTechnical
+                analysis.blogNature.reasoning ||
+                (analysis.blogNature.isTechnical
                   ? 'Technical & Bottom-of-funnel'
-                  : 'Top-of-funnel content'
+                  : 'Top-of-funnel content')
               }
               status={
                 analysis.blogNature.rating === 'high'
@@ -361,7 +364,7 @@ export const BlogAnalysisSection: React.FC<BlogAnalysisSectionProps> = ({
               }
               badges={getContentBadges()}
             >
-              {analysis.contentSummary && (
+              {analysis.contentSummary && !analysis.blogNature.reasoning && (
                 <Typography
                   variant="caption"
                   sx={{

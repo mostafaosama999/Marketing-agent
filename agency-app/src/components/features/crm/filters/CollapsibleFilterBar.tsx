@@ -2,38 +2,47 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { Box } from '@mui/material';
 import { LeadStatus, Lead } from '../../../../types/lead';
+import { Company } from '../../../../types/crm';
 import { FilterState, FilterRule } from '../../../../types/filter';
 import { FilterButton } from './FilterButton';
 import { AdvancedFilterBuilder } from './AdvancedFilterBuilder';
 import { SearchFilter } from './SearchFilter';
 import { ActiveFiltersBar } from './ActiveFiltersBar';
 
-interface CollapsibleFilterBarProps {
+interface CollapsibleFilterBarProps<T = Lead> {
   // Filter state (unified object)
-  filters: FilterState;
+  filters: FilterState | any;
 
   // Filter handlers
-  onFiltersChange: (updates: Partial<FilterState>) => void;
+  onFiltersChange: (updates: Partial<FilterState> | any) => void;
   onClearAll: () => void;
   onApplyAdvancedFilters: (rules: FilterRule[]) => void;
 
   // Data for dropdowns
-  leads: Lead[];
+  data: T[];
+
+  // Entity type for filtering
+  entityType?: 'lead' | 'company';
+
+  // Search placeholder
+  searchPlaceholder?: string;
 }
 
-export const CollapsibleFilterBar: React.FC<CollapsibleFilterBarProps> = ({
+export const CollapsibleFilterBar = <T extends Lead | Company = Lead>({
   filters,
   onFiltersChange,
   onClearAll,
   onApplyAdvancedFilters,
-  leads,
-}) => {
+  data,
+  entityType = 'lead',
+  searchPlaceholder = 'Search...',
+}: CollapsibleFilterBarProps<T>) => {
   const [isExpanded, setIsExpanded] = useState(false);
   const panelRef = useRef<HTMLDivElement>(null);
 
   // Calculate active filter count (excluding search)
   const activeCount =
-    filters.statuses.length +
+    (filters.statuses?.length || 0) +
     (filters.company ? 1 : 0) +
     (filters.month ? 1 : 0) +
     // Count custom field filters
@@ -68,7 +77,7 @@ export const CollapsibleFilterBar: React.FC<CollapsibleFilterBarProps> = ({
   // Handler for removing individual status
   const handleRemoveStatus = (status: LeadStatus) => {
     onFiltersChange({
-      statuses: filters.statuses.filter(s => s !== status),
+      statuses: filters.statuses.filter((s: LeadStatus) => s !== status),
     });
   };
 
@@ -79,7 +88,7 @@ export const CollapsibleFilterBar: React.FC<CollapsibleFilterBarProps> = ({
         <SearchFilter
           value={filters.search}
           onChange={(search) => onFiltersChange({ search })}
-          placeholder="Search leads..."
+          placeholder={searchPlaceholder}
         />
 
         <Box ref={panelRef} sx={{ position: 'relative' }}>
@@ -113,7 +122,8 @@ export const CollapsibleFilterBar: React.FC<CollapsibleFilterBarProps> = ({
                 onClearAll();
                 setIsExpanded(false);
               }}
-              leads={leads}
+              data={data}
+              entityType={entityType}
             />
           </Box>
         </Box>

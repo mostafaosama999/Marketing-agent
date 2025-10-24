@@ -20,7 +20,7 @@ import {
 import { db } from '../firebase/firestore';
 import { Company, CompanyFormData } from '../../types/crm';
 
-const COMPANIES_COLLECTION = 'companies';
+const COMPANIES_COLLECTION = 'entities';  // Renamed from 'companies' to bypass auto-deletion issue
 const LEADS_COLLECTION = 'leads';
 
 /**
@@ -38,6 +38,18 @@ function convertToCompany(id: string, data: any): Company {
     updatedAt: data.updatedAt?.toDate() || new Date(),
     totalApiCosts: data.totalApiCosts,
     lastApiCostUpdate: data.lastApiCostUpdate?.toDate(),
+    writingProgramAnalysis: data.writingProgramAnalysis ? {
+      ...data.writingProgramAnalysis,
+      lastAnalyzedAt: data.writingProgramAnalysis.lastAnalyzedAt?.toDate
+        ? data.writingProgramAnalysis.lastAnalyzedAt.toDate()
+        : new Date(data.writingProgramAnalysis.lastAnalyzedAt),
+    } : undefined,
+    blogAnalysis: data.blogAnalysis ? {
+      ...data.blogAnalysis,
+      lastAnalyzedAt: data.blogAnalysis.lastAnalyzedAt?.toDate
+        ? data.blogAnalysis.lastAnalyzedAt.toDate()
+        : new Date(data.blogAnalysis.lastAnalyzedAt),
+    } : undefined,
   };
 }
 
@@ -46,6 +58,12 @@ function convertToCompany(id: string, data: any): Company {
  * Performs case-insensitive lookup
  */
 export async function getOrCreateCompany(companyName: string): Promise<Company> {
+  console.log('🔍 [COMPANY GET/CREATE] Looking up company:', {
+    name: companyName,
+    normalized: companyName.trim(),
+    timestamp: new Date().toISOString(),
+  });
+
   try {
     // Normalize company name (trim and lowercase for comparison)
     const normalizedName = companyName.trim();
@@ -64,16 +82,27 @@ export async function getOrCreateCompany(companyName: string): Promise<Company> 
       }
     });
 
-    if (existingCompany) {
+    if (existingCompany !== null) {
+      console.log('✅ [COMPANY GET/CREATE] Found existing company');
       return existingCompany;
     }
 
     // Company doesn't exist, create it
+    console.log('➕ [COMPANY GET/CREATE] Creating new company:', {
+      name: normalizedName,
+    });
+
     const docRef = await addDoc(companiesRef, {
       name: normalizedName,
       customFields: {},
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
+    });
+
+    console.log('✅ [COMPANY GET/CREATE] New company created:', {
+      id: docRef.id,
+      name: normalizedName,
+      timestamp: new Date().toISOString(),
     });
 
     return {
@@ -84,7 +113,7 @@ export async function getOrCreateCompany(companyName: string): Promise<Company> 
       updatedAt: new Date(),
     };
   } catch (error) {
-    console.error('Error getting or creating company:', error);
+    console.error('❌ [COMPANY GET/CREATE] Error:', error);
     throw error;
   }
 }
@@ -242,15 +271,30 @@ export async function createCompany(
 ): Promise<string> {
   try {
     const companiesRef = collection(db, COMPANIES_COLLECTION);
-    const docRef = await addDoc(companiesRef, {
-      ...companyData,
-      customFields: companyData.customFields || {},
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
-    });
 
+    // Build document data without undefined fields (Firestore doesn't allow undefined)
+    const now = new Date();
+    const docData: any = {
+      name: companyData.name,
+      customFields: companyData.customFields || {},
+      createdAt: now,
+      updatedAt: now,
+    };
+
+    // Only add optional fields if they have values
+    if (companyData.website !== undefined && companyData.website !== null && companyData.website !== '') {
+      docData.website = companyData.website;
+    }
+    if (companyData.industry !== undefined && companyData.industry !== null && companyData.industry !== '') {
+      docData.industry = companyData.industry;
+    }
+    if (companyData.description !== undefined && companyData.description !== null && companyData.description !== '') {
+      docData.description = companyData.description;
+    }
+
+    const docRef = await addDoc(companiesRef, docData);
     return docRef.id;
-  } catch (error) {
+  } catch (error: any) {
     console.error('Error creating company:', error);
     throw error;
   }
@@ -295,20 +339,42 @@ export async function countLeadsForCompany(companyId: string): Promise<number> {
  * Should only be called when no leads reference this company
  */
 export async function deleteCompany(companyId: string): Promise<void> {
+  const stack = new Error().stack?.split('\n').slice(1, 5).join('\n');
+
+  console.log('🗑️ [COMPANY DELETE] Delete requested:', {
+    companyId,
+    timestamp: new Date().toISOString(),
+    calledFrom: stack,
+  });
+
   try {
     // Safety check: ensure no leads reference this company
     const leadCount = await countLeadsForCompany(companyId);
+
+    console.log('🔍 [COMPANY DELETE] Lead count check:', {
+      companyId,
+      leadCount,
+      willDelete: leadCount === 0,
+      timestamp: new Date().toISOString(),
+    });
+
     if (leadCount > 0) {
-      console.warn(
-        `Cannot delete company ${companyId}: ${leadCount} leads still reference it`
-      );
+      console.warn('⚠️ [COMPANY DELETE] Cannot delete company - has leads:', {
+        companyId,
+        leadCount,
+      });
       return;
     }
 
     const companyRef = doc(db, COMPANIES_COLLECTION, companyId);
     await deleteDoc(companyRef);
+
+    console.log('✅ [COMPANY DELETE] Company deleted successfully:', {
+      companyId,
+      timestamp: new Date().toISOString(),
+    });
   } catch (error) {
-    console.error('Error deleting company:', error);
+    console.error('❌ [COMPANY DELETE] Error deleting company:', error);
     throw error;
   }
 }

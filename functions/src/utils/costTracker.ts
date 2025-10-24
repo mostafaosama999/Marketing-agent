@@ -39,7 +39,7 @@ export interface CostInfo {
 export interface ApiCostRecord {
   userId: string;
   leadId?: string;
-  service: "blog-qualification" | "writing-program-finder" | "idea-generation";
+  service: "blog-qualification" | "writing-program-finder" | "writing-program-analyzer" | "idea-generation";
   model: string;
   timestamp: FieldValue;
   inputTokens: number;
@@ -81,7 +81,7 @@ export function calculateCost(
  */
 export async function logApiCost(
   userId: string,
-  service: "blog-qualification" | "writing-program-finder" | "idea-generation",
+  service: "blog-qualification" | "writing-program-finder" | "writing-program-analyzer" | "idea-generation",
   costInfo: CostInfo,
   metadata: {
     leadId?: string;

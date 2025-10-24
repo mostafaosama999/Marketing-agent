@@ -23,8 +23,19 @@ export interface Company {
     programUrl: string | null;
     isOpen: boolean | null;
     openDates: { openFrom: string; closedFrom: string } | null;
-    paymentAmount: string | null;
-    historicalPayment: string | null;
+    payment: {
+      amount: string | null;           // e.g., "$300 to $500"
+      method: string | null;            // e.g., "Deel", "PayPal", "gift cards"
+      details: string | null;           // Additional info: bonuses, performance-based, etc.
+      sourceSnippet: string | null;     // Quoted proof from the page (max ~200 chars)
+      historical: string | null;        // Previous payment rates if mentioned
+    };
+    requirements?: string[];
+    requirementTypes?: string[];
+    submissionGuidelines?: string;
+    contactEmail?: string;
+    responseTime?: string;
+    programDetails?: string;
     lastAnalyzedAt: Date;
     aiReasoning?: string;
     costInfo?: {
@@ -49,14 +60,62 @@ export interface Company {
       rating: 'low' | 'medium' | 'high';
       hasCodeExamples: boolean;
       hasDiagrams: boolean;
+      reasoning?: string; // Why this rating was given
     };
     isDeveloperB2BSaas: boolean;
     contentSummary: string;
     blogUrl: string | null;
+    lastPostUrl?: string | null; // URL to the most recent blog post
+    rssFeedUrl?: string | null; // URL to the RSS feed
     lastAnalyzedAt: Date;
     costInfo?: {
       totalCost: number;
       totalTokens: number;
+    };
+  };
+
+  // Apollo Enrichment (Company-specific data from Apollo.io)
+  apolloEnrichment?: {
+    apolloId: string | null;
+    name: string | null;
+    website: string | null;
+    employeeCount: number | null;
+    employeeRange: string | null; // "1-10", "11-50", "51-200", etc.
+    foundedYear: number | null;
+    totalFunding: number | null;
+    totalFundingFormatted: string | null; // e.g., "$10.5M"
+    latestFundingStage: string | null; // e.g., "Series A", "Seed"
+    latestFundingDate: string | null;
+    industry: string | null;
+    industries: string[];
+    secondaryIndustries: string[];
+    keywords: string[];
+    technologies: string[]; // Technology stack (e.g., ["React", "Node.js", "AWS"])
+    description: string | null;
+    logoUrl: string | null;
+    linkedinUrl: string | null;
+    twitterUrl: string | null;
+    facebookUrl: string | null;
+    crunchbaseUrl: string | null;
+    angellistUrl: string | null;
+    blogUrl: string | null;
+    phone: string | null;
+    address: {
+      street: string | null;
+      city: string | null;
+      state: string | null;
+      postalCode: string | null;
+      country: string | null;
+      raw: string | null;
+    };
+    publiclyTraded: {
+      symbol: string;
+      exchange: string | null;
+    } | null;
+    lastEnrichedAt: Date;
+    costInfo?: {
+      credits: number;
+      timestamp: Date;
     };
   };
 }

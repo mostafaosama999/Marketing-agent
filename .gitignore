@@ -109,6 +109,8 @@ Thumbs.db
 firebase-export-*
 firestore-export-*
 .firebase-emulators/
+emulator-data/
+agency-app/emulator-data/
 
 # Local development
 .env.local

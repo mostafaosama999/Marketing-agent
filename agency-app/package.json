@@ -43,10 +43,13 @@
   },
   "scripts": {
     "start": "react-scripts start",
+    "start:emulator": "REACT_APP_USE_EMULATOR=true react-scripts start",
     "build": "GENERATE_SOURCEMAP=false react-scripts build",
     "test": "react-scripts test",
     "eject": "react-scripts eject",
-    "serve": "npx serve -s build -l 8080"
+    "serve": "npx serve -s build -l 8080",
+    "emulators": "firebase emulators:start --only functions",
+    "emulators:ui": "firebase emulators:start --only functions"
   },
   "eslintConfig": {
     "extends": [

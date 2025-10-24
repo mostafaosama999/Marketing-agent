@@ -25,50 +25,41 @@ function getOpenAI(): OpenAI {
  * Common URL patterns for writing/guest author programs
  * Ordered by likelihood/popularity
  * Note: Excludes general pages like /blog, /careers, /community
+ * Note: Trailing slashes are automatically normalized, so only include one version
  */
 const URL_PATTERNS = [
   "/write-for-us",
-  "/write-for-us/",
   "/blog/write-for-us",
-  "/blog/write-for-us/",
   "/community/write-for-us",
-  "/community/write-for-us/",
+  "/write-for-the-community",
+  "/community/write-for-the-community",
+  "/blog/write-for-the-community",
+  "/community/write-for-community",
   "/guest-authors",
-  "/guest-authors/",
   "/guest-authorship",
-  "/guest-authorship/",
   "/writers-program",
   "/writer-program",
   "/technical-writer-program",
   "/contributor-program",
-  "/contributor-program/",
   "/contribute",
-  "/contribute/",
   "/community-content-program",
   "/guest-writing",
-  "/guest-writing/",
   "/community/tutorials/how-to-write",
   "/docs/community/programs/guest-authors",
   "/community/pages/write-for-us",
   "/write-with-us",
-  "/write-with-us/",
   "/become-an-author",
   "/blog/guest-author-program",
   "/community/write",
   "/scholars",
-  "/scholars/",
   "/scholars-program",
-  "/scholars-program/",
   "/blog/scholars",
-  "/blog/scholars/",
   "/community/scholars",
-  "/community/scholars/",
   "/developer-scholars",
   "/technical-scholars",
   "/content-creator-program",
   "/ambassador-program",
   "/advocates",
-  "/advocates/",
 ];
 
 /**
@@ -110,6 +101,24 @@ function extractCompanyName(hostname: string): string {
 }
 
 /**
+ * Normalize URL by removing trailing slashes (except for root domain)
+ * This prevents duplicates like /scholars and /scholars/
+ */
+function normalizeUrl(url: string): string {
+  try {
+    const urlObj = new URL(url);
+    // Remove trailing slash from pathname unless it's just "/"
+    if (urlObj.pathname.length > 1 && urlObj.pathname.endsWith("/")) {
+      urlObj.pathname = urlObj.pathname.slice(0, -1);
+    }
+    return urlObj.toString();
+  } catch {
+    // If URL parsing fails, just remove trailing slash from string
+    return url.length > 1 && url.endsWith("/") ? url.slice(0, -1) : url;
+  }
+}
+
+/**
  * Generate all candidate URLs to check for writing programs
  */
 function generateCandidateUrls(websiteUrl: string): string[] {
@@ -137,6 +146,9 @@ function generateCandidateUrls(websiteUrl: string): string[] {
   const companySpecificPatterns = [
     `/write-for-${companyName}`,
     `/blog/write-for-${companyName}`,
+    `/write-for-the-${companyName}-community`,
+    `/community/write-for-the-${companyName}-community`,
+    `/blog/write-for-the-${companyName}-community`,
     `/${companyName}-writers-program`,
     `/blog/${companyName}-technical-writer-program`,
     `/${companyName}-writer-program`,
@@ -148,9 +160,18 @@ function generateCandidateUrls(websiteUrl: string): string[] {
     `/community/contribute-article`,
     `/community/submit-tutorial`,
     `/community/tutorials/write`,
-    `/blog/become-a-contributor`,
+    `/community/tutorials/how-to-contribute`,
+    `/community/tutorials/submit-tutorial`,
+    `/community/tutorials/contributor-guide`,
+    `/community/tutorials/writing-guide`,
+    `/community/tutorials/contribute`,
+    `/blog/how-to-contribute`,
+    `/blog/contributor-guide`,
+    `/blog/writing-guide`,
     `/docs/contributing`,
     `/docs/contribute-content`,
+    `/docs/contributing/writing`,
+    `/docs/community/contribute`,
   ];
 
   companySpecificPatterns.forEach((pattern) => {
@@ -160,8 +181,9 @@ function generateCandidateUrls(websiteUrl: string): string[] {
   // Notion pattern
   candidates.push(`https://${companyName}.notion.site/Write-for-us`);
 
-  // Remove duplicates
-  return [...new Set(candidates)];
+  // Normalize URLs and remove duplicates
+  const normalizedCandidates = candidates.map(normalizeUrl);
+  return [...new Set(normalizedCandidates)];
 }
 
 /**
@@ -181,67 +203,90 @@ async function findWritingProgramLinksOnPage(
     `${domain.origin}/docs`,
   ];
 
-  for (const pageUrl of pagesToCheck) {
-    try {
-      const response = await axios.get(pageUrl, {
-        timeout: 10000,
-        validateStatus: (status) => status >= 200 && status < 400,
-        headers: {
-          "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
-        },
-      });
+  // Check all pages in parallel for faster execution
+  const pageResults = await Promise.allSettled(
+    pagesToCheck.map(async (pageUrl) => {
+      try {
+        const response = await axios.get(pageUrl, {
+          timeout: 10000,
+          validateStatus: (status) => status >= 200 && status < 400,
+          headers: {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36",
+          },
+        });
 
-      const $ = cheerio.load(response.data);
+        const $ = cheerio.load(response.data);
+        const links: string[] = [];
 
-      // Find all links that might lead to writing programs
-      $("a").each((_, element) => {
-        const href = $(element).attr("href");
-        const linkText = $(element).text().toLowerCase().trim();
+        // Find all links that might lead to writing programs
+        $("a").each((_, element) => {
+          const href = $(element).attr("href");
+          const linkText = $(element).text().toLowerCase().trim();
 
-        if (!href) return;
+          if (!href) return;
 
-        // Check if link text contains writing-related keywords
-        const writingKeywords = [
-          "write for us",
-          "write an article",
-          "submit article",
-          "submit tutorial",
-          "contribute",
-          "contributor",
-          "become a writer",
-          "become an author",
-          "guest author",
-          "technical writer",
-          "how to write",
-        ];
+          // Check if link text contains writing-related keywords
+          const writingKeywords = [
+            "write for us",
+            "write an article",
+            "submit article",
+            "submit tutorial",
+            "contribute",
+            "contributor",
+            "become a writer",
+            "become an author",
+            "guest author",
+            "technical writer",
+            "how to write",
+            "how to contribute",
+            "writing guide",
+            "contributor guide",
+            "contribution guide",
+            "submit content",
+            "contribute content",
+            "community writer",
+            "write with us",
+          ];
 
-        const hasWritingKeyword = writingKeywords.some((keyword) =>
-          linkText.includes(keyword)
-        );
+          const hasWritingKeyword = writingKeywords.some((keyword) =>
+            linkText.includes(keyword)
+          );
 
-        if (hasWritingKeyword) {
-          // Normalize the URL
-          let fullUrl = href;
-          if (href.startsWith("/")) {
-            fullUrl = `${domain.origin}${href}`;
-          } else if (!href.startsWith("http")) {
-            fullUrl = `${domain.origin}/${href}`;
+          if (hasWritingKeyword) {
+            // Normalize the URL
+            let fullUrl = href;
+            if (href.startsWith("/")) {
+              fullUrl = `${domain.origin}${href}`;
+            } else if (!href.startsWith("http")) {
+              fullUrl = `${domain.origin}/${href}`;
+            }
+
+            // Only add if it's from the same domain
+            if (fullUrl.includes(domain.hostname)) {
+              links.push(fullUrl);
+              console.log(`🔍 Found potential link on ${pageUrl}: ${fullUrl} ("${linkText}")`);
+            }
           }
+        });
 
-          // Only add if it's from the same domain
-          if (fullUrl.includes(domain.hostname)) {
-            foundLinks.push(fullUrl);
-            console.log(`🔍 Found potential link on ${pageUrl}: ${fullUrl} ("${linkText}")`);
-          }
-        }
-      });
-    } catch (error) {
-      // Silently continue if page doesn't exist
-      continue;
+        return links;
+      } catch (error) {
+        // Return empty array if page doesn't exist
+        return [];
+      }
+    })
+  );
+
+  // Collect all found links from successful requests
+  pageResults.forEach((result) => {
+    if (result.status === "fulfilled" && result.value.length > 0) {
+      foundLinks.push(...result.value);
     }
-  }
+  });
 
-  return [...new Set(foundLinks)];
+  // Normalize URLs and remove duplicates
+  const normalizedLinks = foundLinks.map(normalizeUrl);
+  return [...new Set(normalizedLinks)];
 }
 
 /**
@@ -285,6 +330,15 @@ function isNotFoundPage(finalUrl: string, htmlContent: string): boolean {
 function hasWritingProgramContent(htmlContent: string): boolean {
   const lowerContent = htmlContent.toLowerCase();
 
+  // Check for submission forms (Google Forms, Typeform, etc.)
+  const hasSubmissionForm =
+    lowerContent.includes("forms.gle") ||
+    lowerContent.includes("docs.google.com/forms") ||
+    lowerContent.includes("typeform.com") ||
+    lowerContent.includes("submission form") ||
+    lowerContent.includes("application form") ||
+    lowerContent.includes("apply via");
+
   // Keywords that should appear on a writing program page
   const writingKeywords = [
     "write for us",
@@ -293,6 +347,8 @@ function hasWritingProgramContent(htmlContent: string): boolean {
     "writing program",
     "submit an article",
     "submit your article",
+    "submit tutorial",
+    "contribute tutorial",
     "guest post",
     "contribute content",
     "become a writer",
@@ -308,12 +364,22 @@ function hasWritingProgramContent(htmlContent: string): boolean {
     "advocate program",
     "paid to write",
     "freelance writ",
+    "how to write",
+    "writing guide",
+    "contributor guide",
+    "contribution guide",
+    "tutorial submission",
   ];
 
   // Count how many keywords are found
   const foundKeywords = writingKeywords.filter((keyword) =>
     lowerContent.includes(keyword)
   );
+
+  // If submission form is present, be more lenient (consider valid with any keyword)
+  if (hasSubmissionForm && foundKeywords.length >= 1) {
+    return true;
+  }
 
   // Consider valid if at least 1 strong keyword found
   return foundKeywords.length >= 1;
@@ -378,29 +444,34 @@ async function checkUrl(
  */
 async function checkUrlsInBatches(
   urls: string[],
-  concurrent: number = 5,
-  timeout: number = 5000
+  concurrent: number = 30,
+  timeout: number = 3000,
+  maxValidUrls: number = 2
 ): Promise<WritingProgramResult[]> {
   const results: WritingProgramResult[] = [];
+  let validUrlsFound = 0;
 
   for (let i = 0; i < urls.length; i += concurrent) {
+    // Early exit if we've found enough valid URLs
+    if (validUrlsFound >= maxValidUrls) {
+      console.log(`✓ Found ${validUrlsFound} valid URLs, stopping early (remaining: ${urls.length - i} URLs)`);
+      break;
+    }
+
     const batch = urls.slice(i, i + concurrent);
     const batchResults = await Promise.all(
       batch.map((url) => checkUrl(url, timeout))
     );
     results.push(...batchResults);
 
-    // Log found URLs
+    // Log found URLs and count them
     const foundUrls = batchResults.filter((r) => r.exists);
+    validUrlsFound += foundUrls.length;
+
     if (foundUrls.length > 0) {
       foundUrls.forEach((result) => {
         console.log(`✓ FOUND: ${result.url} (${result.status})`);
       });
-    }
-
-    // Add small delay between batches to be respectful
-    if (i + concurrent < urls.length) {
-      await new Promise((resolve) => setTimeout(resolve, 200));
     }
   }
 
@@ -738,22 +809,25 @@ export async function findWritingProgram(
     concurrent?: number;
     timeout?: number;
     useAiFallback?: boolean;
+    maxValidUrls?: number;
   } = {}
 ): Promise<WritingProgramFinderResult> {
   const {
-    concurrent = 5,
-    timeout = 5000,
+    concurrent = 30,
+    timeout = 3000,
     useAiFallback = true,
+    maxValidUrls = 2,
   } = options;
 
   console.log(`\nSearching for writing programs: ${websiteUrl}`);
+  console.log(`⚡ Performance settings: concurrency=${concurrent}, timeout=${timeout}ms, maxValidUrls=${maxValidUrls}`);
 
   // Generate candidate URLs
   const candidates = generateCandidateUrls(websiteUrl);
   console.log(`Generated ${candidates.length} candidate URLs from patterns\n`);
 
-  // Scrape common pages to find additional writing program links
-  console.log("🔍 Scraping /community, /blog, and /docs pages for writing program links...");
+  // Scrape common pages to find additional writing program links (in parallel)
+  console.log("🔍 Scraping /community, /blog, and /docs pages for writing program links (parallel)...");
   const scrapedLinks = await findWritingProgramLinksOnPage(websiteUrl);
   if (scrapedLinks.length > 0) {
     console.log(`✅ Found ${scrapedLinks.length} additional URLs from scraping`);
@@ -762,8 +836,8 @@ export async function findWritingProgram(
 
   console.log(`Total URLs to check: ${candidates.length}\n`);
 
-  // Check URLs
-  const results = await checkUrlsInBatches(candidates, concurrent, timeout);
+  // Check URLs with early exit optimization
+  const results = await checkUrlsInBatches(candidates, concurrent, timeout, maxValidUrls);
 
   // Filter valid URLs
   let validUrls = results.filter((r) => r.exists);
@@ -801,7 +875,7 @@ export async function findWritingProgram(
   }
 
   console.log(`\n--- Results for ${websiteUrl} ---`);
-  console.log(`Found ${validUrls.length} valid URLs out of ${candidates.length} checked`);
+  console.log(`Found ${validUrls.length} valid URLs out of ${results.length} checked (skipped ${candidates.length - results.length})`);
   if (usedAiFallback) {
     console.log(`🤖 AI Fallback: ${aiSuggestions?.length || 0} suggestions, ${aiSuggestions?.filter(s => s.verified).length || 0} verified`);
   }
@@ -811,7 +885,7 @@ export async function findWritingProgram(
 
   return {
     website: websiteUrl,
-    totalChecked: candidates.length,
+    totalChecked: results.length,
     validUrls,
     patternsFound,
     usedAiFallback,
@@ -831,23 +905,25 @@ export async function findMultipleWritingPrograms(
     timeout?: number;
     delayBetweenWebsites?: number;
     useAiFallback?: boolean;
+    maxValidUrls?: number;
   } = {}
 ): Promise<Map<string, WritingProgramFinderResult>> {
   const {
-    concurrent = 5,
-    timeout = 5000,
-    delayBetweenWebsites = 1000,
+    concurrent = 30,
+    timeout = 3000,
+    delayBetweenWebsites = 500,
     useAiFallback = true,
+    maxValidUrls = 2,
   } = options;
 
   const allResults = new Map<string, WritingProgramFinderResult>();
 
   for (const website of websites) {
     try {
-      const result = await findWritingProgram(website, {concurrent, timeout, useAiFallback});
+      const result = await findWritingProgram(website, {concurrent, timeout, useAiFallback, maxValidUrls});
       allResults.set(website, result);
 
-      // Add delay between websites to be respectful
+      // Add delay between websites to be respectful (reduced from 1000ms to 500ms)
       if (delayBetweenWebsites > 0 && website !== websites[websites.length - 1]) {
         await new Promise((resolve) => setTimeout(resolve, delayBetweenWebsites));
       }

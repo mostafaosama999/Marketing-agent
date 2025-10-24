@@ -6,15 +6,21 @@ import { LeadStatus } from '../../../../types/lead';
 
 interface ActiveFiltersBarProps {
   search: string;
-  statuses: LeadStatus[];
-  owner: string;
-  company: string;
-  month: string;
+  statuses?: LeadStatus[];
+  owner?: string;
+  company?: string;
+  month?: string;
+  industry?: string;
+  employeeRange?: string;
+  fundingStage?: string;
   onRemoveSearch: () => void;
-  onRemoveStatus: (status: LeadStatus) => void;
-  onRemoveOwner: () => void;
-  onRemoveCompany: () => void;
-  onRemoveMonth: () => void;
+  onRemoveStatus?: (status: LeadStatus) => void;
+  onRemoveOwner?: () => void;
+  onRemoveCompany?: () => void;
+  onRemoveMonth?: () => void;
+  onRemoveIndustry?: () => void;
+  onRemoveEmployeeRange?: () => void;
+  onRemoveFundingStage?: () => void;
   onClearAll: () => void;
 }
 
@@ -30,15 +36,21 @@ const STATUS_LABELS: Record<LeadStatus, string> = {
 
 export const ActiveFiltersBar: React.FC<ActiveFiltersBarProps> = ({
   search,
-  statuses,
+  statuses = [],
   owner,
   company,
   month,
+  industry,
+  employeeRange,
+  fundingStage,
   onRemoveSearch,
   onRemoveStatus,
   onRemoveOwner,
   onRemoveCompany,
   onRemoveMonth,
+  onRemoveIndustry,
+  onRemoveEmployeeRange,
+  onRemoveFundingStage,
   onClearAll,
 }) => {
   // Calculate total active filters
@@ -47,7 +59,10 @@ export const ActiveFiltersBar: React.FC<ActiveFiltersBarProps> = ({
     statuses.length +
     (owner ? 1 : 0) +
     (company ? 1 : 0) +
-    (month ? 1 : 0);
+    (month ? 1 : 0) +
+    (industry ? 1 : 0) +
+    (employeeRange ? 1 : 0) +
+    (fundingStage ? 1 : 0);
 
   // Don't render if no active filters
   if (activeFilterCount === 0) {
@@ -90,7 +105,7 @@ export const ActiveFiltersBar: React.FC<ActiveFiltersBarProps> = ({
           key={status}
           label={`Status: ${STATUS_LABELS[status]}`}
           size="small"
-          onDelete={() => onRemoveStatus(status)}
+          onDelete={onRemoveStatus ? () => onRemoveStatus(status) : undefined}
           deleteIcon={<CloseIcon />}
           sx={{
             bgcolor: 'white',
@@ -146,11 +161,71 @@ export const ActiveFiltersBar: React.FC<ActiveFiltersBarProps> = ({
       )}
 
       {/* Month filter chip */}
-      {month && (
+      {month && onRemoveMonth && (
         <Chip
           label={`Month: ${month}`}
           size="small"
           onDelete={onRemoveMonth}
+          deleteIcon={<CloseIcon />}
+          sx={{
+            bgcolor: 'white',
+            border: '1px solid #e2e8f0',
+            '& .MuiChip-deleteIcon': {
+              color: '#64748b',
+              '&:hover': {
+                color: '#f44336',
+              },
+            },
+          }}
+        />
+      )}
+
+      {/* Industry filter chip (for companies) */}
+      {industry && onRemoveIndustry && (
+        <Chip
+          label={`Industry: ${industry}`}
+          size="small"
+          onDelete={onRemoveIndustry}
+          deleteIcon={<CloseIcon />}
+          sx={{
+            bgcolor: 'white',
+            border: '1px solid #e2e8f0',
+            '& .MuiChip-deleteIcon': {
+              color: '#64748b',
+              '&:hover': {
+                color: '#f44336',
+              },
+            },
+          }}
+        />
+      )}
+
+      {/* Employee Range filter chip (for companies) */}
+      {employeeRange && onRemoveEmployeeRange && (
+        <Chip
+          label={`Employees: ${employeeRange}`}
+          size="small"
+          onDelete={onRemoveEmployeeRange}
+          deleteIcon={<CloseIcon />}
+          sx={{
+            bgcolor: 'white',
+            border: '1px solid #e2e8f0',
+            '& .MuiChip-deleteIcon': {
+              color: '#64748b',
+              '&:hover': {
+                color: '#f44336',
+              },
+            },
+          }}
+        />
+      )}
+
+      {/* Funding Stage filter chip (for companies) */}
+      {fundingStage && onRemoveFundingStage && (
+        <Chip
+          label={`Funding: ${fundingStage}`}
+          size="small"
+          onDelete={onRemoveFundingStage}
           deleteIcon={<CloseIcon />}
           sx={{
             bgcolor: 'white',

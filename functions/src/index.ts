@@ -20,5 +20,7 @@ export {triggerResearchFlow} from "./research/orchestrator";
 export {dailyWebflowSync} from "./webflow/dailySync";
 export {qualifyCompanyBlog} from "./blogQualifier/qualifyBlog";
 export {findWritingProgramCloud} from "./writingProgramFinder/findWritingProgram";
+export {analyzeWritingProgramDetailsCloud} from "./writingProgramAnalyzer";
 export {generateCustomIdeasCloud, getLeadIdeas, updateIdeaStatus} from "./ideaGenerator/generateIdeas";
 export {fetchApolloEmail} from "./apollo/apolloProxy";
+export {enrichOrganizationCloud} from "./apollo/enrichOrganization";

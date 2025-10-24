@@ -34,6 +34,7 @@ import {
   Email as EmailIcon,
   Save as SaveIcon,
   Cancel as CancelIcon,
+  Search as SearchIcon,
 } from '@mui/icons-material';
 import { Company, CompanyFormData } from '../../types/crm';
 import {
@@ -47,13 +48,16 @@ import { subscribeToCompanyLeads, subscribeToCompanyLeadsByName } from '../../se
 import { Lead } from '../../types/lead';
 import {
   analyzeWritingProgram,
+  analyzeWritingProgramDetails,
   analyzeBlog,
-  extractPaymentInfo,
-  extractProgramStatus,
+  WritingProgramResult,
 } from '../../services/firebase/cloudFunctions';
+import { enrichOrganization } from '../../services/api/apolloService';
 import { WritingProgramSection } from '../../components/features/companies/WritingProgramSection';
 import { BlogAnalysisSection } from '../../components/features/companies/BlogAnalysisSection';
 import { WebsiteFieldMappingDialog } from '../../components/features/companies/WebsiteFieldMappingDialog';
+import { WritingProgramUrlSelectionDialog } from '../../components/features/companies/WritingProgramUrlSelectionDialog';
+import { LeadDiscoveryDialog } from '../../components/features/companies/LeadDiscoveryDialog';
 import {
   getCompanyWebsite,
   getWebsiteFieldMapping,
@@ -65,7 +69,7 @@ export const CompanyDetailPage: React.FC = () => {
 
   const [company, setCompany] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
-  const [editMode, setEditMode] = useState(false);
+  const [editMode, setEditMode] = useState(true); // Default to edit mode for better UX
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [duplicateWarning, setDuplicateWarning] = useState('');
@@ -96,11 +100,26 @@ export const CompanyDetailPage: React.FC = () => {
   const [writingProgramError, setWritingProgramError] = useState<string | null>(null);
   const [blogAnalysisLoading, setBlogAnalysisLoading] = useState(false);
   const [blogAnalysisError, setBlogAnalysisError] = useState<string | null>(null);
+  const [apolloEnrichmentLoading, setApolloEnrichmentLoading] = useState(false);
+  const [apolloEnrichmentError, setApolloEnrichmentError] = useState<string | null>(null);
 
   // Website mapping dialog state
   const [websiteMappingDialogOpen, setWebsiteMappingDialogOpen] = useState(false);
   const [allCompanies, setAllCompanies] = useState<Company[]>([]);
   const [pendingAnalysisType, setPendingAnalysisType] = useState<'writing' | 'blog' | null>(null);
+
+  // URL selection dialog state
+  const [urlSelectionDialogOpen, setUrlSelectionDialogOpen] = useState(false);
+  const [foundUrls, setFoundUrls] = useState<Array<{
+    url: string;
+    source: 'pattern' | 'ai';
+    confidence?: 'high' | 'medium' | 'low';
+    verified?: boolean;
+  }>>([]);
+  const [detailsAnalysisLoading, setDetailsAnalysisLoading] = useState(false);
+
+  // Lead discovery dialog state
+  const [leadDiscoveryDialogOpen, setLeadDiscoveryDialogOpen] = useState(false);
 
   // Load company data
   useEffect(() => {
@@ -351,12 +370,12 @@ export const CompanyDetailPage: React.FC = () => {
     setTabValue(newValue);
   };
 
-  // Handle writing program analysis
+  // Handle writing program analysis (Phase 1: Find URLs)
   const handleAnalyzeWritingProgram = async () => {
     if (!company) return;
 
-    // Get website using mapping
-    const website = getCompanyWebsite(company);
+    // Get website using mapping - check formData first (in case user hasn't saved yet)
+    let website = formData.website || getCompanyWebsite(company);
 
     if (!website) {
       // No website found, check if mapping is set
@@ -377,30 +396,94 @@ export const CompanyDetailPage: React.FC = () => {
     setWritingProgramError(null);
 
     try {
+      // Phase 1: Find URLs
       const result = await analyzeWritingProgram(website);
 
-      // Extract information
-      const hasProgram = result.validUrls.length > 0;
-      const programUrl = result.validUrls[0]?.url || null;
-      const { isOpen, openDates } = extractProgramStatus(result.aiSuggestions);
-      const { amount, historical } = extractPaymentInfo(result.aiSuggestions);
+      if (result.validUrls.length === 0 && (!result.aiSuggestions || result.aiSuggestions.length === 0)) {
+        // No URLs found at all
+        setWritingProgramError('No writing program URLs found for this website');
+        setWritingProgramLoading(false);
+        return;
+      }
+
+      // Prepare URLs for selection
+      const urlOptions: Array<{
+        url: string;
+        source: 'pattern' | 'ai';
+        confidence?: 'high' | 'medium' | 'low';
+        verified?: boolean;
+      }> = [];
+
+      // Add pattern-matched URLs (from validUrls)
+      result.validUrls.forEach((urlResult) => {
+        urlOptions.push({
+          url: urlResult.url,
+          source: 'pattern',
+          verified: true,
+        });
+      });
+
+      // Add AI suggestions
+      if (result.aiSuggestions) {
+        result.aiSuggestions.forEach((suggestion) => {
+          // Don't duplicate if already in validUrls
+          if (!urlOptions.some(u => u.url === suggestion.url)) {
+            urlOptions.push({
+              url: suggestion.url,
+              source: 'ai',
+              confidence: suggestion.confidence,
+              verified: suggestion.verified,
+            });
+          }
+        });
+      }
+
+      // Show URL selection dialog
+      setFoundUrls(urlOptions);
+      setUrlSelectionDialogOpen(true);
+      setWritingProgramLoading(false);
+    } catch (err: any) {
+      console.error('Error finding writing program URLs:', err);
+      setWritingProgramError(err.message || 'Failed to find writing program URLs');
+      setWritingProgramLoading(false);
+    }
+  };
+
+  // Handle URL selection and detailed analysis (Phase 2: Analyze selected URL)
+  const handleUrlSelected = async (selectedUrl: string) => {
+    if (!company) return;
+
+    setDetailsAnalysisLoading(true);
+    setWritingProgramError(null);
+
+    try {
+      // Phase 2: Analyze the selected URL in detail
+      const detailsResult = await analyzeWritingProgramDetails(
+        selectedUrl,
+        company.id
+      );
 
       const analysisData: any = {
-        hasProgram,
-        programUrl,
-        isOpen,
-        openDates,
-        paymentAmount: amount,
-        historicalPayment: historical,
+        hasProgram: detailsResult.hasProgram,
+        programUrl: detailsResult.programUrl,
+        isOpen: detailsResult.isOpen,
+        openDates: detailsResult.openDates,
+        payment: detailsResult.payment,
+        requirements: detailsResult.requirements,
+        requirementTypes: detailsResult.requirementTypes,
+        submissionGuidelines: detailsResult.submissionGuidelines,
+        contactEmail: detailsResult.contactEmail,
+        responseTime: detailsResult.responseTime,
+        programDetails: detailsResult.programDetails,
         lastAnalyzedAt: new Date(),
-        aiReasoning: result.aiReasoning,
+        aiReasoning: detailsResult.aiReasoning,
       };
 
       // Only add costInfo if it exists
-      if (result.costInfo) {
+      if (detailsResult.costInfo) {
         analysisData.costInfo = {
-          totalCost: result.costInfo.totalCost,
-          totalTokens: result.costInfo.totalTokens,
+          totalCost: detailsResult.costInfo.totalCost,
+          totalTokens: detailsResult.costInfo.totalTokens,
         };
       }
 
@@ -414,11 +497,15 @@ export const CompanyDetailPage: React.FC = () => {
         ...company,
         writingProgramAnalysis: analysisData,
       });
+
+      // Close dialog
+      setUrlSelectionDialogOpen(false);
+      setFoundUrls([]);
     } catch (err: any) {
-      console.error('Error analyzing writing program:', err);
-      setWritingProgramError(err.message || 'Failed to analyze writing program');
+      console.error('Error analyzing writing program details:', err);
+      setWritingProgramError(err.message || 'Failed to analyze writing program details');
     } finally {
-      setWritingProgramLoading(false);
+      setDetailsAnalysisLoading(false);
     }
   };
 
@@ -426,8 +513,8 @@ export const CompanyDetailPage: React.FC = () => {
   const handleAnalyzeBlog = async () => {
     if (!company) return;
 
-    // Get website using mapping
-    const website = getCompanyWebsite(company);
+    // Get website using mapping - check formData first (in case user hasn't saved yet)
+    let website = formData.website || getCompanyWebsite(company);
 
     if (!website) {
       // No website found, check if mapping is set
@@ -455,12 +542,45 @@ export const CompanyDetailPage: React.FC = () => {
       const areEmployees = result.authorsAreEmployees === 'employees' || result.authorsAreEmployees === 'mixed';
       const areFreelancers = result.authorsAreEmployees === 'freelancers' || result.authorsAreEmployees === 'mixed';
 
-      // Determine content quality rating based on multiple factors
-      let rating: 'low' | 'medium' | 'high' = 'low';
-      if (result.isDeveloperB2BSaas && result.coversAiTopics) {
-        rating = 'high';
-      } else if (result.isDeveloperB2BSaas || result.coversAiTopics) {
-        rating = 'medium';
+      // Use backend's content quality rating if available, otherwise fallback to old logic
+      let rating: 'low' | 'medium' | 'high' = result.contentQualityRating || 'low';
+      if (!result.contentQualityRating) {
+        // Fallback logic for backward compatibility
+        if (result.isDeveloperB2BSaas && result.coversAiTopics) {
+          rating = 'high';
+        } else if (result.isDeveloperB2BSaas || result.coversAiTopics) {
+          rating = 'medium';
+        }
+      }
+
+      // Build blogNature object conditionally to avoid undefined values
+      const blogNature: any = {
+        isAIWritten: result.isAIWritten || false,
+        isTechnical: result.technicalDepth === 'advanced' || result.technicalDepth === 'intermediate',
+        rating,
+        hasCodeExamples: result.hasCodeExamples || false,
+        codeExamplesCount: result.codeExamplesCount || 0,
+        codeLanguages: result.codeLanguages || [],
+        hasDiagrams: result.hasDiagrams || false,
+        diagramsCount: result.diagramsCount || 0,
+        exampleQuotes: result.exampleQuotes || [],
+      };
+
+      // Only add optional fields if they have values (Firestore doesn't allow undefined)
+      if (result.aiWrittenConfidence) {
+        blogNature.aiWrittenConfidence = result.aiWrittenConfidence;
+      }
+      if (result.aiWrittenEvidence) {
+        blogNature.aiWrittenEvidence = result.aiWrittenEvidence;
+      }
+      if (result.technicalDepth) {
+        blogNature.technicalDepth = result.technicalDepth;
+      }
+      if (result.funnelStage) {
+        blogNature.funnelStage = result.funnelStage;
+      }
+      if (result.contentQualityReasoning) {
+        blogNature.reasoning = result.contentQualityReasoning;
       }
 
       const analysisData: any = {
@@ -472,16 +592,12 @@ export const CompanyDetailPage: React.FC = () => {
           areFreelancers,
           list: authorNames,
         },
-        blogNature: {
-          isAIWritten: !result.isDeveloperB2BSaas && !result.coversAiTopics, // Assume AI if not technical
-          isTechnical: result.isDeveloperB2BSaas,
-          rating,
-          hasCodeExamples: result.isDeveloperB2BSaas, // Assume code examples if dev-focused
-          hasDiagrams: result.isDeveloperB2BSaas, // Assume diagrams if dev-focused
-        },
+        blogNature,
         isDeveloperB2BSaas: result.isDeveloperB2BSaas,
         contentSummary: result.contentSummary,
         blogUrl: result.blogLinkUsed || null,
+        lastPostUrl: result.lastPostUrl || null,
+        rssFeedUrl: result.rssFeedUrl || null,
         lastAnalyzedAt: new Date(),
       };
 
@@ -508,6 +624,55 @@ export const CompanyDetailPage: React.FC = () => {
       setBlogAnalysisError(err.message || 'Failed to analyze blog');
     } finally {
       setBlogAnalysisLoading(false);
+    }
+  };
+
+  // Handle Apollo enrichment
+  const handleApolloEnrichment = async () => {
+    if (!company) return;
+
+    // Get website using mapping - check formData first (in case user hasn't saved yet)
+    let website = formData.website || getCompanyWebsite(company);
+
+    if (!website) {
+      // No website found, check if mapping is set
+      const mapping = getWebsiteFieldMapping();
+      if (!mapping) {
+        // No mapping set, show dialog to configure
+        setPendingAnalysisType('blog'); // Reuse blog type for simplicity
+        setWebsiteMappingDialogOpen(true);
+        return;
+      }
+
+      // Mapping is set but this company doesn't have that field
+      setApolloEnrichmentError('This company does not have a website field set');
+      return;
+    }
+
+    setApolloEnrichmentLoading(true);
+    setApolloEnrichmentError(null);
+
+    try {
+      const result = await enrichOrganization({
+        domain: website,
+        companyId: company.id,
+      });
+
+      if (!result.enriched || !result.organization) {
+        throw new Error(result.error || 'Failed to enrich organization');
+      }
+
+      // Organization data is already saved to Firestore by the cloud function
+      // Just update local state
+      const updatedCompany = await getCompany(company.id);
+      if (updatedCompany) {
+        setCompany(updatedCompany);
+      }
+    } catch (err: any) {
+      console.error('Error enriching organization:', err);
+      setApolloEnrichmentError(err.message || 'Failed to enrich organization with Apollo');
+    } finally {
+      setApolloEnrichmentLoading(false);
     }
   };
 
@@ -684,7 +849,7 @@ export const CompanyDetailPage: React.FC = () => {
             </Box>
 
             <Box sx={{ display: 'flex', gap: 1 }}>
-              {editMode ? (
+              {editMode && !blogAnalysisLoading && !writingProgramLoading ? (
                 <>
                   <Button
                     startIcon={<CancelIcon />}
@@ -714,7 +879,7 @@ export const CompanyDetailPage: React.FC = () => {
                     {saving ? <CircularProgress size={24} sx={{ color: 'white' }} /> : 'Save Changes'}
                   </Button>
                 </>
-              ) : (
+              ) : !blogAnalysisLoading && !writingProgramLoading ? (
                 <>
                   <IconButton
                     onClick={() => setEditMode(true)}
@@ -739,7 +904,7 @@ export const CompanyDetailPage: React.FC = () => {
                     <DeleteIcon />
                   </IconButton>
                 </>
-              )}
+              ) : null}
             </Box>
           </Box>
         </Box>
@@ -750,7 +915,8 @@ export const CompanyDetailPage: React.FC = () => {
             <Tab label="Details" />
             <Tab label={`Leads (${companyLeads.length})`} />
             <Tab label="Writing Program" />
-            {/* <Tab label="Blog" /> */}
+            <Tab label="Blog" />
+            <Tab label="Apollo Enrichment" />
           </Tabs>
         </Box>
 
@@ -820,6 +986,80 @@ export const CompanyDetailPage: React.FC = () => {
                   helperText="Optional - Any additional information"
                 />
               </Grid>
+
+              {/* Custom Fields Section */}
+              {formData.customFields && Object.keys(formData.customFields).length > 0 && (
+                <>
+                  <Grid size={{ xs: 12 }}>
+                    <Box sx={{ borderTop: '1px solid', borderColor: 'divider', pt: 2, mt: 1 }}>
+                      <Typography
+                        variant="h6"
+                        sx={{
+                          fontWeight: 600,
+                          color: '#667eea',
+                          mb: 2,
+                        }}
+                      >
+                        Custom Fields
+                      </Typography>
+                    </Box>
+                  </Grid>
+
+                  {Object.keys(formData.customFields).sort().map((fieldName) => {
+                    const fieldLabel = fieldName
+                      .split('_')
+                      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+                      .join(' ');
+
+                    const fieldValue = formData.customFields?.[fieldName] ?? '';
+
+                    // Determine field type based on field name
+                    const isNumberField = fieldName.toLowerCase().includes('rating') ||
+                                         fieldName.toLowerCase().includes('count') ||
+                                         fieldName.toLowerCase().includes('score');
+
+                    const isUrlField = fieldName.toLowerCase().includes('link') ||
+                                      fieldName.toLowerCase().includes('url') ||
+                                      fieldName.toLowerCase().includes('website');
+
+                    return (
+                      <Grid size={{ xs: 12, md: isUrlField ? 12 : 6 }} key={fieldName}>
+                        <TextField
+                          fullWidth
+                          label={fieldLabel}
+                          value={fieldValue}
+                          onChange={(e) => {
+                            const value = isNumberField ? e.target.value.replace(/[^0-9]/g, '') : e.target.value;
+                            setFormData({
+                              ...formData,
+                              customFields: {
+                                ...formData.customFields,
+                                [fieldName]: value,
+                              },
+                            });
+                          }}
+                          disabled={!editMode || saving}
+                          type={isNumberField ? 'number' : 'text'}
+                          placeholder={
+                            isNumberField
+                              ? 'Enter a number'
+                              : isUrlField
+                              ? 'https://example.com'
+                              : `Enter ${fieldLabel.toLowerCase()}`
+                          }
+                          helperText={
+                            isUrlField
+                              ? 'URL to the resource'
+                              : isNumberField
+                              ? 'Numeric value'
+                              : undefined
+                          }
+                        />
+                      </Grid>
+                    );
+                  })}
+                </>
+              )}
             </Grid>
           )}
 
@@ -832,9 +1072,26 @@ export const CompanyDetailPage: React.FC = () => {
                 </Box>
               ) : companyLeads.length === 0 ? (
                 <Box sx={{ textAlign: 'center', py: 6 }}>
-                  <Typography variant="body1" color="text.secondary">
+                  <Typography variant="body1" color="text.secondary" sx={{ mb: 3 }}>
                     No leads found for this company
                   </Typography>
+                  <Button
+                    variant="contained"
+                    startIcon={<SearchIcon />}
+                    onClick={() => setLeadDiscoveryDialogOpen(true)}
+                    sx={{
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      px: 3,
+                      py: 1.5,
+                      '&:hover': {
+                        background: 'linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%)',
+                      },
+                    }}
+                  >
+                    Discover Leads with Apollo
+                  </Button>
                 </Box>
               ) : (
                 <TableContainer component={Paper} sx={{ maxHeight: 500 }}>
@@ -898,14 +1155,322 @@ export const CompanyDetailPage: React.FC = () => {
           )}
 
           {/* Blog Tab */}
-          {/* {tabValue === 3 && (
+          {tabValue === 3 && (
             <BlogAnalysisSection
               company={company}
               onAnalyze={handleAnalyzeBlog}
               loading={blogAnalysisLoading}
               error={blogAnalysisError}
             />
-          )} */}
+          )}
+
+          {/* Apollo Enrichment Tab */}
+          {tabValue === 4 && (
+            <Box>
+              {apolloEnrichmentError && (
+                <Alert severity="error" sx={{ mb: 3 }}>
+                  {apolloEnrichmentError}
+                </Alert>
+              )}
+
+              {!company?.apolloEnrichment && (
+                <Box sx={{ textAlign: 'center', py: 6 }}>
+                  <Typography variant="h6" gutterBottom sx={{ color: '#64748b' }}>
+                    No enrichment data available
+                  </Typography>
+                  <Typography variant="body2" sx={{ mb: 3, color: '#94a3b8' }}>
+                    Enrich this company with Apollo.io to get employee count, funding details, technologies, and more.
+                  </Typography>
+                  <Button
+                    variant="contained"
+                    onClick={handleApolloEnrichment}
+                    disabled={apolloEnrichmentLoading}
+                    startIcon={apolloEnrichmentLoading ? <CircularProgress size={20} /> : <SearchIcon />}
+                    sx={{
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      textTransform: 'none',
+                      px: 4,
+                    }}
+                  >
+                    {apolloEnrichmentLoading ? 'Enriching...' : 'Enrich with Apollo'}
+                  </Button>
+                </Box>
+              )}
+
+              {company?.apolloEnrichment && (
+                <Box>
+                  {/* Header with Re-enrich button */}
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
+                    <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                      Company Data from Apollo.io
+                    </Typography>
+                    <Button
+                      variant="outlined"
+                      size="small"
+                      onClick={handleApolloEnrichment}
+                      disabled={apolloEnrichmentLoading}
+                      startIcon={apolloEnrichmentLoading ? <CircularProgress size={16} /> : <SearchIcon />}
+                      sx={{ textTransform: 'none' }}
+                    >
+                      {apolloEnrichmentLoading ? 'Enriching...' : 'Re-enrich'}
+                    </Button>
+                  </Box>
+
+                  <Grid container spacing={3}>
+                    {/* Company Overview */}
+                    <Grid size={{ xs: 12, md: 6 }}>
+                      <Paper sx={{ p: 3, height: '100%' }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 2, color: '#64748b' }}>
+                          Overview
+                        </Typography>
+
+                        {company.apolloEnrichment.employeeCount && (
+                          <Box sx={{ mb: 2 }}>
+                            <Typography variant="caption" sx={{ color: '#94a3b8' }}>Employee Count</Typography>
+                            <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                              {company.apolloEnrichment.employeeCount.toLocaleString()}
+                              {company.apolloEnrichment.employeeRange && ` (${company.apolloEnrichment.employeeRange})`}
+                            </Typography>
+                          </Box>
+                        )}
+
+                        {company.apolloEnrichment.foundedYear && (
+                          <Box sx={{ mb: 2 }}>
+                            <Typography variant="caption" sx={{ color: '#94a3b8' }}>Founded Year</Typography>
+                            <Typography variant="body1" sx={{ fontWeight: 600 }}>
+                              {company.apolloEnrichment.foundedYear}
+                            </Typography>
+                          </Box>
+                        )}
+
+                        {company.apolloEnrichment.industry && (
+                          <Box sx={{ mb: 2 }}>
+                            <Typography variant="caption" sx={{ color: '#94a3b8' }}>Industry</Typography>
+                            <Typography variant="body1">{company.apolloEnrichment.industry}</Typography>
+                          </Box>
+                        )}
+
+                        {company.apolloEnrichment.description && (
+                          <Box>
+                            <Typography variant="caption" sx={{ color: '#94a3b8' }}>Description</Typography>
+                            <Typography variant="body2" sx={{ mt: 0.5 }}>
+                              {company.apolloEnrichment.description}
+                            </Typography>
+                          </Box>
+                        )}
+                      </Paper>
+                    </Grid>
+
+                    {/* Funding Information */}
+                    <Grid size={{ xs: 12, md: 6 }}>
+                      <Paper sx={{ p: 3, height: '100%' }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 2, color: '#64748b' }}>
+                          Funding
+                        </Typography>
+
+                        {company.apolloEnrichment.totalFundingFormatted ? (
+                          <>
+                            <Box sx={{ mb: 2 }}>
+                              <Typography variant="caption" sx={{ color: '#94a3b8' }}>Total Funding</Typography>
+                              <Typography variant="h5" sx={{ fontWeight: 700, color: '#10b981' }}>
+                                {company.apolloEnrichment.totalFundingFormatted}
+                              </Typography>
+                            </Box>
+
+                            {company.apolloEnrichment.latestFundingStage && (
+                              <Box sx={{ mb: 2 }}>
+                                <Typography variant="caption" sx={{ color: '#94a3b8' }}>Latest Funding Stage</Typography>
+                                <Chip
+                                  label={company.apolloEnrichment.latestFundingStage}
+                                  size="small"
+                                  sx={{ mt: 0.5, bgcolor: '#e0e7ff', color: '#4f46e5', fontWeight: 600 }}
+                                />
+                              </Box>
+                            )}
+
+                            {company.apolloEnrichment.latestFundingDate && (
+                              <Box>
+                                <Typography variant="caption" sx={{ color: '#94a3b8' }}>Latest Funding Date</Typography>
+                                <Typography variant="body2">
+                                  {new Date(company.apolloEnrichment.latestFundingDate).toLocaleDateString()}
+                                </Typography>
+                              </Box>
+                            )}
+                          </>
+                        ) : (
+                          <Typography variant="body2" sx={{ color: '#94a3b8', fontStyle: 'italic' }}>
+                            No funding information available
+                          </Typography>
+                        )}
+
+                        {company.apolloEnrichment.publiclyTraded && (
+                          <Box sx={{ mt: 2, p: 2, bgcolor: '#f3f4f6', borderRadius: 1 }}>
+                            <Typography variant="caption" sx={{ color: '#64748b', fontWeight: 600 }}>
+                              Publicly Traded
+                            </Typography>
+                            <Typography variant="body2" sx={{ mt: 0.5 }}>
+                              {company.apolloEnrichment.publiclyTraded.symbol}
+                              {company.apolloEnrichment.publiclyTraded.exchange && ` (${company.apolloEnrichment.publiclyTraded.exchange})`}
+                            </Typography>
+                          </Box>
+                        )}
+                      </Paper>
+                    </Grid>
+
+                    {/* Technologies */}
+                    {company.apolloEnrichment.technologies && company.apolloEnrichment.technologies.length > 0 && (
+                      <Grid size={{ xs: 12 }}>
+                        <Paper sx={{ p: 3 }}>
+                          <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 2, color: '#64748b' }}>
+                            Technologies ({company.apolloEnrichment.technologies.length})
+                          </Typography>
+                          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                            {company.apolloEnrichment.technologies.map((tech, index) => (
+                              <Chip
+                                key={index}
+                                label={tech}
+                                size="small"
+                                sx={{
+                                  bgcolor: '#f1f5f9',
+                                  color: '#475569',
+                                  fontWeight: 500,
+                                  fontSize: '12px',
+                                }}
+                              />
+                            ))}
+                          </Box>
+                        </Paper>
+                      </Grid>
+                    )}
+
+                    {/* Social Links */}
+                    <Grid size={{ xs: 12 }}>
+                      <Paper sx={{ p: 3 }}>
+                        <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 2, color: '#64748b' }}>
+                          Social & Contact
+                        </Typography>
+                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2 }}>
+                          {company.apolloEnrichment.linkedinUrl && (
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              startIcon={<LinkedInIcon />}
+                              href={company.apolloEnrichment.linkedinUrl}
+                              target="_blank"
+                              sx={{ textTransform: 'none' }}
+                            >
+                              LinkedIn
+                            </Button>
+                          )}
+                          {company.apolloEnrichment.twitterUrl && (
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              href={company.apolloEnrichment.twitterUrl}
+                              target="_blank"
+                              sx={{ textTransform: 'none' }}
+                            >
+                              Twitter
+                            </Button>
+                          )}
+                          {company.apolloEnrichment.facebookUrl && (
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              href={company.apolloEnrichment.facebookUrl}
+                              target="_blank"
+                              sx={{ textTransform: 'none' }}
+                            >
+                              Facebook
+                            </Button>
+                          )}
+                          {company.apolloEnrichment.crunchbaseUrl && (
+                            <Button
+                              variant="outlined"
+                              size="small"
+                              href={company.apolloEnrichment.crunchbaseUrl}
+                              target="_blank"
+                              sx={{ textTransform: 'none' }}
+                            >
+                              Crunchbase
+                            </Button>
+                          )}
+                          {company.apolloEnrichment.phone && (
+                            <Chip
+                              icon={<EmailIcon />}
+                              label={company.apolloEnrichment.phone}
+                              size="small"
+                              sx={{ bgcolor: '#f1f5f9' }}
+                            />
+                          )}
+                        </Box>
+                      </Paper>
+                    </Grid>
+
+                    {/* Keywords & Industries */}
+                    {((company.apolloEnrichment.keywords && company.apolloEnrichment.keywords.length > 0) ||
+                      (company.apolloEnrichment.industries && company.apolloEnrichment.industries.length > 0)) && (
+                      <Grid size={{ xs: 12 }}>
+                        <Paper sx={{ p: 3 }}>
+                          {company.apolloEnrichment.keywords && company.apolloEnrichment.keywords.length > 0 && (
+                            <Box sx={{ mb: 3 }}>
+                              <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 2, color: '#64748b' }}>
+                                Keywords
+                              </Typography>
+                              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                                {company.apolloEnrichment.keywords.map((keyword, index) => (
+                                  <Chip
+                                    key={index}
+                                    label={keyword}
+                                    size="small"
+                                    variant="outlined"
+                                    sx={{ fontSize: '12px' }}
+                                  />
+                                ))}
+                              </Box>
+                            </Box>
+                          )}
+
+                          {company.apolloEnrichment.industries && company.apolloEnrichment.industries.length > 0 && (
+                            <Box>
+                              <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 2, color: '#64748b' }}>
+                                Industries
+                              </Typography>
+                              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                                {company.apolloEnrichment.industries.map((industry, index) => (
+                                  <Chip
+                                    key={index}
+                                    label={industry}
+                                    size="small"
+                                    sx={{ bgcolor: '#dbeafe', color: '#1e40af', fontWeight: 500 }}
+                                  />
+                                ))}
+                              </Box>
+                            </Box>
+                          )}
+                        </Paper>
+                      </Grid>
+                    )}
+
+                    {/* Cost Info */}
+                    {company.apolloEnrichment.costInfo && (
+                      <Grid size={{ xs: 12 }}>
+                        <Alert severity="info" sx={{ fontSize: '12px' }}>
+                          <Typography variant="caption" sx={{ display: 'block', fontWeight: 600 }}>
+                            Apollo Credits Used: {company.apolloEnrichment.costInfo.credits}
+                          </Typography>
+                          <Typography variant="caption" sx={{ color: '#64748b' }}>
+                            Last enriched: {company.apolloEnrichment.lastEnrichedAt ?
+                              new Date(company.apolloEnrichment.lastEnrichedAt).toLocaleString() : 'Unknown'}
+                          </Typography>
+                        </Alert>
+                      </Grid>
+                    )}
+                  </Grid>
+                </Box>
+              )}
+            </Box>
+          )}
         </Box>
       </Box>
 
@@ -966,6 +1531,31 @@ export const CompanyDetailPage: React.FC = () => {
         companies={allCompanies}
         onSave={handleWebsiteMappingSave}
       />
+
+      {/* URL Selection Dialog */}
+      <WritingProgramUrlSelectionDialog
+        open={urlSelectionDialogOpen}
+        onClose={() => {
+          setUrlSelectionDialogOpen(false);
+          setFoundUrls([]);
+        }}
+        onSelect={handleUrlSelected}
+        urls={foundUrls}
+        loading={detailsAnalysisLoading}
+      />
+
+      {/* Lead Discovery Dialog */}
+      {company && (
+        <LeadDiscoveryDialog
+          open={leadDiscoveryDialogOpen}
+          onClose={() => setLeadDiscoveryDialogOpen(false)}
+          company={company}
+          onImportComplete={(count) => {
+            console.log(`Successfully imported ${count} leads`);
+            // Leads will update automatically via real-time subscription
+          }}
+        />
+      )}
     </Box>
   );
 };

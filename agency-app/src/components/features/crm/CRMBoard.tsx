@@ -880,7 +880,9 @@ function CRMBoard() {
                 onFiltersChange={handleFiltersChange}
                 onClearAll={handleClearAllFilters}
                 onApplyAdvancedFilters={handleApplyAdvancedFilters}
-                leads={leads}
+                data={leads}
+                entityType="lead"
+                searchPlaceholder="Search leads..."
               />
             </Box>
           </Box>

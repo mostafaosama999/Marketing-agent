@@ -4,38 +4,44 @@ import { Box, Button, Typography, Paper, Collapse, Chip } from '@mui/material';
 import { Add as AddIcon, FilterList as FilterListIcon } from '@mui/icons-material';
 import { FilterRule, FilterableField } from '../../../../types/filter';
 import { Lead } from '../../../../types/lead';
+import { Company } from '../../../../types/crm';
 import { FilterRuleRow } from './FilterRuleRow';
 import { getFilterRuleSummary, getFilterableFields } from '../../../../services/api/advancedFilterService';
+import { getCompanyFilterableFields } from '../../../../services/api/companyFilterService';
 
-interface AdvancedFilterBuilderProps {
+interface AdvancedFilterBuilderProps<T = Lead> {
   isExpanded: boolean;
   onApplyFilters: (rules: FilterRule[]) => void;
   onClearFilters: () => void;
-  leads: Lead[];
+  data: T[];
+  entityType?: 'lead' | 'company';
 }
 
-export const AdvancedFilterBuilder: React.FC<AdvancedFilterBuilderProps> = ({
+export const AdvancedFilterBuilder = <T extends Lead | Company = Lead>({
   isExpanded,
   onApplyFilters,
   onClearFilters,
-  leads,
-}) => {
+  data,
+  entityType = 'lead',
+}: AdvancedFilterBuilderProps<T>) => {
   const [rules, setRules] = useState<FilterRule[]>([]);
   const [fields, setFields] = useState<FilterableField[]>([]);
   const [fieldsLoaded, setFieldsLoaded] = useState(false);
 
-  // Load filterable fields from actual leads data
+  // Load filterable fields from actual data (leads or companies)
   useEffect(() => {
-    if (isExpanded && leads.length > 0) {
+    if (isExpanded && data.length > 0) {
       try {
-        const filterableFields = getFilterableFields(leads);
+        const filterableFields = entityType === 'company'
+          ? getCompanyFilterableFields(data as Company[])
+          : getFilterableFields(data as Lead[]);
         setFields(filterableFields);
         setFieldsLoaded(true);
       } catch (error) {
         console.error('Error loading filterable fields:', error);
       }
     }
-  }, [isExpanded, leads]);
+  }, [isExpanded, data, entityType]);
 
   // Add default rule AFTER fields are loaded (only if no rules)
   useEffect(() => {
