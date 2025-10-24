@@ -65,20 +65,20 @@ interface ApolloApiError {
 
 interface SearchPeopleResponse {
   people: Array<{
-    id?: string;
-    firstName?: string;
-    lastName?: string;
-    name?: string;
-    email?: string;
-    phone?: string;
-    linkedinUrl?: string;
-    title?: string;
-    companyName?: string;
-    companyWebsite?: string;
-    photoUrl?: string;
-    city?: string;
-    state?: string;
-    country?: string;
+    id?: string | null;
+    firstName?: string | null;
+    lastName?: string | null;
+    name?: string | null;
+    email?: string | null;
+    phone?: string | null;
+    linkedinUrl?: string | null;
+    title?: string | null;
+    companyName?: string | null;
+    companyWebsite?: string | null;
+    photoUrl?: string | null;
+    city?: string | null;
+    state?: string | null;
+    country?: string | null;
   }>;
   pagination: {
     currentPage: number;
