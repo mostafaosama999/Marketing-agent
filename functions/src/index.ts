@@ -24,3 +24,4 @@ export {analyzeWritingProgramDetailsCloud} from "./writingProgramAnalyzer";
 export {generateCustomIdeasCloud, getLeadIdeas, updateIdeaStatus} from "./ideaGenerator/generateIdeas";
 export {fetchApolloEmail} from "./apollo/apolloProxy";
 export {enrichOrganizationCloud} from "./apollo/enrichOrganization";
+export {searchPeopleCloud} from "./apollo/searchPeople";

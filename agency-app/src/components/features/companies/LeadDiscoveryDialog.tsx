@@ -33,12 +33,12 @@ import {
   OpenInNew as OpenInNewIcon,
 } from '@mui/icons-material';
 import { Company } from '../../../types/crm';
-import { apolloService } from '../../../services/api/apolloService';
 import { ApolloSearchPerson } from '../../../types/apollo';
 import { createLeadsBatch } from '../../../services/api/leads';
 import { LeadFormData } from '../../../types/lead';
 import { useAuth } from '../../../contexts/AuthContext';
 import { getUserPreferences, updateApolloJobTitles } from '../../../services/api/userPreferences';
+import { getFunctions, httpsCallable } from 'firebase/functions';
 
 interface LeadDiscoveryDialogProps {
   open: boolean;
@@ -85,9 +85,6 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
 
   // Cost tracking
   const [estimatedCredits, setEstimatedCredits] = useState(0);
-
-  // Get Apollo API key from environment
-  const apolloApiKey = process.env.REACT_APP_APOLLO_API_KEY;
 
   // Load saved job titles from user preferences when dialog opens
   useEffect(() => {
@@ -172,13 +169,6 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
 
   // Handle search
   const handleSearch = async () => {
-    if (!apolloApiKey) {
-      setSearchError(
-        'Apollo API key is not configured. Please set REACT_APP_APOLLO_API_KEY in your environment variables.'
-      );
-      return;
-    }
-
     if (jobTitles.length === 0) {
       setSearchError('Please add at least one job title to search for.');
       return;
@@ -188,22 +178,45 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
     setSearchError(null);
 
     try {
-      const result = await apolloService.searchPeople(
+      // Call Firebase Cloud Function to search for people
+      const functions = getFunctions();
+      const searchPeople = httpsCallable<
         {
-          companyName: company.name,
-          jobTitles,
-          pageSize: 50, // Get up to 50 results
+          companyName: string;
+          jobTitles: string[];
+          pageSize?: number;
         },
-        apolloApiKey
-      );
+        {
+          people: ApolloSearchPerson[];
+          pagination: {
+            currentPage: number;
+            pageSize: number;
+            totalResults: number;
+            totalPages: number;
+          };
+          success: boolean;
+          error?: string;
+          costInfo?: {
+            credits: number;
+            model: string;
+            timestamp: Date;
+          };
+        }
+      >(functions, 'searchPeopleCloud');
 
-      if (!result.success) {
-        setSearchError(result.error || 'Failed to search for leads');
+      const result = await searchPeople({
+        companyName: company.name,
+        jobTitles,
+        pageSize: 50, // Get up to 50 results
+      });
+
+      if (!result.data.success) {
+        setSearchError(result.data.error || 'Failed to search for leads');
         setSearchResults([]);
         return;
       }
 
-      if (result.people.length === 0) {
+      if (result.data.people.length === 0) {
         setSearchError(
           'No leads found matching your criteria. Try different job titles or check if the company name is correct.'
         );
@@ -211,8 +224,8 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
         return;
       }
 
-      setSearchResults(result.people);
-      setEstimatedCredits(result.costInfo?.credits || 0);
+      setSearchResults(result.data.people);
+      setEstimatedCredits(result.data.costInfo?.credits || 0);
       setActiveStep(1); // Move to results step
     } catch (error) {
       console.error('Error searching for leads:', error);

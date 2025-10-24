@@ -288,16 +288,18 @@ export const CompaniesPage: React.FC = () => {
         </Box>
 
         {/* Filter Bar and Column Visibility */}
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-          <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap' }}>
-            Showing {filteredCompanies.length} {filteredCompanies.length === 1 ? 'company' : 'companies'}
-          </Typography>
-          <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
-          <TableColumnVisibilityMenu
-            columns={tableColumns}
-            onToggleVisibility={handleColumnVisibilityChange}
-          />
-          <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', flex: 1 }}>
+          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
+            <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap' }}>
+              Showing {filteredCompanies.length} {filteredCompanies.length === 1 ? 'company' : 'companies'}
+            </Typography>
+            <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
+            <TableColumnVisibilityMenu
+              columns={tableColumns}
+              onToggleVisibility={handleColumnVisibilityChange}
+            />
+            <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
+          </Box>
 
           {/* Collapsible Filter Bar */}
           <CollapsibleFilterBar

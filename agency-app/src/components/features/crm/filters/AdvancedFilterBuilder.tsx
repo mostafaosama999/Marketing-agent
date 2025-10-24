@@ -107,14 +107,17 @@ export const AdvancedFilterBuilder = <T extends Lead | Company = Lead>({
   return (
     <Collapse in={isExpanded} timeout={200}>
       <Paper
-        elevation={3}
+        elevation={8}
         sx={{
           mt: 1,
           p: 2.5,
           borderRadius: '8px',
           border: '1px solid rgba(103, 126, 234, 0.2)',
-          bgcolor: 'white',
-          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.1)',
+          bgcolor: '#ffffff',
+          background: '#ffffff',
+          boxShadow: '0 8px 32px rgba(0, 0, 0, 0.15)',
+          position: 'relative',
+          zIndex: 1001,
         }}
       >
         {/* Header */}

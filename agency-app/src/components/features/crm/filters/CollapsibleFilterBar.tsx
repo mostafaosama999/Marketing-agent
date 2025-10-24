@@ -110,6 +110,7 @@ export const CollapsibleFilterBar = <T extends Lead | Company = Lead>({
                 md: '800px',
               },
               zIndex: 1000,
+              bgcolor: 'transparent',
             }}
           >
             <AdvancedFilterBuilder
