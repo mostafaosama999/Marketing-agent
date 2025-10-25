@@ -36,8 +36,8 @@ function AppContent() {
     };
   }, [location.pathname]);
   
-  // Routes that need full-height fixed layout (CRM board)
-  const fixedHeightRoutes = ['/', '/crm', '/leads'];
+  // Routes that need full-height fixed layout (CRM board, Companies)
+  const fixedHeightRoutes = ['/', '/crm', '/leads', '/companies'];
   const isFixedHeightRoute = fixedHeightRoutes.includes(location.pathname);
 
   if (isFixedHeightRoute) {
@@ -60,6 +60,7 @@ function AppContent() {
             <Route path="/" element={<CRMBoard />} />
             <Route path="/crm" element={<CRMBoard />} />
             <Route path="/leads" element={<CRMBoard />} />
+            <Route path="/companies" element={<CompaniesPage />} />
           </Routes>
         </Box>
       </Box>
@@ -80,7 +81,6 @@ function AppContent() {
       }}>
         <Routes>
           <Route path="/review/:taskId" element={<TaskReview />} />
-          <Route path="/companies" element={<CompaniesPage />} />
           <Route path="/companies/:companyId" element={<CompanyDetailPage />} />
           <Route path="/team" element={<TeamManagement />} />
           <Route path="/team-member/:userId" element={<TeamMemberPerformance />} />

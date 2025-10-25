@@ -324,7 +324,10 @@ export const CompaniesPage: React.FC = () => {
   return (
     <Box
       sx={{
-        minHeight: '100vh',
+        height: '100vh',
+        overflow: 'hidden',
+        display: 'flex',
+        flexDirection: 'column',
         background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
         p: 4,
       }}
@@ -338,6 +341,7 @@ export const CompaniesPage: React.FC = () => {
           p: 4,
           mb: 4,
           boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
+          flexShrink: 0,
         }}
       >
         <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
@@ -403,13 +407,21 @@ export const CompaniesPage: React.FC = () => {
       </Box>
 
       {/* Companies Table */}
-      <CompanyTable
-        companies={filteredCompanies}
-        onView={handleViewCompany}
-        visibleColumns={tableColumns}
-        onMoveColumnLeft={handleMoveColumnLeft}
-        onMoveColumnRight={handleMoveColumnRight}
-      />
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          overflow: 'hidden',
+        }}
+      >
+        <CompanyTable
+          companies={filteredCompanies}
+          onView={handleViewCompany}
+          visibleColumns={tableColumns}
+          onMoveColumnLeft={handleMoveColumnLeft}
+          onMoveColumnRight={handleMoveColumnRight}
+        />
+      </Box>
 
       {/* Add Company FAB */}
       <Fab

@@ -494,14 +494,19 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
   };
 
   return (
-    <Box>
+    <Box sx={{
+      display: 'flex',
+      flexDirection: 'column',
+      flex: 1,
+      overflow: 'hidden',
+    }}>
       {/* Table */}
       <TableContainer
         component={Paper}
         sx={{
           boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
-          borderRadius: '8px',
-          maxHeight: 'calc(100vh - 320px)',
+          borderRadius: '8px 8px 0 0',
+          flex: 1,
           overflow: 'auto',
         }}
       >
@@ -759,7 +764,7 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
 
       {/* Pagination */}
       <TablePagination
-        component="div"
+        component={Paper}
         count={sortedLeads.length}
         page={page}
         onPageChange={(event, newPage) => setPage(newPage)}
@@ -773,8 +778,15 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
         sx={{
           borderTop: '1px solid #e2e8f0',
           bgcolor: '#fafafa',
+          borderRadius: '0 0 8px 8px',
+          boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          flexShrink: 0,
           '.MuiTablePagination-toolbar': {
             px: 2,
+            pr: 20, // Large right padding to avoid FAB (160px)
+          },
+          '.MuiTablePagination-actions': {
+            mr: 4, // Extra margin on action buttons
           },
           '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
             fontSize: '13px',

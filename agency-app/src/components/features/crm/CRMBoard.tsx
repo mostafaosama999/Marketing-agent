@@ -993,6 +993,8 @@ function CRMBoard() {
         ) : (
           <Box sx={{
             flex: 1,
+            display: 'flex',
+            flexDirection: 'column',
             overflow: 'hidden',
             background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
             py: 2,
@@ -1001,6 +1003,11 @@ function CRMBoard() {
               maxWidth: '2200px',
               margin: '0 auto',
               px: 0.5,
+              width: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              flex: 1,
+              overflow: 'hidden',
             }}>
               {/* Bulk Actions Toolbar */}
               <BulkActionsToolbar
@@ -1013,18 +1020,20 @@ function CRMBoard() {
               />
 
               {/* Table */}
-              <CRMLeadsTable
-                leads={getFilteredLeads()}
-                onLeadClick={handleLeadClick}
-                onUpdateStatus={handleUpdateStatus}
-                selectedLeadIds={selectedLeadIds}
-                onSelectLead={handleSelectLead}
-                onSelectAll={handleSelectAll}
-                onClearSelection={handleClearSelection}
-                visibleColumns={tableColumns}
-                onMoveColumnLeft={handleMoveColumnLeft}
-                onMoveColumnRight={handleMoveColumnRight}
-              />
+              <Box sx={{ flex: 1, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
+                <CRMLeadsTable
+                  leads={getFilteredLeads()}
+                  onLeadClick={handleLeadClick}
+                  onUpdateStatus={handleUpdateStatus}
+                  selectedLeadIds={selectedLeadIds}
+                  onSelectLead={handleSelectLead}
+                  onSelectAll={handleSelectAll}
+                  onClearSelection={handleClearSelection}
+                  visibleColumns={tableColumns}
+                  onMoveColumnLeft={handleMoveColumnLeft}
+                  onMoveColumnRight={handleMoveColumnRight}
+                />
+              </Box>
             </Box>
           </Box>
         )}

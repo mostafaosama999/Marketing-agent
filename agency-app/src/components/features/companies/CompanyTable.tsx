@@ -402,7 +402,7 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
         sx={{
           boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
           borderRadius: '8px',
-          maxHeight: 'calc(100vh - 320px)',
+          maxHeight: 'calc(100vh - 400px)',
           overflow: 'auto',
         }}
       >
@@ -635,8 +635,13 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
         sx={{
           borderTop: '1px solid #e2e8f0',
           bgcolor: '#fafafa',
+          flexShrink: 0,
           '.MuiTablePagination-toolbar': {
             px: 2,
+            pr: 20, // Large right padding to avoid FAB (160px)
+          },
+          '.MuiTablePagination-actions': {
+            mr: 4, // Extra margin on action buttons
           },
           '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
             fontSize: '13px',
