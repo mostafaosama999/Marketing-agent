@@ -123,7 +123,7 @@ export const WritingProgramSection: React.FC<WritingProgramSectionProps> = ({
         <Box sx={{ textAlign: 'right' }}>
           <Button
             variant="contained"
-            startIcon={loading ? <CircularProgress size={20} sx={{ color: 'white' }} /> : <RefreshIcon />}
+            startIcon={<RefreshIcon />}
             onClick={onAnalyze}
             disabled={loading}
             sx={{

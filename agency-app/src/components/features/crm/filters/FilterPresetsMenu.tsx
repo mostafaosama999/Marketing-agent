@@ -21,25 +21,33 @@ import {
   MoreVert as MoreVertIcon,
 } from '@mui/icons-material';
 import { PresetListItem } from '../../../../types/filter';
+import { CompanyPresetListItem } from '../../../../types/companyFilter';
 import {
   subscribeToUserPresets,
   deleteFilterPreset,
   setDefaultPreset,
 } from '../../../../services/api/filterPresetsService';
+import {
+  subscribeToCompanyPresets,
+  deleteCompanyPreset,
+  setDefaultCompanyPreset,
+} from '../../../../services/api/companyFilterPresetsService';
 
 interface FilterPresetsMenuProps {
   userId: string;
   onLoadPreset: (presetId: string) => void;
   onSaveNew: () => void;
+  entityType?: 'lead' | 'company';
 }
 
 export const FilterPresetsMenu: React.FC<FilterPresetsMenuProps> = ({
   userId,
   onLoadPreset,
   onSaveNew,
+  entityType = 'lead',
 }) => {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
-  const [presets, setPresets] = useState<PresetListItem[]>([]);
+  const [presets, setPresets] = useState<PresetListItem[] | CompanyPresetListItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [actionMenuAnchor, setActionMenuAnchor] = useState<null | HTMLElement>(null);
   const [selectedPresetId, setSelectedPresetId] = useState<string | null>(null);
@@ -47,16 +55,21 @@ export const FilterPresetsMenu: React.FC<FilterPresetsMenuProps> = ({
   const open = Boolean(anchorEl);
   const actionMenuOpen = Boolean(actionMenuAnchor);
 
-  // Subscribe to presets
+  // Subscribe to presets (lead or company based on entityType)
   useEffect(() => {
     setLoading(true);
-    const unsubscribe = subscribeToUserPresets(userId, (presetList) => {
-      setPresets(presetList);
-      setLoading(false);
-    });
+    const unsubscribe = entityType === 'company'
+      ? subscribeToCompanyPresets(userId, (presetList) => {
+          setPresets(presetList);
+          setLoading(false);
+        })
+      : subscribeToUserPresets(userId, (presetList) => {
+          setPresets(presetList);
+          setLoading(false);
+        });
 
     return () => unsubscribe();
-  }, [userId]);
+  }, [userId, entityType]);
 
   const handleOpen = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -90,7 +103,11 @@ export const FilterPresetsMenu: React.FC<FilterPresetsMenuProps> = ({
   const handleSetDefault = async () => {
     if (!selectedPresetId) return;
     try {
-      await setDefaultPreset(userId, selectedPresetId);
+      if (entityType === 'company') {
+        await setDefaultCompanyPreset(userId, selectedPresetId);
+      } else {
+        await setDefaultPreset(userId, selectedPresetId);
+      }
       handleCloseActionMenu();
     } catch (error) {
       console.error('Error setting default preset:', error);
@@ -100,7 +117,11 @@ export const FilterPresetsMenu: React.FC<FilterPresetsMenuProps> = ({
   const handleDelete = async () => {
     if (!selectedPresetId) return;
     try {
-      await deleteFilterPreset(userId, selectedPresetId);
+      if (entityType === 'company') {
+        await deleteCompanyPreset(userId, selectedPresetId);
+      } else {
+        await deleteFilterPreset(userId, selectedPresetId);
+      }
       handleCloseActionMenu();
     } catch (error) {
       console.error('Error deleting preset:', error);

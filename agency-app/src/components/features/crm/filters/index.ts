@@ -11,6 +11,7 @@ export { FilterButton } from './FilterButton';
 export { FilterPanel } from './FilterPanel';
 export { CollapsibleFilterBar } from './CollapsibleFilterBar';
 export { AdvancedFilterBuilder } from './AdvancedFilterBuilder';
+export { AdvancedFiltersModal } from './AdvancedFiltersModal';
 export { FilterRuleRow } from './FilterRuleRow';
 export { FieldSelector } from './FieldSelector';
 export { OperatorSelector } from './OperatorSelector';

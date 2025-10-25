@@ -69,7 +69,7 @@ export const CompanyDetailPage: React.FC = () => {
 
   const [company, setCompany] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
-  const [editMode, setEditMode] = useState(true); // Default to edit mode for better UX
+  const [editMode, setEditMode] = useState(false); // Start in view mode, enter edit after analysis
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [duplicateWarning, setDuplicateWarning] = useState('');
@@ -501,6 +501,9 @@ export const CompanyDetailPage: React.FC = () => {
       // Close dialog
       setUrlSelectionDialogOpen(false);
       setFoundUrls([]);
+
+      // Enter edit mode after successful analysis
+      setEditMode(true);
     } catch (err: any) {
       console.error('Error analyzing writing program details:', err);
       setWritingProgramError(err.message || 'Failed to analyze writing program details');
@@ -510,32 +513,37 @@ export const CompanyDetailPage: React.FC = () => {
   };
 
   // Handle blog analysis
-  const handleAnalyzeBlog = async () => {
+  const handleAnalyzeBlog = async (blogUrl?: string) => {
     if (!company) return;
 
-    // Get website using mapping - check formData first (in case user hasn't saved yet)
-    let website = formData.website || getCompanyWebsite(company);
+    // Use provided URL or fall back to website
+    let urlToAnalyze = blogUrl;
 
-    if (!website) {
-      // No website found, check if mapping is set
-      const mapping = getWebsiteFieldMapping();
-      if (!mapping) {
-        // No mapping set, show dialog to configure
-        setPendingAnalysisType('blog');
-        setWebsiteMappingDialogOpen(true);
+    if (!urlToAnalyze) {
+      // Get website using mapping - check formData first (in case user hasn't saved yet)
+      urlToAnalyze = formData.website || getCompanyWebsite(company);
+
+      if (!urlToAnalyze) {
+        // No website found, check if mapping is set
+        const mapping = getWebsiteFieldMapping();
+        if (!mapping) {
+          // No mapping set, show dialog to configure
+          setPendingAnalysisType('blog');
+          setWebsiteMappingDialogOpen(true);
+          return;
+        }
+
+        // Mapping is set but this company doesn't have that field
+        setBlogAnalysisError('This company does not have a website field set');
         return;
       }
-
-      // Mapping is set but this company doesn't have that field
-      setBlogAnalysisError('This company does not have a website field set');
-      return;
     }
 
     setBlogAnalysisLoading(true);
     setBlogAnalysisError(null);
 
     try {
-      const result = await analyzeBlog(company.name, website);
+      const result = await analyzeBlog(company.name, urlToAnalyze);
 
       // Parse writer information
       const authorNames = result.authorNames ? result.authorNames.split(', ') : [];
@@ -619,6 +627,9 @@ export const CompanyDetailPage: React.FC = () => {
         ...company,
         blogAnalysis: analysisData,
       });
+
+      // Enter edit mode after successful analysis
+      setEditMode(true);
     } catch (err: any) {
       console.error('Error analyzing blog:', err);
       setBlogAnalysisError(err.message || 'Failed to analyze blog');
@@ -1094,52 +1105,75 @@ export const CompanyDetailPage: React.FC = () => {
                   </Button>
                 </Box>
               ) : (
-                <TableContainer component={Paper} sx={{ maxHeight: 500 }}>
-                  <Table stickyHeader>
-                    <TableHead>
-                      <TableRow>
-                        <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>Email</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>LinkedIn Status</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>Email Status</TableCell>
-                        <TableCell sx={{ fontWeight: 600 }}>Created</TableCell>
-                      </TableRow>
-                    </TableHead>
-                    <TableBody>
-                      {companyLeads.map((lead) => (
-                        <TableRow key={lead.id} hover>
-                          <TableCell>
-                            <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                              {lead.name}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2" color="text.secondary">
-                              {lead.email || '-'}
-                            </Typography>
-                          </TableCell>
-                          <TableCell>
-                            {renderOutreachStatus(
-                              lead.outreach?.linkedIn?.status,
-                              'linkedin'
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            {renderOutreachStatus(
-                              lead.outreach?.email?.status,
-                              'email'
-                            )}
-                          </TableCell>
-                          <TableCell>
-                            <Typography variant="body2" color="text.secondary">
-                              {formatDate(lead.createdAt)}
-                            </Typography>
-                          </TableCell>
+                <Box>
+                  {/* Discover More Leads Button */}
+                  <Box sx={{ mb: 3, display: 'flex', justifyContent: 'flex-end' }}>
+                    <Button
+                      variant="outlined"
+                      startIcon={<SearchIcon />}
+                      onClick={() => setLeadDiscoveryDialogOpen(true)}
+                      sx={{
+                        textTransform: 'none',
+                        fontWeight: 600,
+                        borderColor: '#667eea',
+                        color: '#667eea',
+                        '&:hover': {
+                          borderColor: '#5568d3',
+                          bgcolor: 'rgba(102, 126, 234, 0.08)',
+                        },
+                      }}
+                    >
+                      Discover More Leads
+                    </Button>
+                  </Box>
+
+                  <TableContainer component={Paper} sx={{ maxHeight: 500 }}>
+                    <Table stickyHeader>
+                      <TableHead>
+                        <TableRow>
+                          <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
+                          <TableCell sx={{ fontWeight: 600 }}>Email</TableCell>
+                          <TableCell sx={{ fontWeight: 600 }}>LinkedIn Status</TableCell>
+                          <TableCell sx={{ fontWeight: 600 }}>Email Status</TableCell>
+                          <TableCell sx={{ fontWeight: 600 }}>Created</TableCell>
                         </TableRow>
-                      ))}
-                    </TableBody>
-                  </Table>
-                </TableContainer>
+                      </TableHead>
+                      <TableBody>
+                        {companyLeads.map((lead) => (
+                          <TableRow key={lead.id} hover>
+                            <TableCell>
+                              <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                                {lead.name}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="body2" color="text.secondary">
+                                {lead.email || '-'}
+                              </Typography>
+                            </TableCell>
+                            <TableCell>
+                              {renderOutreachStatus(
+                                lead.outreach?.linkedIn?.status,
+                                'linkedin'
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              {renderOutreachStatus(
+                                lead.outreach?.email?.status,
+                                'email'
+                              )}
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="body2" color="text.secondary">
+                                {formatDate(lead.createdAt)}
+                              </Typography>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
+                </Box>
               )}
             </Box>
           )}

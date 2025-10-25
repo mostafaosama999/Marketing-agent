@@ -506,7 +506,12 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
         }}
       >
         <Table size="small">
-          <TableHead>
+          <TableHead sx={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 100,
+            bgcolor: '#fafafa',
+          }}>
             <TableRow sx={{ bgcolor: '#fafafa', borderBottom: '2px solid #e0e0e0', height: '36px' }}>
               {/* Checkbox column */}
               <TableCell

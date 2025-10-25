@@ -5,19 +5,14 @@ import {
   Box,
   Typography,
   Fab,
-  TextField,
-  InputAdornment,
   CircularProgress,
-  IconButton,
-  Tooltip,
 } from '@mui/material';
 import {
   Add as AddIcon,
-  Search as SearchIcon,
-  ViewColumn as ViewColumnIcon,
 } from '@mui/icons-material';
+import { useAuth } from '../../contexts/AuthContext';
 import { Company } from '../../types/crm';
-import { subscribeToCompanies, countLeadsForCompany, deleteCompany } from '../../services/api/companies';
+import { subscribeToCompanies, countLeadsForCompany } from '../../services/api/companies';
 import { CompanyDialog } from '../../components/features/companies/CompanyDialog';
 import { CompanyTable } from '../../components/features/companies/CompanyTable';
 import { TableColumnVisibilityMenu } from '../../components/features/crm/TableColumnVisibilityMenu';
@@ -31,20 +26,31 @@ import {
   buildCompaniesTableColumns,
   columnsToVisibilityMap,
 } from '../../services/api/tableColumnsService';
-import { CompanyFilterState, DEFAULT_COMPANY_FILTER_STATE } from '../../types/companyFilter';
+import { CompanyFilterState, DEFAULT_COMPANY_FILTER_STATE, SaveCompanyPresetRequest } from '../../types/companyFilter';
 import { FilterRule } from '../../types/filter';
 import { applyCompanyAdvancedFilters } from '../../services/api/companyFilterService';
-import { CollapsibleFilterBar } from '../../components/features/crm/filters';
+import { AdvancedFiltersModal, SearchFilter, FilterButton } from '../../components/features/crm/filters';
+import { FilterPresetsMenu } from '../../components/features/crm/filters/FilterPresetsMenu';
+import { SavePresetDialog } from '../../components/features/crm/filters/SavePresetDialog';
+import {
+  loadCompanyPreset,
+  getDefaultCompanyPreset,
+} from '../../services/api/companyFilterPresetsService';
 
 export const CompaniesPage: React.FC = () => {
   const navigate = useNavigate();
+  const { user } = useAuth();
   const [companies, setCompanies] = useState<Array<Company & { leadCount: number }>>([]);
   const [loading, setLoading] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
+  const [openFiltersModal, setOpenFiltersModal] = useState(false);
 
   // Filter state
   const [filters, setFilters] = useState<CompanyFilterState>(DEFAULT_COMPANY_FILTER_STATE);
   const [advancedFilterRules, setAdvancedFilterRules] = useState<FilterRule[]>([]);
+
+  // Preset dialog state
+  const [showSavePresetDialog, setShowSavePresetDialog] = useState(false);
 
   // Table column visibility state
   const [tableColumns, setTableColumns] = useState<TableColumnConfig[]>(DEFAULT_COMPANIES_TABLE_COLUMNS);
@@ -66,6 +72,33 @@ export const CompaniesPage: React.FC = () => {
 
     return () => unsubscribe();
   }, []);
+
+  // Load default preset on mount
+  useEffect(() => {
+    if (!user) return;
+
+    async function loadDefaultPreset() {
+      try {
+        const defaultPreset = await getDefaultCompanyPreset(user.uid);
+        if (defaultPreset) {
+          // Apply preset filters
+          setFilters(defaultPreset.basicFilters);
+          setAdvancedFilterRules(defaultPreset.advancedRules);
+
+          // Apply table column preferences if saved in preset
+          if (defaultPreset.tableColumns) {
+            const visibilityMap = defaultPreset.tableColumns;
+            const columnsWithPreferences = applyVisibilityPreferences(tableColumns, visibilityMap);
+            setTableColumns(columnsWithPreferences);
+          }
+        }
+      } catch (error) {
+        console.error('Error loading default preset:', error);
+      }
+    }
+
+    loadDefaultPreset();
+  }, [user]); // Only run once on mount
 
   // Load table columns (default + custom fields from companies)
   useEffect(() => {
@@ -227,6 +260,47 @@ export const CompaniesPage: React.FC = () => {
     setAdvancedFilterRules(rules);
   };
 
+  // Calculate active filter count (for badge)
+  const activeFilterCount = advancedFilterRules.length;
+
+  // Preset handlers
+  const handleLoadPreset = async (presetId: string) => {
+    if (!user) return;
+
+    try {
+      const preset = await loadCompanyPreset(user.uid, presetId);
+      if (preset) {
+        // Apply filters from preset
+        setFilters(preset.basicFilters);
+        setAdvancedFilterRules(preset.advancedRules);
+
+        // Apply table column preferences if saved in preset
+        if (preset.tableColumns) {
+          const visibilityMap = preset.tableColumns;
+          const columnsWithPreferences = applyVisibilityPreferences(tableColumns, visibilityMap);
+          setTableColumns(columnsWithPreferences);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading preset:', error);
+    }
+  };
+
+  const handleSaveNewPreset = () => {
+    setShowSavePresetDialog(true);
+  };
+
+  const getCurrentPresetData = (): SaveCompanyPresetRequest => {
+    return {
+      name: '', // Will be filled by dialog
+      description: '',
+      advancedRules: advancedFilterRules,
+      basicFilters: filters,
+      tableColumns: columnsToVisibilityMap(tableColumns),
+      isDefault: false,
+    };
+  };
+
   if (loading) {
     return (
       <Box
@@ -288,28 +362,42 @@ export const CompaniesPage: React.FC = () => {
         </Box>
 
         {/* Filter Bar and Column Visibility */}
-        <Box sx={{ display: 'flex', gap: 2, alignItems: 'flex-start', flex: 1 }}>
-          <Box sx={{ display: 'flex', gap: 2, alignItems: 'center' }}>
-            <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap' }}>
-              Showing {filteredCompanies.length} {filteredCompanies.length === 1 ? 'company' : 'companies'}
-            </Typography>
-            <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
-            <TableColumnVisibilityMenu
-              columns={tableColumns}
-              onToggleVisibility={handleColumnVisibilityChange}
-            />
-            <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
-          </Box>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', flex: 1 }}>
+          <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500, whiteSpace: 'nowrap' }}>
+            Showing {filteredCompanies.length} {filteredCompanies.length === 1 ? 'company' : 'companies'}
+          </Typography>
+          <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
+          <TableColumnVisibilityMenu
+            columns={tableColumns}
+            onToggleVisibility={handleColumnVisibilityChange}
+          />
+          <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
 
-          {/* Collapsible Filter Bar */}
-          <CollapsibleFilterBar
-            filters={filters}
-            onFiltersChange={handleFiltersChange}
-            onClearAll={handleClearAllFilters}
-            onApplyAdvancedFilters={handleApplyAdvancedFilters}
-            data={companies}
-            entityType="company"
-            searchPlaceholder="Search companies..."
+          {/* Filter Presets */}
+          {user && (
+            <>
+              <FilterPresetsMenu
+                userId={user.uid}
+                onLoadPreset={handleLoadPreset}
+                onSaveNew={handleSaveNewPreset}
+                entityType="company"
+              />
+              <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
+            </>
+          )}
+
+          {/* Search Filter */}
+          <SearchFilter
+            value={filters.search}
+            onChange={(search) => handleFiltersChange({ search })}
+            placeholder="Search companies..."
+          />
+
+          {/* Filter Button */}
+          <FilterButton
+            activeCount={activeFilterCount}
+            isExpanded={openFiltersModal}
+            onToggle={() => setOpenFiltersModal(!openFiltersModal)}
           />
         </Box>
       </Box>
@@ -352,6 +440,27 @@ export const CompaniesPage: React.FC = () => {
           // Companies list will update automatically via subscription
         }}
       />
+
+      {/* Advanced Filters Modal */}
+      <AdvancedFiltersModal
+        open={openFiltersModal}
+        onClose={() => setOpenFiltersModal(false)}
+        onApplyFilters={handleApplyAdvancedFilters}
+        onClearFilters={handleClearAllFilters}
+        data={companies}
+        entityType="company"
+      />
+
+      {/* Save Preset Dialog */}
+      {user && (
+        <SavePresetDialog
+          open={showSavePresetDialog}
+          onClose={() => setShowSavePresetDialog(false)}
+          userId={user.uid}
+          currentPreset={getCurrentPresetData()}
+          entityType="company"
+        />
+      )}
     </Box>
   );
 };

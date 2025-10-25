@@ -1,5 +1,5 @@
 // src/components/features/companies/BlogAnalysisSection.tsx
-import React from 'react';
+import React, { useState } from 'react';
 import { Box, Typography, Button, CircularProgress, Alert, Chip } from '@mui/material';
 import {
   CalendarToday as CalendarIcon,
@@ -12,10 +12,11 @@ import Grid from '@mui/material/Grid';
 import { Company } from '../../../types/crm';
 import { AnalysisCard } from './AnalysisCard';
 import { formatCost } from '../../../services/firebase/cloudFunctions';
+import { BlogUrlSelectionDialog } from './BlogUrlSelectionDialog';
 
 interface BlogAnalysisSectionProps {
   company: Company;
-  onAnalyze: () => void;
+  onAnalyze: (url: string) => void;
   loading: boolean;
   error: string | null;
 }
@@ -26,7 +27,21 @@ export const BlogAnalysisSection: React.FC<BlogAnalysisSectionProps> = ({
   loading,
   error,
 }) => {
+  const [dialogOpen, setDialogOpen] = useState(false);
   const analysis = company.blogAnalysis;
+
+  const handleOpenDialog = () => {
+    setDialogOpen(true);
+  };
+
+  const handleCloseDialog = () => {
+    setDialogOpen(false);
+  };
+
+  const handleConfirmUrl = (url: string) => {
+    onAnalyze(url);
+    setDialogOpen(false);
+  };
 
   const getTimeSinceAnalysis = () => {
     if (!analysis?.lastAnalyzedAt) return null;
@@ -167,8 +182,8 @@ export const BlogAnalysisSection: React.FC<BlogAnalysisSectionProps> = ({
         <Box sx={{ textAlign: 'right' }}>
           <Button
             variant="contained"
-            startIcon={loading ? <CircularProgress size={20} sx={{ color: 'white' }} /> : <RefreshIcon />}
-            onClick={onAnalyze}
+            startIcon={<RefreshIcon />}
+            onClick={handleOpenDialog}
             disabled={loading}
             sx={{
               background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -381,6 +396,14 @@ export const BlogAnalysisSection: React.FC<BlogAnalysisSectionProps> = ({
           </Grid>
         </Grid>
       )}
+
+      {/* Blog URL Selection Dialog */}
+      <BlogUrlSelectionDialog
+        open={dialogOpen}
+        onClose={handleCloseDialog}
+        onConfirm={handleConfirmUrl}
+        company={company}
+      />
     </Box>
   );
 };

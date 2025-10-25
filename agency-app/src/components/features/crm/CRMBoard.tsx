@@ -788,18 +788,17 @@ function CRMBoard() {
         height: 'calc(100vh - 48px)',
         display: 'flex',
         flexDirection: 'column',
-        overflow: 'hidden'
+        overflow: 'hidden',
+        p: 4,
       }}>
         {/* Header */}
         <Box sx={{
-          position: 'relative',
-          zIndex: 10,
           background: 'rgba(255, 255, 255, 0.95)',
           backdropFilter: 'blur(20px)',
-          borderBottom: '1px solid rgba(255, 255, 255, 0.2)',
-          px: 3,
-          py: 1.5,
-          flexShrink: 0
+          borderRadius: 3,
+          p: 4,
+          mb: 4,
+          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
         }}>
           <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', mb: 1 }}>
             <Box>
@@ -922,7 +921,7 @@ function CRMBoard() {
         ) : (
           <Box sx={{
             flex: 1,
-            overflow: 'auto',
+            overflow: 'hidden',
             background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
             py: 2,
           }}>

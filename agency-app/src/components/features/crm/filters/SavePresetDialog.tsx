@@ -14,13 +14,16 @@ import {
   CircularProgress,
 } from '@mui/material';
 import { SavePresetRequest } from '../../../../types/filter';
+import { SaveCompanyPresetRequest } from '../../../../types/companyFilter';
 import { saveFilterPreset } from '../../../../services/api/filterPresetsService';
+import { saveCompanyPreset } from '../../../../services/api/companyFilterPresetsService';
 
 interface SavePresetDialogProps {
   open: boolean;
   onClose: () => void;
   userId: string;
-  currentPreset: SavePresetRequest;
+  currentPreset: SavePresetRequest | SaveCompanyPresetRequest;
+  entityType?: 'lead' | 'company';
 }
 
 export const SavePresetDialog: React.FC<SavePresetDialogProps> = ({
@@ -28,6 +31,7 @@ export const SavePresetDialog: React.FC<SavePresetDialogProps> = ({
   onClose,
   userId,
   currentPreset,
+  entityType = 'lead',
 }) => {
   const [name, setName] = useState('');
   const [description, setDescription] = useState('');
@@ -46,14 +50,18 @@ export const SavePresetDialog: React.FC<SavePresetDialogProps> = ({
     setError(null);
 
     try {
-      const presetToSave: SavePresetRequest = {
+      const presetToSave: any = {
         ...currentPreset,
         name: name.trim(),
         description: description.trim() || undefined,
         isDefault,
       };
 
-      await saveFilterPreset(userId, presetToSave);
+      if (entityType === 'company') {
+        await saveCompanyPreset(userId, presetToSave as SaveCompanyPresetRequest);
+      } else {
+        await saveFilterPreset(userId, presetToSave as SavePresetRequest);
+      }
 
       // Reset form and close
       setName('');
@@ -178,7 +186,7 @@ export const SavePresetDialog: React.FC<SavePresetDialogProps> = ({
                   Set as default preset
                 </Typography>
                 <Typography variant="caption" sx={{ color: '#64748b' }}>
-                  This preset will be automatically applied when you open the CRM
+                  This preset will be automatically applied when you open {entityType === 'company' ? 'Companies' : 'the CRM'}
                 </Typography>
               </Box>
             }
@@ -200,9 +208,11 @@ export const SavePresetDialog: React.FC<SavePresetDialogProps> = ({
               <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
                 • {currentPreset.advancedRules.length} filter rule(s)
               </Typography>
-              <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
-                • View mode: {currentPreset.viewMode === 'board' ? 'Board' : 'Table'}
-              </Typography>
+              {(currentPreset as SavePresetRequest).viewMode && (
+                <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
+                  • View mode: {(currentPreset as SavePresetRequest).viewMode === 'board' ? 'Board' : 'Table'}
+                </Typography>
+              )}
               {currentPreset.tableColumns && (
                 <Typography variant="body2" sx={{ fontSize: '0.85rem' }}>
                   • Table column preferences

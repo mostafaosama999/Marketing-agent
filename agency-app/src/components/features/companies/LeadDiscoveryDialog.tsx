@@ -25,6 +25,9 @@ import {
   Stepper,
   Step,
   StepLabel,
+  FormControl,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -34,11 +37,12 @@ import {
 } from '@mui/icons-material';
 import { Company } from '../../../types/crm';
 import { ApolloSearchPerson } from '../../../types/apollo';
-import { createLeadsBatch } from '../../../services/api/leads';
+import { createLeadsBatch, subscribeToLeads } from '../../../services/api/leads';
 import { LeadFormData } from '../../../types/lead';
 import { useAuth } from '../../../contexts/AuthContext';
 import { getUserPreferences, updateApolloJobTitles } from '../../../services/api/userPreferences';
 import { getFunctions, httpsCallable } from 'firebase/functions';
+import { getLeadCustomFieldNames } from '../../../services/api/tableColumnsService';
 
 interface LeadDiscoveryDialogProps {
   open: boolean;
@@ -57,6 +61,13 @@ const DEFAULT_JOB_TITLES = [
   'Content Marketing Manager',
   'Head of Content',
 ];
+
+interface ApolloFieldMapping {
+  apolloField: string;
+  label: string;
+  leadField: string | null; // 'name', 'email', 'phone', 'skip', or custom field name
+  autoCreate?: boolean;
+}
 
 export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
   open,
@@ -77,6 +88,18 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
   const [searchResults, setSearchResults] = useState<ApolloSearchPerson[]>([]);
   const [selectedLeads, setSelectedLeads] = useState<Set<string>>(new Set());
 
+  // Field mapping state
+  const [fieldMappings, setFieldMappings] = useState<ApolloFieldMapping[]>([
+    { apolloField: 'name', label: 'Name', leadField: 'name' },
+    { apolloField: 'email', label: 'Email', leadField: 'email' },
+    { apolloField: 'phone', label: 'Phone', leadField: 'phone' },
+    { apolloField: 'title', label: 'Job Title', leadField: 'skip' },
+    { apolloField: 'linkedinUrl', label: 'LinkedIn URL', leadField: 'skip' },
+    { apolloField: 'city', label: 'City', leadField: 'skip' },
+    { apolloField: 'state', label: 'State', leadField: 'skip' },
+    { apolloField: 'country', label: 'Country', leadField: 'skip' },
+  ]);
+
   // Import state
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState<string | null>(null);
@@ -85,6 +108,21 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
 
   // Cost tracking
   const [estimatedCredits, setEstimatedCredits] = useState(0);
+
+  // Existing custom fields from leads database
+  const [existingCustomFields, setExistingCustomFields] = useState<string[]>([]);
+
+  // Load existing custom fields from leads database
+  useEffect(() => {
+    if (!open) return;
+
+    const unsubscribe = subscribeToLeads((leads) => {
+      const customFields = getLeadCustomFieldNames(leads);
+      setExistingCustomFields(customFields);
+    });
+
+    return () => unsubscribe();
+  }, [open]);
 
   // Load saved job titles from user preferences when dialog opens
   useEffect(() => {
@@ -278,24 +316,80 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
       // Filter selected leads
       const leadsToImport = searchResults.filter(p => p.id && selectedLeads.has(p.id));
 
-      // Map Apollo people to LeadFormData
-      const leadsData: LeadFormData[] = leadsToImport.map(person => ({
-        name: person.name || `${person.firstName || ''} ${person.lastName || ''}`.trim(),
-        email: person.email || '',
-        phone: person.phone || '',
-        company: company.name,
-        status: 'new_lead',
-        customFields: {
-          linkedinUrl: person.linkedinUrl || '',
-          title: person.title || '',
-          apolloId: person.id || '',
-          city: person.city || '',
-          state: person.state || '',
-          country: person.country || '',
-          importedFrom: 'apollo_discovery',
-          importedAt: new Date().toISOString(),
-        },
-      }));
+      // Map Apollo people to LeadFormData using field mappings
+      const leadsData: LeadFormData[] = leadsToImport.map(person => {
+        // Helper to check if email is a placeholder (not unlocked)
+        const isValidEmail = (email: string | undefined): boolean => {
+          if (!email) return false;
+          // Check for Apollo's placeholder pattern: email_not_unlocked@domain.com
+          if (email.includes('email_not_unlocked@')) return false;
+          return true;
+        };
+
+        // Helper to get Apollo field value
+        const getFieldValue = (field: string): string => {
+          switch (field) {
+            case 'name':
+              return person.name || `${person.firstName || ''} ${person.lastName || ''}`.trim();
+            case 'email':
+              return isValidEmail(person.email || undefined) ? person.email! : '';
+            case 'phone':
+              return person.phone || '';
+            case 'title':
+              return person.title || '';
+            case 'linkedinUrl':
+              return person.linkedinUrl || '';
+            case 'city':
+              return person.city || '';
+            case 'state':
+              return person.state || '';
+            case 'country':
+              return person.country || '';
+            default:
+              return '';
+          }
+        };
+
+        // Build lead data based on mappings
+        const leadData: LeadFormData = {
+          name: '',
+          email: '',
+          phone: '',
+          company: company.name,
+          status: 'new_lead',
+          customFields: {
+            importedFrom: 'apollo_discovery',
+            importedAt: new Date().toISOString(),
+          },
+        };
+
+        // Apply field mappings
+        fieldMappings.forEach(mapping => {
+          const value = getFieldValue(mapping.apolloField);
+
+          if (!value || mapping.leadField === 'skip' || mapping.leadField === null) {
+            return; // Skip empty values and unmapped fields
+          }
+
+          // Map to standard field
+          if (mapping.leadField === 'name') {
+            leadData.name = value;
+          } else if (mapping.leadField === 'email') {
+            leadData.email = value;
+          } else if (mapping.leadField === 'phone') {
+            leadData.phone = value;
+          } else if (mapping.autoCreate) {
+            // Map to custom field (user chose to create custom field)
+            leadData.customFields![mapping.apolloField] = value;
+          } else if (mapping.leadField?.startsWith('customFields.')) {
+            // Map to existing custom field
+            const fieldName = mapping.leadField.replace('customFields.', '');
+            leadData.customFields![fieldName] = value;
+          }
+        });
+
+        return leadData;
+      });
 
       // Create company ID map (all leads belong to the same company)
       const companyIdMap = new Map<string, string>();
@@ -306,7 +400,7 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
 
       setImportedCount(leadsData.length);
       setImportSuccess(true);
-      setActiveStep(2); // Move to success step
+      setActiveStep(3); // Move to success step
 
       // Notify parent component
       if (onImportComplete) {
@@ -393,6 +487,9 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
           </Step>
           <Step>
             <StepLabel>Select Leads</StepLabel>
+          </Step>
+          <Step>
+            <StepLabel>Map Fields</StepLabel>
           </Step>
           <Step>
             <StepLabel>Import Complete</StepLabel>
@@ -590,8 +687,86 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
           </Box>
         )}
 
-        {/* Step 2: Import Success */}
-        {activeStep === 2 && importSuccess && (
+        {/* Step 2: Field Mapping */}
+        {activeStep === 2 && (
+          <Box>
+            <Alert severity="info" sx={{ mb: 3 }}>
+              Map Apollo fields to your lead fields. Choose "Skip" to ignore fields, or select "Create Custom Field" to save as custom data.
+            </Alert>
+
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              Selected {selectedLeads.size} lead{selectedLeads.size !== 1 ? 's' : ''} to import
+            </Typography>
+
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+              {fieldMappings.map((mapping) => (
+                <Box
+                  key={mapping.apolloField}
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 2,
+                    p: 2,
+                    border: '1px solid #e2e8f0',
+                    borderRadius: 2,
+                    bgcolor: '#f8fafc',
+                  }}
+                >
+                  <Box sx={{ flex: 1 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+                      {mapping.label}
+                    </Typography>
+                    <Typography variant="caption" color="text.secondary">
+                      Apollo field: {mapping.apolloField}
+                    </Typography>
+                  </Box>
+
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="body2" color="text.secondary">
+                      →
+                    </Typography>
+                    <FormControl size="small" sx={{ minWidth: 200 }}>
+                      <Select
+                        value={mapping.leadField || 'skip'}
+                        onChange={(e) => {
+                          const value = e.target.value;
+                          setFieldMappings(prev =>
+                            prev.map(m =>
+                              m.apolloField === mapping.apolloField
+                                ? {
+                                    ...m,
+                                    leadField: value === 'skip' ? 'skip' : value,
+                                    autoCreate: value === 'create_custom',
+                                  }
+                                : m
+                            )
+                          );
+                        }}
+                      >
+                        <MenuItem value="skip">Skip (Don't Import)</MenuItem>
+                        <MenuItem value="name">Lead Name</MenuItem>
+                        <MenuItem value="email">Email</MenuItem>
+                        <MenuItem value="phone">Phone</MenuItem>
+
+                        {/* Existing custom fields */}
+                        {existingCustomFields.map((fieldName) => (
+                          <MenuItem key={fieldName} value={`customFields.${fieldName}`}>
+                            {fieldName.charAt(0).toUpperCase() + fieldName.slice(1).replace(/_/g, ' ')} (Custom Field)
+                          </MenuItem>
+                        ))}
+
+                        <MenuItem value="create_custom">Create Custom Field "{mapping.apolloField}"</MenuItem>
+                      </Select>
+                    </FormControl>
+                  </Box>
+                </Box>
+              ))}
+            </Box>
+          </Box>
+        )}
+
+        {/* Step 3: Import Success */}
+        {activeStep === 3 && importSuccess && (
           <Box sx={{ textAlign: 'center', py: 4 }}>
             <CheckCircleIcon sx={{ fontSize: 64, color: '#10b981', mb: 2 }} />
             <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
@@ -638,6 +813,32 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
           <>
             <Button
               onClick={handleBackToSearch}
+              sx={{ textTransform: 'none', fontWeight: 600 }}
+            >
+              Back
+            </Button>
+            <Button
+              variant="contained"
+              onClick={() => setActiveStep(2)}
+              disabled={selectedLeads.size === 0}
+              sx={{
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                textTransform: 'none',
+                fontWeight: 600,
+                '&:hover': {
+                  background: 'linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%)',
+                },
+              }}
+            >
+              Next: Map Fields
+            </Button>
+          </>
+        )}
+
+        {activeStep === 2 && (
+          <>
+            <Button
+              onClick={() => setActiveStep(1)}
               disabled={importing}
               sx={{ textTransform: 'none', fontWeight: 600 }}
             >
@@ -646,7 +847,7 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
             <Button
               variant="contained"
               onClick={handleImport}
-              disabled={importing || selectedLeads.size === 0}
+              disabled={importing}
               sx={{
                 background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                 textTransform: 'none',
@@ -668,7 +869,7 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
           </>
         )}
 
-        {activeStep === 2 && (
+        {activeStep === 3 && (
           <Button
             variant="contained"
             onClick={onClose}

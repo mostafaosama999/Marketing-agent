@@ -11,6 +11,25 @@ import { Company } from '../../types/crm';
 import { Lead } from '../../types/lead';
 
 /**
+ * Get all unique custom field names from leads
+ * @param leads Array of leads to scan for custom fields
+ * @returns Array of unique custom field names (sorted alphabetically)
+ */
+export function getLeadCustomFieldNames(leads: Lead[]): string[] {
+  const customFieldNames = new Set<string>();
+
+  leads.forEach(lead => {
+    if (lead.customFields) {
+      Object.keys(lead.customFields).forEach(fieldName => {
+        customFieldNames.add(fieldName);
+      });
+    }
+  });
+
+  return Array.from(customFieldNames).sort();
+}
+
+/**
  * Build complete table column list from default columns + custom fields (for leads)
  * @param leads Array of leads to scan for custom fields
  * @returns Array of all available table columns
