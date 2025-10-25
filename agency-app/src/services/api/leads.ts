@@ -44,6 +44,9 @@ function convertToLead(id: string, data: any): Lead {
     lastEnrichedAt: data.lastEnrichedAt?.toDate(),
     totalApiCosts: data.totalApiCosts,
     lastApiCostUpdate: data.lastApiCostUpdate?.toDate(),
+    archived: data.archived || false,
+    archivedAt: data.archivedAt?.toDate(),
+    archivedBy: data.archivedBy,
     outreach: data.outreach
       ? {
           linkedIn: data.outreach.linkedIn
@@ -65,13 +68,50 @@ function convertToLead(id: string, data: any): Lead {
 }
 
 /**
- * Subscribe to all leads with real-time updates
+ * Subscribe to all active (non-archived) leads with real-time updates
  */
 export function subscribeToLeads(
   callback: (leads: Lead[]) => void
 ): Unsubscribe {
   const leadsRef = collection(db, LEADS_COLLECTION);
-  const q = query(leadsRef, orderBy('createdAt', 'desc'));
+  // Query all leads, filter archived in JavaScript to handle leads without archived field
+  const q = query(
+    leadsRef,
+    orderBy('createdAt', 'desc')
+  );
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const leads: Lead[] = [];
+      snapshot.forEach((doc) => {
+        const data = doc.data();
+        // Filter out archived leads (handles both undefined and false)
+        if (data.archived !== true) {
+          leads.push(convertToLead(doc.id, data));
+        }
+      });
+      callback(leads);
+    },
+    (error) => {
+      console.error('Error listening to leads:', error);
+      callback([]);
+    }
+  );
+}
+
+/**
+ * Subscribe to archived leads with real-time updates
+ */
+export function subscribeToArchivedLeads(
+  callback: (leads: Lead[]) => void
+): Unsubscribe {
+  const leadsRef = collection(db, LEADS_COLLECTION);
+  const q = query(
+    leadsRef,
+    where('archived', '==', true),
+    orderBy('archivedAt', 'desc')
+  );
 
   return onSnapshot(
     q,
@@ -83,7 +123,7 @@ export function subscribeToLeads(
       callback(leads);
     },
     (error) => {
-      console.error('Error listening to leads:', error);
+      console.error('Error listening to archived leads:', error);
       callback([]);
     }
   );
@@ -467,6 +507,46 @@ async function deleteLeadTimeline(leadId: string): Promise<void> {
   } catch (error) {
     console.error(`Error deleting timeline for lead ${leadId}:`, error);
     // Don't throw - we still want to delete the parent document even if timeline deletion fails
+  }
+}
+
+/**
+ * Archive a lead
+ * Sets archived flag to true and records who archived it and when
+ */
+export async function archiveLead(leadId: string, userId: string): Promise<void> {
+  try {
+    const leadRef = doc(db, LEADS_COLLECTION, leadId);
+    await updateDoc(leadRef, {
+      archived: true,
+      archivedAt: serverTimestamp(),
+      archivedBy: userId,
+      updatedAt: serverTimestamp(),
+    });
+    console.log('✅ Lead archived successfully:', leadId);
+  } catch (error) {
+    console.error('Error archiving lead:', error);
+    throw new Error('Failed to archive lead');
+  }
+}
+
+/**
+ * Unarchive a lead
+ * Sets archived flag to false and clears archive metadata
+ */
+export async function unarchiveLead(leadId: string): Promise<void> {
+  try {
+    const leadRef = doc(db, LEADS_COLLECTION, leadId);
+    await updateDoc(leadRef, {
+      archived: false,
+      archivedAt: null,
+      archivedBy: null,
+      updatedAt: serverTimestamp(),
+    });
+    console.log('✅ Lead unarchived successfully:', leadId);
+  } catch (error) {
+    console.error('Error unarchiving lead:', error);
+    throw new Error('Failed to unarchive lead');
   }
 }
 

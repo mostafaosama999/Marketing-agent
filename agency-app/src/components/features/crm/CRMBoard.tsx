@@ -1,7 +1,7 @@
 // src/components/features/crm/CRMBoard.tsx
 import React, { useState, useEffect } from 'react';
-import { Box, Typography, Fab, Button, ThemeProvider, createTheme, Alert, Snackbar } from '@mui/material';
-import { Add as AddIcon, UploadFile as UploadFileIcon } from '@mui/icons-material';
+import { Box, Typography, Fab, Button, ThemeProvider, createTheme, Alert, Snackbar, IconButton, Badge, Tooltip } from '@mui/material';
+import { Add as AddIcon, UploadFile as UploadFileIcon, Archive as ArchiveIcon } from '@mui/icons-material';
 import { useAuth } from '../../../contexts/AuthContext';
 import { Lead, LeadStatus } from '../../../types/lead';
 import { CSVRow } from '../../../types/crm';
@@ -16,7 +16,9 @@ import { BulkActionsToolbar } from './BulkActionsToolbar';
 import { BulkEditDialog } from './BulkEditDialog';
 import { TableColumnVisibilityMenu } from './TableColumnVisibilityMenu';
 import {
-  CollapsibleFilterBar,
+  AdvancedFiltersModal,
+  SearchFilter,
+  FilterButton,
 } from './filters';
 import { TableColumnConfig, DEFAULT_TABLE_COLUMNS, TABLE_COLUMNS_STORAGE_KEY, applyVisibilityPreferences } from '../../../types/table';
 import { buildTableColumns, columnsToVisibilityMap } from '../../../services/api/tableColumnsService';
@@ -24,12 +26,16 @@ import { FilterPresetsMenu } from './filters/FilterPresetsMenu';
 import { SavePresetDialog } from './filters/SavePresetDialog';
 import {
   subscribeToLeads,
+  subscribeToArchivedLeads,
   createLead,
   updateLead,
   updateLeadStatus,
   deleteLead,
   bulkDeleteLeads,
+  archiveLead,
+  unarchiveLead,
 } from '../../../services/api/leads';
+import { ArchivedLeadsView } from './ArchivedLeadsView';
 import { usePipelineConfig } from '../../../hooks/usePipelineConfig';
 import {
   loadPreset,
@@ -54,6 +60,8 @@ function CRMBoard() {
   const { userProfile, user } = useAuth();
   const { stages, updateLabel, updateOrder } = usePipelineConfig(); // Load dynamic pipeline config
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [archivedLeadsCount, setArchivedLeadsCount] = useState(0);
+  const [showArchivedView, setShowArchivedView] = useState(false);
   const [draggedLead, setDraggedLead] = useState<Lead | null>(null);
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null); // Column being dragged
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null); // Column being dragged over
@@ -86,6 +94,9 @@ function CRMBoard() {
   // Preset dialog state
   const [showSavePresetDialog, setShowSavePresetDialog] = useState(false);
 
+  // Advanced filters modal state
+  const [openFiltersModal, setOpenFiltersModal] = useState(false);
+
   // Selection state for table view
   const [selectedLeadIds, setSelectedLeadIds] = useState<string[]>([]);
 
@@ -114,6 +125,15 @@ function CRMBoard() {
   useEffect(() => {
     const unsubscribe = subscribeToLeads((leadsData) => {
       setLeads(leadsData);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Subscribe to archived leads count
+  useEffect(() => {
+    const unsubscribe = subscribeToArchivedLeads((archivedLeads) => {
+      setArchivedLeadsCount(archivedLeads.length);
     });
 
     return () => unsubscribe();
@@ -352,6 +372,27 @@ function CRMBoard() {
     } catch (error) {
       console.error('Error deleting lead:', error);
       showAlert('Failed to delete lead. Please try again.');
+    }
+  };
+
+  const handleArchiveLead = async (leadId: string) => {
+    if (!user) return;
+    try {
+      await archiveLead(leadId, user.uid);
+      showAlert('Lead archived successfully');
+    } catch (error) {
+      console.error('Error archiving lead:', error);
+      showAlert('Failed to archive lead. Please try again.');
+    }
+  };
+
+  const handleUnarchiveLead = async (leadId: string) => {
+    try {
+      await unarchiveLead(leadId);
+      showAlert('Lead unarchived successfully');
+    } catch (error) {
+      console.error('Error unarchiving lead:', error);
+      showAlert('Failed to unarchive lead. Please try again.');
     }
   };
 
@@ -841,6 +882,24 @@ function CRMBoard() {
                   Import CSV
                 </Button>
                 <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
+                <Tooltip title="View Archived Leads">
+                  <IconButton
+                    onClick={() => setShowArchivedView(true)}
+                    sx={{
+                      border: '1px solid #e2e8f0',
+                      color: '#667eea',
+                      '&:hover': {
+                        bgcolor: 'rgba(102, 126, 234, 0.08)',
+                        borderColor: '#667eea',
+                      },
+                    }}
+                  >
+                    <Badge badgeContent={archivedLeadsCount} color="primary">
+                      <ArchiveIcon />
+                    </Badge>
+                  </IconButton>
+                </Tooltip>
+                <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
                 {user && (
                   <>
                     <FilterPresetsMenu
@@ -871,24 +930,37 @@ function CRMBoard() {
                   onViewChange={handleViewChange}
                 />
                 */}
-              </Box>
 
-              {/* Collapsible Filter Bar */}
-              <CollapsibleFilterBar
-                filters={filters}
-                onFiltersChange={handleFiltersChange}
-                onClearAll={handleClearAllFilters}
-                onApplyAdvancedFilters={handleApplyAdvancedFilters}
-                data={leads}
-                entityType="lead"
-                searchPlaceholder="Search leads..."
-              />
+                {/* Search Filter */}
+                <SearchFilter
+                  value={filters.search}
+                  onChange={(search) => handleFiltersChange({ search })}
+                  placeholder="Search leads..."
+                />
+
+                {/* Filter Button */}
+                <FilterButton
+                  activeCount={advancedFilterRules.length}
+                  isExpanded={openFiltersModal}
+                  onToggle={() => setOpenFiltersModal(!openFiltersModal)}
+                />
+              </Box>
             </Box>
           </Box>
         </Box>
 
-        {/* Content Area - Board or Table View */}
-        {currentView === 'board' ? (
+        {/* Content Area - Board, Table, or Archived View */}
+        {showArchivedView ? (
+          <ArchivedLeadsView
+            onClose={() => setShowArchivedView(false)}
+            onLeadClick={(lead) => {
+              setSelectedLead(lead);
+              setDialogMode('edit');
+              setOpenLeadDetail(true);
+            }}
+            onUnarchive={handleUnarchiveLead}
+          />
+        ) : currentView === 'board' ? (
           <Box sx={{
             flex: 1,
             display: 'flex',
@@ -997,6 +1069,8 @@ function CRMBoard() {
           }}
           onSave={handleSaveLead}
           onDelete={handleDeleteLead}
+          onArchive={handleArchiveLead}
+          onUnarchive={handleUnarchiveLead}
           lead={selectedLead || undefined}
           mode={dialogMode}
         />
@@ -1026,6 +1100,16 @@ function CRMBoard() {
             currentPreset={getCurrentPresetData()}
           />
         )}
+
+        {/* Advanced Filters Modal */}
+        <AdvancedFiltersModal
+          open={openFiltersModal}
+          onClose={() => setOpenFiltersModal(false)}
+          onApplyFilters={handleApplyAdvancedFilters}
+          onClearFilters={handleClearAllFilters}
+          data={leads}
+          entityType="lead"
+        />
 
         {/* Bulk Edit Dialog */}
         <BulkEditDialog

@@ -69,7 +69,7 @@ export const CompanyDetailPage: React.FC = () => {
 
   const [company, setCompany] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
-  const [editMode, setEditMode] = useState(false); // Start in view mode, enter edit after analysis
+  const [editMode, setEditMode] = useState(true); // Start in edit mode by default for easy field editing
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [duplicateWarning, setDuplicateWarning] = useState('');

@@ -57,6 +57,11 @@ export interface Lead {
       sentAt?: Date;
     };
   };
+
+  // Archive status
+  archived?: boolean;
+  archivedAt?: Date;
+  archivedBy?: string; // User ID who archived the lead
 }
 
 // Lead form data (for create/update operations)

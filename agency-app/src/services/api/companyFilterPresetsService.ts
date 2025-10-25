@@ -177,6 +177,27 @@ export async function setDefaultCompanyPreset(
 }
 
 /**
+ * Remove default status from a company preset
+ * @param userId - User ID
+ * @param presetId - Preset ID to unset as default
+ */
+export async function unsetDefaultCompanyPreset(
+  userId: string,
+  presetId: string
+): Promise<void> {
+  try {
+    const presetRef = doc(db, 'users', userId, 'companyFilterPresets', presetId);
+    await setDoc(presetRef, {
+      isDefault: false,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (error) {
+    console.error('Error unsetting default company preset:', error);
+    throw new Error('Failed to unset default company preset');
+  }
+}
+
+/**
  * Get the default company preset for a user
  * @param userId - User ID
  * @returns Default company preset or null

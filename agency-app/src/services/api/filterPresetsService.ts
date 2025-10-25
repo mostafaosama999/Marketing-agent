@@ -179,6 +179,27 @@ export async function setDefaultPreset(
 }
 
 /**
+ * Remove default status from a preset
+ * @param userId - User ID
+ * @param presetId - Preset ID to unset as default
+ */
+export async function unsetDefaultPreset(
+  userId: string,
+  presetId: string
+): Promise<void> {
+  try {
+    const presetRef = doc(db, 'users', userId, 'filterPresets', presetId);
+    await setDoc(presetRef, {
+      isDefault: false,
+      updatedAt: new Date().toISOString()
+    }, { merge: true });
+  } catch (error) {
+    console.error('Error unsetting default preset:', error);
+    throw new Error('Failed to unset default preset');
+  }
+}
+
+/**
  * Get the default preset for a user
  * @param userId - User ID
  * @returns Default preset or null

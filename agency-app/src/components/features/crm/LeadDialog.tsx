@@ -25,7 +25,13 @@ import {
   Select,
   Grid,
 } from '@mui/material';
-import { Email as EmailIcon, LinkedIn as LinkedInIcon, Delete as DeleteIcon } from '@mui/icons-material';
+import {
+  Email as EmailIcon,
+  LinkedIn as LinkedInIcon,
+  Delete as DeleteIcon,
+  Archive as ArchiveIcon,
+  Unarchive as UnarchiveIcon,
+} from '@mui/icons-material';
 import { Lead, LeadFormData, LeadStatusChange } from '../../../types/lead';
 import { leadTimelineService } from '../../../services/api/leadSubcollections';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -37,6 +43,8 @@ interface LeadDialogProps {
   onClose: () => void;
   onSave: (leadData: LeadFormData) => Promise<void>;
   onDelete?: (leadId: string) => Promise<void>;
+  onArchive?: (leadId: string) => Promise<void>;
+  onUnarchive?: (leadId: string) => Promise<void>;
   lead?: Lead; // If provided, edit mode; otherwise, create mode
   mode: 'create' | 'edit';
 }
@@ -67,6 +75,8 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
   onClose,
   onSave,
   onDelete,
+  onArchive,
+  onUnarchive,
   lead,
   mode,
 }) => {
@@ -304,6 +314,30 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
       onClose();
     } catch (error) {
       console.error('Error deleting lead:', error);
+    }
+  };
+
+  const handleArchiveToggle = async () => {
+    if (!lead) return;
+
+    const isArchived = lead.archived;
+    const action = isArchived ? 'unarchive' : 'archive';
+    const confirmMessage = isArchived
+      ? `Unarchive "${lead.name}"? This lead will be restored to the active pipeline.`
+      : `Archive "${lead.name}"? This lead will be removed from the active pipeline.`;
+
+    if (!window.confirm(confirmMessage)) return;
+
+    try {
+      if (isArchived && onUnarchive) {
+        await onUnarchive(lead.id);
+      } else if (!isArchived && onArchive) {
+        await onArchive(lead.id);
+      }
+      onClose();
+    } catch (error) {
+      console.error(`Error ${action}ing lead:`, error);
+      alert(`Failed to ${action} lead. Please try again.`);
     }
   };
 
@@ -643,21 +677,37 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
       </DialogContent>
 
       <DialogActions sx={{ justifyContent: 'space-between', px: 3, pb: 2 }}>
-        {/* Delete button (left side, edit mode only) */}
-        {mode === 'edit' && onDelete && lead && (
-          <Button
-            onClick={handleDelete}
-            startIcon={<DeleteIcon />}
-            color="error"
-            disabled={loading}
-            sx={{
-              textTransform: 'none',
-              fontWeight: 600,
-            }}
-          >
-            Delete
-          </Button>
-        )}
+        {/* Archive/Unarchive and Delete buttons (left side, edit mode only) */}
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          {mode === 'edit' && lead && (onArchive || onUnarchive) && (
+            <Button
+              onClick={handleArchiveToggle}
+              startIcon={lead.archived ? <UnarchiveIcon /> : <ArchiveIcon />}
+              color="warning"
+              disabled={loading}
+              sx={{
+                textTransform: 'none',
+                fontWeight: 600,
+              }}
+            >
+              {lead.archived ? 'Unarchive' : 'Archive'}
+            </Button>
+          )}
+          {mode === 'edit' && onDelete && lead && (
+            <Button
+              onClick={handleDelete}
+              startIcon={<DeleteIcon />}
+              color="error"
+              disabled={loading}
+              sx={{
+                textTransform: 'none',
+                fontWeight: 600,
+              }}
+            >
+              Delete
+            </Button>
+          )}
+        </Box>
         {mode === 'create' && <Box />}
 
         {/* Cancel and Save buttons (right side) */}

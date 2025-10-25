@@ -26,11 +26,13 @@ import {
   subscribeToUserPresets,
   deleteFilterPreset,
   setDefaultPreset,
+  unsetDefaultPreset,
 } from '../../../../services/api/filterPresetsService';
 import {
   subscribeToCompanyPresets,
   deleteCompanyPreset,
   setDefaultCompanyPreset,
+  unsetDefaultCompanyPreset,
 } from '../../../../services/api/companyFilterPresetsService';
 
 interface FilterPresetsMenuProps {
@@ -100,17 +102,29 @@ export const FilterPresetsMenu: React.FC<FilterPresetsMenuProps> = ({
     setSelectedPresetId(null);
   };
 
-  const handleSetDefault = async () => {
+  const handleToggleDefault = async () => {
     if (!selectedPresetId) return;
     try {
+      // Check if the selected preset is currently the default
+      const selectedPreset = presets.find(p => p.id === selectedPresetId);
+      const isCurrentlyDefault = selectedPreset?.isDefault || false;
+
       if (entityType === 'company') {
-        await setDefaultCompanyPreset(userId, selectedPresetId);
+        if (isCurrentlyDefault) {
+          await unsetDefaultCompanyPreset(userId, selectedPresetId);
+        } else {
+          await setDefaultCompanyPreset(userId, selectedPresetId);
+        }
       } else {
-        await setDefaultPreset(userId, selectedPresetId);
+        if (isCurrentlyDefault) {
+          await unsetDefaultPreset(userId, selectedPresetId);
+        } else {
+          await setDefaultPreset(userId, selectedPresetId);
+        }
       }
       handleCloseActionMenu();
     } catch (error) {
-      console.error('Error setting default preset:', error);
+      console.error('Error toggling default preset:', error);
     }
   };
 
@@ -261,11 +275,21 @@ export const FilterPresetsMenu: React.FC<FilterPresetsMenuProps> = ({
           },
         }}
       >
-        <MenuItem onClick={handleSetDefault}>
+        <MenuItem onClick={handleToggleDefault}>
           <ListItemIcon>
-            <StarIcon fontSize="small" sx={{ color: '#f59e0b' }} />
+            {presets.find(p => p.id === selectedPresetId)?.isDefault ? (
+              <StarBorderIcon fontSize="small" sx={{ color: '#94a3b8' }} />
+            ) : (
+              <StarIcon fontSize="small" sx={{ color: '#f59e0b' }} />
+            )}
           </ListItemIcon>
-          <ListItemText primary="Set as Default" />
+          <ListItemText
+            primary={
+              presets.find(p => p.id === selectedPresetId)?.isDefault
+                ? 'Remove Default'
+                : 'Set as Default'
+            }
+          />
         </MenuItem>
         <MenuItem onClick={handleDelete} sx={{ color: '#ef4444' }}>
           <ListItemIcon>
