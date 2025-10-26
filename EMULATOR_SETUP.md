@@ -1,146 +1,265 @@
-# Firebase Emulator Setup - Functions Only
+# Firebase Emulator Setup
 
-This project is configured to use Firebase Emulators for **Cloud Functions only** during local development. Auth and Firestore remain connected to production, allowing you to:
-- Login with real production accounts
-- Access real production data
-- Test Cloud Functions locally before deploying
+This project can be configured to use Firebase Emulators for local development and testing. You can choose between:
+
+1. **Full Emulator Mode**: Auth, Firestore, and Functions all local (isolated testing)
+2. **Functions-Only Mode**: Only Functions emulated, Auth & Firestore use production (realistic testing)
+
+## Full Emulator Mode (Recommended for Testing)
+
+Use this mode when you want to test without affecting production data at all.
 
 ## Prerequisites
 
 - Firebase CLI installed: `npm install -g firebase-tools`
 - Logged in to Firebase: `firebase login`
 
-## Configuration
+## Emulator Ports
 
-Only the Functions emulator is used:
+- **Firestore**: `localhost:8081`
+- **Auth**: `localhost:9099`
 - **Functions**: `localhost:5001`
-- **Emulator UI**: `localhost:4000` (optional, for monitoring)
-- **Auth**: Production Firebase (real authentication)
-- **Firestore**: Production Firebase (real database)
+- **Emulator UI**: `localhost:4001` (web interface)
 
-## Quick Start
+## Quick Start - Full Emulator Mode
 
-### 1. Start the Functions Emulator
+### 1. Enable Emulator Mode
 
-From the agency-app directory:
+Edit `agency-app/.env`:
+
+```env
+REACT_APP_USE_EMULATOR=true
+```
+
+### 2. Start All Emulators
+
+From the project root:
+
+```bash
+firebase emulators:start
+```
+
+### 3. Start the React App
+
+In a new terminal:
 
 ```bash
 cd agency-app
-npm run emulators
+npm start
 ```
 
-This will start only the Functions emulator on port 5001.
+### 4. Access the Emulator UI
 
-### 2. Start the React App with Emulator Mode
-
-In a new terminal, from the `agency-app` directory:
-
-```bash
-npm run start:emulator
-```
-
-This will start the React app and connect it to the local emulators.
-
-### 3. Access the Emulator UI (Optional)
-
-Open your browser to: http://localhost:4000
+Open your browser to: http://localhost:4001
 
 Here you can:
-- Monitor function calls
-- View function logs
-- Test function invocations
+- View and edit Firestore documents
+- Create test users in Auth
+- Monitor function calls and logs
+- See all emulator activity
 
-**Note**: Firestore and Auth data will show production data, not emulated data.
+## Creating Test Data
 
-## Environment Variables
+### Option 1: Use the Emulator UI
+1. Open http://localhost:4001/firestore
+2. Click "Start collection"
+3. Add documents manually
+4. Create test users at http://localhost:4001/auth
 
-Create a `.env.local` file in the `agency-app` directory (copy from `.env.local.example`):
-
+### Option 2: Import Production Data (for testing)
 ```bash
-# Set to 'true' to use emulators
-REACT_APP_USE_EMULATOR=true
+# Export from production (requires permissions)
+firebase firestore:export ./firestore-export
 
-# Your Firebase API key
-REACT_APP_FIREBASE_API_KEY=your-api-key-here
+# Start emulators with imported data
+firebase emulators:start --import=./firestore-export
 ```
 
-## Scripts
+### Option 3: Use Your App
+Just use the app normally - all data is created locally!
 
-### From `agency-app` directory:
+## Persisting Emulator Data
 
-- `npm run emulators` - Start Functions emulator only
-- `npm run emulators:ui` - Start Functions emulator with UI
-- `npm start` - Start React app in full production mode
-- `npm run start:emulator` - Start React app with local Functions (Auth & Firestore still production)
+By default, emulator data is cleared when stopped. To persist:
 
-## Development Workflow
+```bash
+# Export current emulator data
+firebase emulators:export ./emulator-data
 
-### Option 1: Local Functions Testing (Recommended for Development)
-1. Terminal 1: Start Functions emulator: `npm run emulators`
-2. Terminal 2: Start app with local functions: `npm run start:emulator`
-3. Login works with real accounts
-4. Data reads/writes to production Firestore
-5. Functions execute locally (changes visible immediately without deploying)
+# Start with previously exported data
+firebase emulators:start --import=./emulator-data --export-on-exit=./emulator-data
+```
 
-### Option 2: Full Production Mode
-1. `npm start`
-2. Everything connects to production Firebase (including Functions)
+Add to `.gitignore`:
+```
+emulator-data/
+firestore-export/
+```
+
+## Switching Modes
+
+### Use Full Emulator Mode (Local Testing)
+```env
+# agency-app/.env
+REACT_APP_USE_EMULATOR=true
+```
+Start emulators: `firebase emulators:start`
+
+### Use Production Mode
+```env
+# agency-app/.env
+REACT_APP_USE_EMULATOR=false
+```
+No need to start emulators
+
+**Important**: Always restart your React dev server after changing this setting!
+
+## Development Workflows
+
+### Workflow 1: Isolated Testing (Full Emulator Mode)
+Best for: Testing new features without risk to production
+
+1. Set `REACT_APP_USE_EMULATOR=true` in `.env`
+2. Terminal 1: `firebase emulators:start`
+3. Terminal 2: `cd agency-app && npm start`
+4. All data is local - production is completely untouched
+5. Great for experimenting, testing edge cases, debugging
+
+### Workflow 2: Production Mode
+Best for: Testing with real data, final verification before deployment
+
+1. Set `REACT_APP_USE_EMULATOR=false` in `.env`
+2. Terminal: `cd agency-app && npm start`
+3. Everything connects to production Firebase
+4. Use with caution - changes affect real data!
 
 ## Important Notes
 
-### Data Persistence
-Since only Functions are emulated, there is no emulator data to persist. All Firestore and Auth data is in production.
+### Emulator Data is Temporary
+- By default, emulator data is cleared when you stop the emulators
+- Use `--export-on-exit` flag to persist data between sessions
+- Emulator data is NOT backed up - it's for testing only
 
-### Testing Functions
+### Security Rules Still Apply
+- Firestore security rules are enforced in emulators
+- You can test security rule changes locally
+- Make sure rules allow necessary operations for testing
+
+### Functions Behavior
 - Functions run locally and can be modified without redeploying
 - Changes to function code require restarting the emulator
-- Functions can read/write to production Firestore
-- Be careful: Function side effects (writes, emails, etc.) affect production data!
+- In emulator mode, functions read/write to emulated Firestore (safe!)
+- External API calls (Apollo, OpenAI) still reach real services
 
 ## Troubleshooting
 
-### Emulator won't start
-- Check if port 5001 is already in use: `lsof -i :5001`
-- Kill any existing Firebase processes: `pkill -f firebase`
-- Ensure functions are built: `cd functions && npm run build`
-
-### App still connects to production functions
-- Ensure `REACT_APP_USE_EMULATOR=true` is set in `.env.local`
-- Check browser console for "🔧 Connecting Functions to local emulator..." message
-- Restart the React app after changing environment variables
-
-### Can't login
-- This means Auth is correctly connecting to production (intended behavior)
-- Verify your credentials are correct in production Firebase
-- Check Firebase Console for authentication issues
-
-### Functions not working
-- Ensure functions are built: `cd ../functions && npm run build`
-- Check Functions emulator logs in terminal or Emulator UI at http://localhost:4000
-- Verify function name matches what you're calling from the app
-
-## Security Rules
-
-Since Firestore is connected to production, production security rules apply. Be mindful of this when testing.
-
-## Testing
-
-You can use the Functions emulator for automated testing:
-
+### "Port already in use" errors
 ```bash
-# Start emulator in background for tests
-firebase emulators:exec --only functions "npm test"
+# Find and kill processes using emulator ports
+lsof -ti:8081 | xargs kill -9  # Firestore
+lsof -ti:9099 | xargs kill -9  # Auth
+lsof -ti:5001 | xargs kill -9  # Functions
+lsof -ti:4001 | xargs kill -9  # Emulator UI
 ```
 
-## Why Functions-Only?
+### Emulators won't start
+- Kill any existing Firebase processes: `pkill -f firebase`
+- Check if ports are available
+- Ensure functions are built: `cd functions && npm run build`
 
-This setup provides the best of both worlds:
-- **Real User Authentication**: Test with actual user accounts and permissions
-- **Real Data**: See actual production data for realistic testing
-- **Local Functions**: Iterate quickly on function code without deploying
-- **Safety**: Functions can be tested and debugged before pushing to production
+### App still connects to production
+- Ensure `REACT_APP_USE_EMULATOR=true` is set in `.env`
+- Check browser console for emulator connection messages:
+  - "✅ Firestore connected to emulator"
+  - "✅ Auth connected to emulator"
+  - "✅ Functions connected to emulator"
+- Restart the React app after changing environment variables
+- Hard refresh browser (Cmd+Shift+R on Mac, Ctrl+Shift+R on Windows)
+
+### Can't login to emulated Auth
+- Create a test user via Emulator UI: http://localhost:4001/auth
+- Or use the sign-up flow in your app
+- Remember: Emulated users are separate from production users
+
+### Functions not working
+- Ensure functions are built: `cd functions && npm run build`
+- Check Functions emulator logs in terminal
+- View detailed logs in Emulator UI at http://localhost:4001
+- Verify function name matches what you're calling from the app
+
+### Data disappeared
+- Emulator data is temporary by default
+- Use `--export-on-exit` to persist data
+- Check if you accidentally switched back to production mode
+
+## Testing with Emulators
+
+### Manual Testing
+1. Start emulators with UI: `firebase emulators:start`
+2. Use your app normally
+3. View data/logs in Emulator UI: http://localhost:4001
+
+### Automated Testing
+```bash
+# Start emulators, run tests, then stop
+firebase emulators:exec "cd agency-app && npm test"
+```
+
+### CI/CD Testing
+```bash
+# In your CI pipeline
+firebase emulators:exec --only firestore,auth,functions "npm test"
+```
+
+## Best Practices
+
+1. **Always use emulators for development**: Prevents accidentally modifying production data
+2. **Create seed data**: Export a "clean slate" with test data for consistent testing
+3. **Test edge cases**: Use emulators to create unusual scenarios safely
+4. **Separate environments**: Never run production traffic through emulators
+5. **Version control**: Add emulator data folders to `.gitignore`
+6. **Document test scenarios**: Keep track of different data states for testing
 
 ## Additional Resources
 
 - [Firebase Emulator Suite Documentation](https://firebase.google.com/docs/emulator-suite)
+- [Firestore Emulator Guide](https://firebase.google.com/docs/emulator-suite/connect_firestore)
+- [Auth Emulator Guide](https://firebase.google.com/docs/emulator-suite/connect_auth)
+- [Functions Emulator Guide](https://firebase.google.com/docs/emulator-suite/connect_functions)
 - [Connect your app to the Emulators](https://firebase.google.com/docs/emulator-suite/connect_and_prototype)
+
+## Quick Reference Card
+
+### Start Emulators
+```bash
+firebase emulators:start                    # Basic start
+firebase emulators:start --import=./data    # With existing data
+firebase emulators:start --export-on-exit=./data  # Auto-save on exit
+```
+
+### Environment Variable
+```env
+REACT_APP_USE_EMULATOR=true   # Use emulators
+REACT_APP_USE_EMULATOR=false  # Use production
+```
+
+### Emulator URLs
+- **UI**: http://localhost:4001
+- **Firestore**: http://localhost:4001/firestore
+- **Auth**: http://localhost:4001/auth
+- **Functions**: http://localhost:4001/functions
+- **Logs**: http://localhost:4001/logs
+
+### Console Messages (to verify connection)
+When emulators are connected, you should see:
+```
+✅ Firestore connected to emulator (localhost:8081)
+✅ Auth connected to emulator (localhost:9099)
+✅ Functions connected to emulator (localhost:5001)
+🎯 All Firebase services connected to local emulators
+```
+
+When using production:
+```
+🌐 Using production Firebase services
+```

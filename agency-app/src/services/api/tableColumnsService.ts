@@ -3,7 +3,6 @@
 
 import {
   TableColumnConfig,
-  DEFAULT_TABLE_COLUMNS,
   DEFAULT_LEADS_TABLE_COLUMNS,
   DEFAULT_COMPANIES_TABLE_COLUMNS
 } from '../../types/table';

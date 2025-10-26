@@ -12,7 +12,6 @@ import {
   where,
   orderBy,
   onSnapshot,
-  Timestamp,
   writeBatch
 } from 'firebase/firestore';
 import { db } from '../firebase/firestore';

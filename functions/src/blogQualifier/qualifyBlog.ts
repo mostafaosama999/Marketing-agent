@@ -7,9 +7,15 @@ import {logApiCost} from "../utils/costTracker";
 
 /**
  * Cloud function to qualify a company's blog
+ * Timeout: 300 seconds (5 minutes) - blog analysis can take time
  */
-export const qualifyCompanyBlog = functions.https.onCall(
-  async (data, context): Promise<BlogQualificationResult> => {
+export const qualifyCompanyBlog = functions
+  .runWith({
+    timeoutSeconds: 300, // 5 minutes
+    memory: "512MB", // Increased memory for large blog processing
+  })
+  .https.onCall(
+    async (data, context): Promise<BlogQualificationResult> => {
     // Verify authentication
     if (!context.auth) {
       throw new functions.https.HttpsError(
@@ -97,9 +103,29 @@ export const qualifyCompanyBlog = functions.https.onCall(
       return result;
     } catch (error: any) {
       console.error("Error qualifying company blog:", error);
+
+      // Check if it's a timeout error
+      if (error.code === "ETIMEDOUT" || error.code === "ESOCKETTIMEDOUT" ||
+          error.message?.includes("timeout") || error.message?.includes("timed out")) {
+        throw new functions.https.HttpsError(
+          "deadline-exceeded",
+          "Blog analysis took too long to complete. The blog may have too many posts or slow RSS feed. Please try again or contact support if the issue persists."
+        );
+      }
+
+      // Check if it's a network error
+      if (error.code === "ENOTFOUND" || error.code === "ECONNREFUSED" ||
+          error.message?.includes("socket hang up") || error.message?.includes("network")) {
+        throw new functions.https.HttpsError(
+          "unavailable",
+          "Unable to reach the blog website. The site may be down or blocking our requests. Please verify the blog URL is accessible and try again."
+        );
+      }
+
+      // Generic error with helpful message
       throw new functions.https.HttpsError(
-        "internal",
-        `Failed to qualify company blog: ${error.message || "Unknown error"}`
+        "unknown",
+        error.message || "Failed to analyze blog. Please check the blog URL and try again."
       );
     }
   }

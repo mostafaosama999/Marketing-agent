@@ -265,13 +265,14 @@ export function applyForwardFill(data: CSVRow[]): CSVRow[] {
 
 /**
  * Sanitize string for use in email or field names
+ * Currently unused but kept for potential future use
  */
-function sanitize(str: string): string {
-  return str
-    .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]/g, '');
-}
+// function sanitize(str: string): string {
+//   return str
+//     .toLowerCase()
+//     .trim()
+//     .replace(/[^a-z0-9]/g, '');
+// }
 
 /**
  * Transform CSV row to LeadFormData and CompanyData using field mappings

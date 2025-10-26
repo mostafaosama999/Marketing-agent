@@ -1,5 +1,5 @@
 // src/pages/leads/LeadDetailPage.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -38,6 +38,13 @@ import {
   LinkedIn as LinkedInIcon,
   Archive as ArchiveIcon,
   Unarchive as UnarchiveIcon,
+  ContentCopy as ContentCopyIcon,
+  Person as PersonIcon,
+  Business as BusinessIcon,
+  Article as ArticleIcon,
+  Create as CreateIcon,
+  CalendarToday as CalendarIcon,
+  Tune as TuneIcon,
 } from '@mui/icons-material';
 import { Lead, LeadFormData, LeadStatusChange } from '../../types/lead';
 import { getLead, updateLead, deleteLead, archiveLead, unarchiveLead } from '../../services/api/leads';
@@ -47,6 +54,8 @@ import { usePipelineConfigContext } from '../../contexts/PipelineConfigContext';
 import { fetchEmail } from '../../services/api/apolloService';
 import { getCompany } from '../../services/api/companies';
 import { Company } from '../../types/crm';
+import { getSettings } from '../../services/api/settings';
+import { replaceTemplateVariables } from '../../services/api/templateVariablesService';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -110,8 +119,9 @@ export const LeadDetailPage: React.FC = () => {
   const [linkedInProfileUrl, setLinkedInProfileUrl] = useState('');
   const [emailStatus, setEmailStatus] = useState<'not_sent' | 'sent' | 'opened' | 'replied' | 'bounced' | 'refused' | 'no_response'>('not_sent');
 
-  // Offer template state
+  // Offer template state (fetched from global settings)
   const [offerTemplate, setOfferTemplate] = useState<string>('');
+  const [templateLoading, setTemplateLoading] = useState(false);
 
   // Delete dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -171,13 +181,6 @@ export const LeadDetailPage: React.FC = () => {
           setEmailStatus('not_sent');
         }
 
-        // Load offer template from customFields
-        if (leadData.customFields?.offer_template) {
-          setOfferTemplate(leadData.customFields.offer_template as string);
-        } else {
-          setOfferTemplate('');
-        }
-
         // Fetch company data if companyId exists
         if (leadData.companyId) {
           try {
@@ -219,6 +222,23 @@ export const LeadDetailPage: React.FC = () => {
 
     fetchActivity();
   }, [lead, leadId]);
+
+  // Load global offer template from settings
+  useEffect(() => {
+    const loadTemplate = async () => {
+      setTemplateLoading(true);
+      try {
+        const settings = await getSettings();
+        setOfferTemplate(settings.offerTemplate);
+      } catch (error) {
+        console.error('Error loading offer template:', error);
+      } finally {
+        setTemplateLoading(false);
+      }
+    };
+
+    loadTemplate();
+  }, []);
 
   const handleChange = (field: keyof LeadFormData, value: any) => {
     setFormData((prev) => ({
@@ -285,10 +305,6 @@ export const LeadDetailPage: React.FC = () => {
       // Include outreach in form data (only if there's actual data)
       const dataToSave = {
         ...formData,
-        customFields: {
-          ...formData.customFields,
-          offer_template: offerTemplate, // Save offer template
-        },
       };
 
       if (Object.keys(outreachData).length > 0) {
@@ -439,6 +455,377 @@ export const LeadDetailPage: React.FC = () => {
     });
   };
 
+  // Helper function to get section styling (icon and color)
+  const getSectionStyle = (section: string): { icon: React.ReactNode; color: string; bgColor: string; category: 'lead' | 'company' } => {
+    switch (section) {
+      case 'BASIC INFO':
+        return {
+          icon: <PersonIcon sx={{ fontSize: 14 }} />,
+          color: '#667eea',
+          bgColor: 'rgba(102, 126, 234, 0.08)',
+          category: 'lead'
+        };
+      case 'OUTREACH':
+        return {
+          icon: <EmailIcon sx={{ fontSize: 14 }} />,
+          color: '#667eea',
+          bgColor: 'rgba(102, 126, 234, 0.08)',
+          category: 'lead'
+        };
+      case 'DATES':
+        return {
+          icon: <CalendarIcon sx={{ fontSize: 14 }} />,
+          color: '#667eea',
+          bgColor: 'rgba(102, 126, 234, 0.08)',
+          category: 'lead'
+        };
+      case 'CUSTOM FIELDS':
+        return {
+          icon: <TuneIcon sx={{ fontSize: 14 }} />,
+          color: '#667eea',
+          bgColor: 'rgba(102, 126, 234, 0.08)',
+          category: 'lead'
+        };
+      case 'COMPANY INFO':
+        return {
+          icon: <BusinessIcon sx={{ fontSize: 14 }} />,
+          color: '#059669',
+          bgColor: 'rgba(5, 150, 105, 0.08)',
+          category: 'company'
+        };
+      case 'BLOG ANALYSIS':
+        return {
+          icon: <ArticleIcon sx={{ fontSize: 14 }} />,
+          color: '#059669',
+          bgColor: 'rgba(5, 150, 105, 0.08)',
+          category: 'company'
+        };
+      case 'WRITING PROGRAM':
+        return {
+          icon: <CreateIcon sx={{ fontSize: 14 }} />,
+          color: '#059669',
+          bgColor: 'rgba(5, 150, 105, 0.08)',
+          category: 'company'
+        };
+      default:
+        return {
+          icon: <TuneIcon sx={{ fontSize: 14 }} />,
+          color: '#64748b',
+          bgColor: 'rgba(100, 116, 139, 0.08)',
+          category: 'lead'
+        };
+    }
+  };
+
+  // Generate available variables dynamically from lead fields
+  // Must be called before early returns to follow React hooks rules
+  const availableVariables = useMemo(() => {
+    const variables: Array<{ variable: string; label: string; value: string; section: string }> = [];
+
+    // BASIC INFO - Lead standard fields
+    variables.push(
+      { variable: '{{name}}', label: 'Lead name', value: formData.name || '[Name]', section: 'BASIC INFO' },
+      { variable: '{{email}}', label: 'Lead email', value: formData.email || '[Email]', section: 'BASIC INFO' },
+      { variable: '{{phone}}', label: 'Phone number', value: formData.phone || '[Phone]', section: 'BASIC INFO' },
+      { variable: '{{company}}', label: 'Company name', value: formData.company || '[Company]', section: 'BASIC INFO' },
+      { variable: '{{status}}', label: 'Lead status', value: getLabel(formData.status), section: 'BASIC INFO' }
+    );
+
+    // OUTREACH - Lead outreach status fields
+    if (formData.customFields?.linkedin_status) {
+      variables.push({
+        variable: '{{linkedin_status}}',
+        label: 'LinkedIn outreach status',
+        value: String(formData.customFields.linkedin_status),
+        section: 'OUTREACH'
+      });
+    }
+    if (formData.customFields?.email_status) {
+      variables.push({
+        variable: '{{email_status}}',
+        label: 'Email outreach status',
+        value: String(formData.customFields.email_status),
+        section: 'OUTREACH'
+      });
+    }
+    if (formData.customFields?.linkedin_url) {
+      variables.push({
+        variable: '{{linkedin_url}}',
+        label: 'LinkedIn profile URL',
+        value: String(formData.customFields.linkedin_url),
+        section: 'OUTREACH'
+      });
+    }
+
+    // DATES - Lead dates
+    if (lead?.createdAt) {
+      variables.push({
+        variable: '{{created_date}}',
+        label: 'Lead created date',
+        value: new Date(lead.createdAt).toLocaleDateString(),
+        section: 'DATES'
+      });
+    }
+    if (lead?.updatedAt) {
+      variables.push({
+        variable: '{{updated_date}}',
+        label: 'Lead updated date',
+        value: new Date(lead.updatedAt).toLocaleDateString(),
+        section: 'DATES'
+      });
+    }
+
+    // COMPANY INFO - Company basic fields
+    if (company) {
+      if (company.website) {
+        variables.push({
+          variable: '{{company_website}}',
+          label: 'Company website',
+          value: company.website,
+          section: 'COMPANY INFO'
+        });
+      }
+      if (company.industry) {
+        variables.push({
+          variable: '{{company_industry}}',
+          label: 'Company industry',
+          value: company.industry,
+          section: 'COMPANY INFO'
+        });
+      }
+      if (company.description) {
+        variables.push({
+          variable: '{{company_description}}',
+          label: 'Company description',
+          value: company.description,
+          section: 'COMPANY INFO'
+        });
+      }
+
+      // Apollo enrichment data
+      if (company.apolloEnrichment) {
+        const apollo = company.apolloEnrichment;
+        if (apollo.employeeCount) {
+          variables.push({
+            variable: '{{company_employees}}',
+            label: 'Employee count',
+            value: apollo.employeeCount.toLocaleString(),
+            section: 'COMPANY INFO'
+          });
+        }
+        if (apollo.employeeRange) {
+          variables.push({
+            variable: '{{company_employee_range}}',
+            label: 'Employee range',
+            value: apollo.employeeRange,
+            section: 'COMPANY INFO'
+          });
+        }
+        if (apollo.foundedYear) {
+          variables.push({
+            variable: '{{company_founded}}',
+            label: 'Founded year',
+            value: String(apollo.foundedYear),
+            section: 'COMPANY INFO'
+          });
+        }
+        if (apollo.totalFundingFormatted) {
+          variables.push({
+            variable: '{{company_funding}}',
+            label: 'Total funding',
+            value: apollo.totalFundingFormatted,
+            section: 'COMPANY INFO'
+          });
+        }
+        if (apollo.technologies && apollo.technologies.length > 0) {
+          variables.push({
+            variable: '{{company_technologies}}',
+            label: 'Technologies',
+            value: apollo.technologies.join(', '),
+            section: 'COMPANY INFO'
+          });
+        }
+      }
+
+      // BLOG ANALYSIS - Company blog data
+      if (company.blogAnalysis) {
+        const blog = company.blogAnalysis;
+        if (blog.lastActivePost) {
+          variables.push({
+            variable: '{{company_last_post}}',
+            label: 'Last active post date',
+            value: blog.lastActivePost,
+            section: 'BLOG ANALYSIS'
+          });
+        }
+        if (blog.monthlyFrequency !== undefined) {
+          variables.push({
+            variable: '{{company_blog_frequency}}',
+            label: 'Monthly blog frequency',
+            value: `${blog.monthlyFrequency} posts/month`,
+            section: 'BLOG ANALYSIS'
+          });
+        }
+        if (blog.writers?.count !== undefined) {
+          variables.push({
+            variable: '{{company_writers_count}}',
+            label: 'Number of writers',
+            value: String(blog.writers.count),
+            section: 'BLOG ANALYSIS'
+          });
+        }
+        if (blog.writers?.areFreelancers !== undefined) {
+          variables.push({
+            variable: '{{company_uses_freelancers}}',
+            label: 'Uses freelance writers',
+            value: blog.writers.areFreelancers ? 'Yes' : 'No',
+            section: 'BLOG ANALYSIS'
+          });
+        }
+        if (blog.blogNature?.rating) {
+          variables.push({
+            variable: '{{company_blog_rating}}',
+            label: 'Blog quality rating',
+            value: blog.blogNature.rating,
+            section: 'BLOG ANALYSIS'
+          });
+        }
+        if (blog.blogUrl) {
+          variables.push({
+            variable: '{{company_blog_url}}',
+            label: 'Blog URL',
+            value: blog.blogUrl,
+            section: 'BLOG ANALYSIS'
+          });
+        }
+      }
+
+      // WRITING PROGRAM - Company writing program data
+      if (company.writingProgramAnalysis) {
+        const program = company.writingProgramAnalysis;
+        variables.push({
+          variable: '{{company_has_program}}',
+          label: 'Has writing program',
+          value: program.hasProgram ? 'Yes' : 'No',
+          section: 'WRITING PROGRAM'
+        });
+        if (program.programUrl) {
+          variables.push({
+            variable: '{{company_program_url}}',
+            label: 'Program URL',
+            value: program.programUrl,
+            section: 'WRITING PROGRAM'
+          });
+        }
+        if (program.isOpen !== null) {
+          variables.push({
+            variable: '{{company_program_open}}',
+            label: 'Program currently open',
+            value: program.isOpen ? 'Yes' : 'No',
+            section: 'WRITING PROGRAM'
+          });
+        }
+        if (program.payment?.amount) {
+          variables.push({
+            variable: '{{company_payment_amount}}',
+            label: 'Payment amount',
+            value: program.payment.amount,
+            section: 'WRITING PROGRAM'
+          });
+        }
+        if (program.payment?.method) {
+          variables.push({
+            variable: '{{company_payment_method}}',
+            label: 'Payment method',
+            value: program.payment.method,
+            section: 'WRITING PROGRAM'
+          });
+        }
+        if (program.contactEmail) {
+          variables.push({
+            variable: '{{company_program_contact}}',
+            label: 'Program contact email',
+            value: program.contactEmail,
+            section: 'WRITING PROGRAM'
+          });
+        }
+      }
+
+      // Company custom fields
+      if (company.customFields) {
+        Object.entries(company.customFields)
+          .filter(([key]) => key !== 'offer_template')
+          .forEach(([key, value]) => {
+            const label = key
+              .split('_')
+              .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+              .join(' ');
+            const displayValue = value ? String(value) : `[${label}]`;
+            variables.push({
+              variable: `{{company_${key}}}`,
+              label: `Company: ${label}`,
+              value: displayValue,
+              section: 'CUSTOM FIELDS'
+            });
+          });
+      }
+    }
+
+    // Lead custom fields (excluding internal fields)
+    if (formData.customFields) {
+      Object.entries(formData.customFields)
+        .filter(([key]) =>
+          !key.startsWith('linkedin_') &&
+          !key.startsWith('email_') &&
+          key !== 'offer_template'
+        )
+        .forEach(([key, value]) => {
+          const label = key
+            .split('_')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+
+          const displayValue = value ? String(value) : `[${label}]`;
+
+          variables.push({
+            variable: `{{${key}}}`,
+            label: `Lead: ${label}`,
+            value: displayValue,
+            section: 'CUSTOM FIELDS'
+          });
+        });
+    }
+
+    return variables;
+  }, [formData, company, lead, getLabel]);
+
+  // Render offer preview with variables replaced
+  const renderPreview = () => {
+    if (!offerTemplate) {
+      return <em style={{ color: '#94a3b8' }}>No template yet. Start typing above to see a preview.</em>;
+    }
+
+    // Use centralized template replacement service
+    const preview = replaceTemplateVariables(
+      offerTemplate,
+      {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        company: formData.company,
+        companyName: formData.company,
+        status: formData.status,
+        customFields: formData.customFields,
+        createdAt: lead?.createdAt,
+        updatedAt: lead?.updatedAt,
+        outreach: lead?.outreach,
+      },
+      company
+    );
+
+    return preview;
+  };
+
   if (loading) {
     return (
       <Box
@@ -487,30 +874,6 @@ export const LeadDetailPage: React.FC = () => {
       </Box>
     );
   }
-
-  // Render offer preview with variables replaced
-  const renderPreview = () => {
-    if (!offerTemplate) {
-      return <em style={{ color: '#94a3b8' }}>No template yet. Start typing above to see a preview.</em>;
-    }
-
-    let preview = offerTemplate;
-
-    // Replace variables with actual data
-    const replacements: Record<string, string> = {
-      '{{name}}': formData.name || '[Name]',
-      '{{email}}': formData.email || '[Email]',
-      '{{company}}': formData.company || '[Company]',
-      '{{phone}}': formData.phone || '[Phone]',
-      '{{job}}': (formData.customFields?.job as string) || '[Job]',
-    };
-
-    Object.entries(replacements).forEach(([variable, value]) => {
-      preview = preview.replace(new RegExp(variable.replace(/[{}]/g, '\\$&'), 'g'), value);
-    });
-
-    return preview;
-  };
 
   return (
     <Box
@@ -865,6 +1228,13 @@ export const LeadDetailPage: React.FC = () => {
           {/* Outreach Tab */}
           <TabPanel value={tabValue} index={1}>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {/* Info Note for CSV Imported Fields */}
+              {((formData.customFields && Object.keys(formData.customFields).some(key => key.startsWith('linkedin_') || key.startsWith('email_'))) && (
+                <Alert severity="info" sx={{ mb: 1 }}>
+                  The fields shown below are based on the columns from your CSV import. You can edit these values or add new fields as needed.
+                </Alert>
+              ))}
+
               {/* Company Offer Section */}
               {company?.offer?.blogIdea && (
                 <Paper
@@ -1063,64 +1433,168 @@ export const LeadDetailPage: React.FC = () => {
           {/* Offer Tab */}
           <TabPanel value={tabValue} index={2}>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-              {/* Template Editor */}
+              {/* Info Alert */}
+              <Alert
+                severity="info"
+                action={
+                  <Button
+                    color="inherit"
+                    size="small"
+                    onClick={() => navigate('/settings')}
+                    sx={{ textTransform: 'none', fontWeight: 600 }}
+                  >
+                    Go to Settings
+                  </Button>
+                }
+              >
+                The offer template is configured globally in Settings. You can preview how it will look for this lead below.
+              </Alert>
+
+              {/* Available Variables Section */}
               <Box>
                 <Typography variant="h6" sx={{ mb: 2, color: '#1e293b', fontWeight: 600 }}>
-                  Offer Template
+                  Available Variables ({availableVariables.length})
                 </Typography>
                 <Typography variant="body2" sx={{ mb: 2, color: '#64748b' }}>
-                  Create a message template with variables. Use double curly braces for variables (e.g., {'{{name}}'}, {'{{company}}'}, {'{{job}}'}).
+                  Click a variable to insert it, or click the copy icon to copy it to clipboard
                 </Typography>
 
-                {/* Available Variables Chips */}
-                <Box sx={{ mb: 2, display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
-                  <Typography variant="caption" sx={{ color: '#64748b', mr: 1 }}>
-                    Available variables:
-                  </Typography>
-                  {['{{name}}', '{{email}}', '{{company}}', '{{phone}}', '{{job}}'].map((variable) => (
-                    <Chip
-                      key={variable}
-                      label={variable}
-                      size="small"
-                      onClick={() => {
-                        // Insert variable at cursor position
-                        setOfferTemplate((prev) => prev + variable + ' ');
-                      }}
-                      sx={{
-                        bgcolor: '#e0e7ff',
-                        color: '#667eea',
-                        cursor: 'pointer',
-                        fontFamily: 'monospace',
-                        fontSize: '12px',
-                        '&:hover': {
-                          bgcolor: '#c7d2fe',
-                        },
-                      }}
-                    />
-                  ))}
-                </Box>
+                {/* Group variables by section */}
+                {Object.entries(
+                  availableVariables.reduce((acc, variable) => {
+                    if (!acc[variable.section]) {
+                      acc[variable.section] = [];
+                    }
+                    acc[variable.section].push(variable);
+                    return acc;
+                  }, {} as Record<string, typeof availableVariables>)
+                ).map(([section, vars]) => {
+                  const sectionStyle = getSectionStyle(section);
+                  return (
+                    <Box key={section} sx={{ mb: 3 }}>
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 1,
+                          mb: 1.5,
+                          p: 1,
+                          borderRadius: 1,
+                          bgcolor: sectionStyle.bgColor,
+                          border: `1px solid ${sectionStyle.color}30`,
+                        }}
+                      >
+                        <Box sx={{ color: sectionStyle.color, display: 'flex', alignItems: 'center' }}>
+                          {sectionStyle.icon}
+                        </Box>
+                        <Typography
+                          variant="subtitle2"
+                          sx={{
+                            color: sectionStyle.color,
+                            fontWeight: 700,
+                            fontSize: '13px',
+                            textTransform: 'uppercase',
+                            letterSpacing: '0.5px',
+                          }}
+                        >
+                          {section}
+                        </Typography>
+                        <Chip
+                          label={sectionStyle.category === 'lead' ? 'LEAD' : 'COMPANY'}
+                          size="small"
+                          sx={{
+                            height: '18px',
+                            fontSize: '10px',
+                            fontWeight: 700,
+                            ml: 'auto',
+                            bgcolor: sectionStyle.color,
+                            color: 'white',
+                            '& .MuiChip-label': {
+                              px: 1,
+                            },
+                          }}
+                        />
+                      </Box>
+                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                        {vars.map((variable) => (
+                          <Chip
+                            key={variable.variable}
+                            label={
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                <Typography
+                                  variant="caption"
+                                  sx={{ fontFamily: 'monospace', fontWeight: 600, fontSize: '12px' }}
+                                >
+                                  {variable.variable}
+                                </Typography>
+                                <Typography variant="caption" sx={{ color: '#64748b', fontSize: '11px' }}>
+                                  - {variable.label}
+                                </Typography>
+                              </Box>
+                            }
+                            deleteIcon={<ContentCopyIcon sx={{ fontSize: 16 }} />}
+                            onDelete={() => {
+                              navigator.clipboard.writeText(variable.variable);
+                              setSnackbar({
+                                open: true,
+                                message: `Copied ${variable.variable} to clipboard`,
+                                severity: 'success',
+                              });
+                            }}
+                            sx={{
+                              bgcolor: '#f8fafc',
+                              border: `1px solid ${sectionStyle.color}20`,
+                              '&:hover': {
+                                bgcolor: sectionStyle.bgColor,
+                                borderColor: sectionStyle.color,
+                              },
+                              '& .MuiChip-deleteIcon': {
+                                color: sectionStyle.color,
+                                '&:hover': {
+                                  color: sectionStyle.color,
+                                  opacity: 0.8,
+                                },
+                              },
+                            }}
+                          />
+                        ))}
+                      </Box>
+                    </Box>
+                  );
+                })}
+              </Box>
 
-                {/* Template TextField */}
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={12}
-                  value={offerTemplate}
-                  onChange={(e) => setOfferTemplate(e.target.value)}
-                  placeholder={`Hi {{name}},
+              {/* Template Preview (Read-only) */}
+              <Box>
+                <Typography variant="h6" sx={{ mb: 2, color: '#1e293b', fontWeight: 600 }}>
+                  Template
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 2, color: '#64748b' }}>
+                  This is the global template from Settings. Variables will be replaced with lead data.
+                </Typography>
 
-I noticed you work at {{company}} as a {{job}}. We specialize in...
-
-[Your offer details here]
-
-Best regards`}
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
+                {templateLoading ? (
+                  <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
+                    <CircularProgress />
+                  </Box>
+                ) : (
+                  <Box
+                    sx={{
+                      p: 3,
+                      bgcolor: '#f8fafc',
+                      borderRadius: '8px',
+                      border: '1px solid #e2e8f0',
                       fontFamily: 'monospace',
                       fontSize: '14px',
-                    },
-                  }}
-                />
+                      lineHeight: 1.6,
+                      color: '#64748b',
+                      whiteSpace: 'pre-wrap',
+                      minHeight: '150px',
+                    }}
+                  >
+                    {offerTemplate || 'No template configured yet. Go to Settings to create one.'}
+                  </Box>
+                )}
               </Box>
 
               {/* Preview Section */}

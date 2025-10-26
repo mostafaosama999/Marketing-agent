@@ -12,7 +12,6 @@ import {
   FetchEmailRequest,
   FetchEmailResponse,
   ApolloPeopleSearchRequest,
-  ApolloPeopleSearchResponse,
   ApolloPaginationInfo,
   SearchPeopleRequest,
   SearchPeopleResponse,
@@ -20,6 +19,7 @@ import {
   EnrichOrganizationRequest,
   EnrichOrganizationResponse,
 } from '../../types';
+import { incrementApolloCost } from './userCostTracking';
 
 /**
  * Apollo.io API Service
@@ -66,7 +66,8 @@ const DEFAULT_TIMEOUT = 10000; // 10 seconds
  * ```
  */
 export async function fetchEmail(
-  request: FetchEmailRequest
+  request: FetchEmailRequest,
+  userId?: string
 ): Promise<FetchEmailResponse> {
   console.log('Apollo API: Fetching email for', request.firstName, request.lastName);
 
@@ -81,6 +82,14 @@ export async function fetchEmail(
     const result = await fetchApolloEmail(request);
 
     console.log('Apollo API: Cloud Function response:', result.data.matched ? 'Match found' : 'No match');
+
+    // Track Apollo cost if user provided and match was successful
+    if (userId && result.data.matched) {
+      await incrementApolloCost(userId, {
+        credits: 1, // Email enrichment costs 1 credit
+        category: 'emailEnrichment',
+      });
+    }
 
     return result.data;
   } catch (error) {
@@ -506,7 +515,8 @@ export async function searchPeople(
  * ```
  */
 export async function enrichOrganization(
-  request: EnrichOrganizationRequest
+  request: EnrichOrganizationRequest,
+  userId?: string
 ): Promise<EnrichOrganizationResponse> {
   console.log('Apollo API: Enriching organization for domain', request.domain);
 
@@ -521,6 +531,14 @@ export async function enrichOrganization(
     const result = await enrichOrg(request);
 
     console.log('Apollo API: Cloud Function response:', result.data.enriched ? 'Organization enriched' : 'No match');
+
+    // Track Apollo cost if user provided and enrichment was successful
+    if (userId && result.data.enriched) {
+      await incrementApolloCost(userId, {
+        credits: 1, // Organization enrichment costs 1 credit
+        category: 'organizationEnrichment',
+      });
+    }
 
     return result.data;
   } catch (error) {

@@ -240,8 +240,13 @@ IMPORTANT:
 /**
  * Cloud function to analyze a specific writing program URL in detail
  */
-export const analyzeWritingProgramDetailsCloud = functions.https.onCall(
-  async (data, context): Promise<WritingProgramAnalysisResult> => {
+export const analyzeWritingProgramDetailsCloud = functions
+  .runWith({
+    timeoutSeconds: 300, // 5 minutes
+    memory: "512MB",
+  })
+  .https.onCall(
+    async (data, context): Promise<WritingProgramAnalysisResult> => {
     // Verify authentication
     if (!context.auth) {
       throw new functions.https.HttpsError(
@@ -355,9 +360,29 @@ export const analyzeWritingProgramDetailsCloud = functions.https.onCall(
       return result;
     } catch (error: any) {
       console.error("Error analyzing writing program details:", error);
+
+      // Check if it's a timeout error
+      if (error.code === "ETIMEDOUT" || error.code === "ESOCKETTIMEDOUT" ||
+          error.message?.includes("timeout") || error.message?.includes("timed out")) {
+        throw new functions.https.HttpsError(
+          "deadline-exceeded",
+          "Writing program analysis took too long to complete. The program page may be very large. Please try again."
+        );
+      }
+
+      // Check if it's a network error
+      if (error.code === "ENOTFOUND" || error.code === "ECONNREFUSED" ||
+          error.message?.includes("socket hang up") || error.message?.includes("network")) {
+        throw new functions.https.HttpsError(
+          "unavailable",
+          "Unable to reach the writing program page. The site may be down or blocking our requests. Please verify the URL and try again."
+        );
+      }
+
+      // Generic error with helpful message
       throw new functions.https.HttpsError(
-        "internal",
-        `Failed to analyze writing program: ${error.message}`
+        "unknown",
+        error.message || "Failed to analyze writing program. Please try again or contact support."
       );
     }
   }

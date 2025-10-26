@@ -1,11 +1,9 @@
 // src/components/features/crm/filters/FilterPanel.tsx
 import React, { useState, useEffect } from 'react';
 import { Box, Typography, Button, Collapse, Paper } from '@mui/material';
-import { LeadStatus } from '../../../../types/lead';
 import { Lead } from '../../../../types/lead';
 import { FilterState } from '../../../../types/filter';
 import { StatusFilter } from './StatusFilter';
-import { LeadOwnerFilter } from './LeadOwnerFilter';
 import { CompanyFilter } from './CompanyFilter';
 import { MonthFilter } from './MonthFilter';
 import { DynamicFieldFilter } from './DynamicFieldFilter';

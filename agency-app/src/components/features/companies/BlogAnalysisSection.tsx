@@ -163,9 +163,24 @@ export const BlogAnalysisSection: React.FC<BlogAnalysisSectionProps> = ({
             Comprehensive analysis of blog activity, writers, and content quality
           </Typography>
 
+          {/* Blog URL Display */}
+          {analysis?.blogUrl && (
+            <Typography variant="caption" sx={{ display: 'block', mt: 1, color: '#64748b' }}>
+              Blog URL:{' '}
+              <a
+                href={analysis.blogUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{ color: '#667eea', textDecoration: 'none', fontWeight: 500 }}
+              >
+                {analysis.blogUrl}
+              </a>
+            </Typography>
+          )}
+
           {/* RSS Feed Display */}
           {analysis?.rssFeedUrl && (
-            <Typography variant="caption" sx={{ display: 'block', mt: 1, color: '#64748b' }}>
+            <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: '#64748b' }}>
               RSS Feed Used:{' '}
               <a
                 href={analysis.rssFeedUrl}

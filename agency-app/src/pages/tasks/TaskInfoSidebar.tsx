@@ -12,7 +12,6 @@ import {
 import {
   Edit,
   AutoAwesome as AIIcon,
-  CheckCircle,
 } from '@mui/icons-material';
 import { Ticket } from '../../types';
 

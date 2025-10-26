@@ -10,8 +10,6 @@ import {
   SelectChangeEvent,
   Box,
   TextField,
-  Switch,
-  FormControlLabel,
 } from '@mui/material';
 import { FilterConfig } from '../../../../services/api/dynamicFilterService';
 

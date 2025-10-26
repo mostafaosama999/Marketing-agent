@@ -16,6 +16,7 @@ import LeadAnalytics from './pages/analytics/LeadAnalytics';
 import CompaniesPage from './pages/companies/CompaniesPage';
 import CompanyDetailPage from './pages/companies/CompanyDetailPage';
 import LeadDetailPage from './pages/leads/LeadDetailPage';
+import SettingsPage from './pages/settings/SettingsPage';
 
 // Components
 import Navbar from './components/layout/Navbar';
@@ -88,6 +89,7 @@ function AppContent() {
           <Route path="/team-member/:userId" element={<TeamMemberPerformance />} />
           <Route path="/analytics" element={<LeadAnalytics />} />
           <Route path="/monitoring" element={<ProjectMonitoring />} />
+          <Route path="/settings" element={<SettingsPage />} />
         </Routes>
       </Box>
     </Box>

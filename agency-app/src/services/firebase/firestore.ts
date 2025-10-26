@@ -1,8 +1,8 @@
 // src/config/firebase.ts
 import { initializeApp } from 'firebase/app';
-import { getFirestore } from 'firebase/firestore';
+import { getFirestore, connectFirestoreEmulator } from 'firebase/firestore';
 import { getFunctions, connectFunctionsEmulator } from 'firebase/functions';
-import { getAuth } from 'firebase/auth';
+import { getAuth, connectAuthEmulator } from 'firebase/auth';
 
 // Firebase configuration for marketing-app-cc237 project
 const firebaseConfig = {
@@ -22,12 +22,37 @@ export const db = getFirestore(app);
 export const functions = getFunctions(app);
 export const auth = getAuth(app);
 
-// Connect to Functions emulator in development mode
-// Auth and Firestore remain connected to production for real user access
+// Connect to emulators in development mode
 if (process.env.REACT_APP_USE_EMULATOR === 'true') {
-  console.log('🔧 Connecting Functions to local emulator...');
-  connectFunctionsEmulator(functions, 'localhost', 5001);
-  console.log('✅ Functions connected to emulator (Auth & Firestore using production)');
+  console.log('🔧 Connecting to Firebase Emulators...');
+
+  // Connect Firestore emulator
+  try {
+    connectFirestoreEmulator(db, 'localhost', 8081);
+    console.log('✅ Firestore connected to emulator (localhost:8081)');
+  } catch (error) {
+    console.warn('⚠️ Firestore emulator already connected or failed to connect');
+  }
+
+  // Connect Auth emulator
+  try {
+    connectAuthEmulator(auth, 'http://localhost:9099', { disableWarnings: true });
+    console.log('✅ Auth connected to emulator (localhost:9099)');
+  } catch (error) {
+    console.warn('⚠️ Auth emulator already connected or failed to connect');
+  }
+
+  // Connect Functions emulator
+  try {
+    connectFunctionsEmulator(functions, 'localhost', 5001);
+    console.log('✅ Functions connected to emulator (localhost:5001)');
+  } catch (error) {
+    console.warn('⚠️ Functions emulator already connected or failed to connect');
+  }
+
+  console.log('🎯 All Firebase services connected to local emulators');
+} else {
+  console.log('🌐 Using production Firebase services');
 }
 
 export default app;

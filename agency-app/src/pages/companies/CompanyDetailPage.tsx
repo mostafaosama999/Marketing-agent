@@ -53,7 +53,6 @@ import {
   analyzeWritingProgram,
   analyzeWritingProgramDetails,
   analyzeBlog,
-  WritingProgramResult,
 } from '../../services/firebase/cloudFunctions';
 import { enrichOrganization } from '../../services/api/apolloService';
 import { WritingProgramSection } from '../../components/features/companies/WritingProgramSection';
@@ -66,6 +65,7 @@ import {
   getWebsiteFieldMapping,
 } from '../../services/api/websiteFieldMappingService';
 import { useAuth } from '../../contexts/AuthContext';
+import { incrementAICost } from '../../services/api/userCostTracking';
 
 export const CompanyDetailPage: React.FC = () => {
   const { companyId } = useParams<{ companyId: string }>();
@@ -117,7 +117,11 @@ export const CompanyDetailPage: React.FC = () => {
 
   // Analysis state
   const [writingProgramLoading, setWritingProgramLoading] = useState(false);
-  const [writingProgramError, setWritingProgramError] = useState<string | null>(null);
+  const [writingProgramError, setWritingProgramError] = useState<{
+    message: string;
+    checkedUrls?: string[];
+    totalChecked?: number;
+  } | null>(null);
   const [blogAnalysisLoading, setBlogAnalysisLoading] = useState(false);
   const [blogAnalysisError, setBlogAnalysisError] = useState<string | null>(null);
   const [apolloEnrichmentLoading, setApolloEnrichmentLoading] = useState(false);
@@ -448,7 +452,9 @@ export const CompanyDetailPage: React.FC = () => {
       }
 
       // Mapping is set but this company doesn't have that field
-      setWritingProgramError('This company does not have a website field set');
+      setWritingProgramError({
+        message: 'This company does not have a website field set',
+      });
       return;
     }
 
@@ -459,9 +465,39 @@ export const CompanyDetailPage: React.FC = () => {
       // Phase 1: Find URLs
       const result = await analyzeWritingProgram(website);
 
+      // Track AI cost for current user
+      if (user && result.costInfo) {
+        await incrementAICost(user.uid, {
+          cost: result.costInfo.totalCost,
+          tokens: result.costInfo.totalTokens,
+          category: 'writingProgram',
+        });
+      }
+
       if (result.validUrls.length === 0 && (!result.aiSuggestions || result.aiSuggestions.length === 0)) {
-        // No URLs found at all
-        setWritingProgramError('No writing program URLs found for this website');
+        // No URLs found at all - show detailed message with checked patterns
+        const checkedCount = result.totalChecked || 0;
+        const checkedUrls = result.patternsFound || [];
+
+        // Format patterns nicely - show examples if many were checked
+        let patternsMessage = '';
+        if (checkedUrls.length > 0) {
+          const uniquePatterns = Array.from(new Set(checkedUrls));
+          if (uniquePatterns.length <= 5) {
+            patternsMessage = uniquePatterns.join(', ');
+          } else {
+            const examples = uniquePatterns.slice(0, 5).join(', ');
+            patternsMessage = `${examples}, and ${uniquePatterns.length - 5} more patterns`;
+          }
+        } else {
+          patternsMessage = '/write-for-us, /contribute, /guest-authors, /writers-program, and other common patterns';
+        }
+
+        setWritingProgramError({
+          message: `No writing program found. Checked ${checkedCount} URL${checkedCount !== 1 ? 's' : ''}`,
+          checkedUrls: Array.from(new Set(checkedUrls)), // Remove duplicates
+          totalChecked: checkedCount,
+        });
         setWritingProgramLoading(false);
         return;
       }
@@ -504,7 +540,9 @@ export const CompanyDetailPage: React.FC = () => {
       setWritingProgramLoading(false);
     } catch (err: any) {
       console.error('Error finding writing program URLs:', err);
-      setWritingProgramError(err.message || 'Failed to find writing program URLs');
+      setWritingProgramError({
+        message: err.message || 'Failed to find writing program URLs',
+      });
       setWritingProgramLoading(false);
     }
   };
@@ -522,6 +560,15 @@ export const CompanyDetailPage: React.FC = () => {
         selectedUrl,
         company.id
       );
+
+      // Track AI cost for current user
+      if (user && detailsResult.costInfo) {
+        await incrementAICost(user.uid, {
+          cost: detailsResult.costInfo.totalCost,
+          tokens: detailsResult.costInfo.totalTokens,
+          category: 'writingProgram',
+        });
+      }
 
       const analysisData: any = {
         hasProgram: detailsResult.hasProgram,
@@ -563,7 +610,9 @@ export const CompanyDetailPage: React.FC = () => {
       setFoundUrls([]);
     } catch (err: any) {
       console.error('Error analyzing writing program details:', err);
-      setWritingProgramError(err.message || 'Failed to analyze writing program details');
+      setWritingProgramError({
+        message: err.message || 'Failed to analyze writing program details',
+      });
     } finally {
       setDetailsAnalysisLoading(false);
     }
@@ -601,6 +650,15 @@ export const CompanyDetailPage: React.FC = () => {
 
     try {
       const result = await analyzeBlog(company.name, urlToAnalyze);
+
+      // Track AI cost for current user
+      if (user && result.costInfo) {
+        await incrementAICost(user.uid, {
+          cost: result.costInfo.totalCost,
+          tokens: result.costInfo.totalTokens,
+          category: 'blogAnalysis',
+        });
+      }
 
       // Parse writer information
       const authorNames = result.authorNames ? result.authorNames.split(', ') : [];
@@ -721,7 +779,7 @@ export const CompanyDetailPage: React.FC = () => {
       const result = await enrichOrganization({
         domain: website,
         companyId: company.id,
-      });
+      }, user?.uid); // Track Apollo credits for current user
 
       if (!result.enriched || !result.organization) {
         throw new Error(result.error || 'Failed to enrich organization');

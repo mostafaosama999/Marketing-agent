@@ -38,7 +38,11 @@ interface WritingProgramSectionProps {
   company: Company;
   onAnalyze: () => void;
   loading: boolean;
-  error: string | null;
+  error: {
+    message: string;
+    checkedUrls?: string[];
+    totalChecked?: number;
+  } | null;
 }
 
 // Color mapping for requirement type chips
@@ -66,6 +70,7 @@ export const WritingProgramSection: React.FC<WritingProgramSectionProps> = ({
 }) => {
   const analysis = company.writingProgramAnalysis;
   const [copiedEmail, setCopiedEmail] = useState(false);
+  const [urlsExpanded, setUrlsExpanded] = useState(false);
 
   const getTimeSinceAnalysis = () => {
     if (!analysis?.lastAnalyzedAt) return null;
@@ -154,8 +159,165 @@ export const WritingProgramSection: React.FC<WritingProgramSectionProps> = ({
 
       {/* Error Alert */}
       {error && (
-        <Alert severity="error" sx={{ mb: 3 }}>
-          {error}
+        <Alert
+          severity="warning"
+          sx={{
+            mb: 3,
+            '& .MuiAlert-message': {
+              width: '100%',
+            },
+          }}
+        >
+          <Box>
+            <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
+              {error.message}
+            </Typography>
+
+            {/* Show checked URLs if available */}
+            {error.checkedUrls && error.checkedUrls.length > 0 && (
+              <Accordion
+                expanded={urlsExpanded}
+                onChange={() => setUrlsExpanded(!urlsExpanded)}
+                sx={{
+                  mt: 2,
+                  mb: 1,
+                  boxShadow: 'none',
+                  border: '1px solid rgba(0, 0, 0, 0.12)',
+                  '&:before': {
+                    display: 'none',
+                  },
+                  '& .MuiAccordionSummary-root': {
+                    minHeight: '48px',
+                    '&.Mui-expanded': {
+                      minHeight: '48px',
+                    },
+                  },
+                }}
+              >
+                <AccordionSummary
+                  expandIcon={<ExpandMoreIcon />}
+                  sx={{
+                    backgroundColor: 'rgba(102, 126, 234, 0.08)',
+                    '&:hover': {
+                      backgroundColor: 'rgba(102, 126, 234, 0.12)',
+                    },
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: '#667eea' }}>
+                      View All {error.totalChecked || error.checkedUrls.length} Checked URLs
+                    </Typography>
+                    <Chip
+                      label={error.checkedUrls.length}
+                      size="small"
+                      sx={{
+                        height: '20px',
+                        fontSize: '11px',
+                        bgcolor: '#667eea',
+                        color: 'white',
+                        fontWeight: 600,
+                      }}
+                    />
+                  </Box>
+                </AccordionSummary>
+                <AccordionDetails
+                  sx={{
+                    p: 0,
+                    maxHeight: '300px',
+                    overflow: 'auto',
+                    backgroundColor: '#fafafa',
+                  }}
+                >
+                  <List dense disablePadding>
+                    {error.checkedUrls.map((url, index) => (
+                      <ListItem
+                        key={index}
+                        sx={{
+                          py: 1,
+                          px: 2,
+                          borderBottom: index < error.checkedUrls!.length - 1 ? '1px solid rgba(0, 0, 0, 0.06)' : 'none',
+                          backgroundColor: index % 2 === 0 ? 'white' : '#fafafa',
+                          fontFamily: 'monospace',
+                          fontSize: '12px',
+                          '&:hover': {
+                            backgroundColor: 'rgba(102, 126, 234, 0.08)',
+                          },
+                        }}
+                        secondaryAction={
+                          <Tooltip title="Copy URL">
+                            <IconButton
+                              edge="end"
+                              size="small"
+                              onClick={() => {
+                                navigator.clipboard.writeText(url);
+                              }}
+                              sx={{
+                                color: '#64748b',
+                                '&:hover': {
+                                  color: '#667eea',
+                                },
+                              }}
+                            >
+                              <CopyIcon fontSize="small" />
+                            </IconButton>
+                          </Tooltip>
+                        }
+                      >
+                        <ListItemText
+                          primary={url}
+                          primaryTypographyProps={{
+                            sx: {
+                              fontFamily: 'monospace',
+                              fontSize: '12px',
+                              color: '#334155',
+                              wordBreak: 'break-all',
+                            },
+                          }}
+                        />
+                      </ListItem>
+                    ))}
+                  </List>
+
+                  {/* Footer with actions */}
+                  <Box
+                    sx={{
+                      p: 1.5,
+                      borderTop: '1px solid rgba(0, 0, 0, 0.12)',
+                      backgroundColor: 'white',
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                    }}
+                  >
+                    <Typography variant="caption" sx={{ color: '#64748b' }}>
+                      {error.checkedUrls.length} unique URL pattern{error.checkedUrls.length !== 1 ? 's' : ''} checked
+                    </Typography>
+                    <Button
+                      size="small"
+                      startIcon={<CopyIcon />}
+                      onClick={() => {
+                        navigator.clipboard.writeText(error.checkedUrls!.join('\n'));
+                      }}
+                      sx={{
+                        textTransform: 'none',
+                        fontSize: '11px',
+                        color: '#667eea',
+                        '&:hover': {
+                          backgroundColor: 'rgba(102, 126, 234, 0.08)',
+                        },
+                      }}
+                    >
+                      Copy All
+                    </Button>
+                  </Box>
+                </AccordionDetails>
+              </Accordion>
+            )}
+
+            <Typography variant="caption" sx={{ display: 'block', mt: 2, color: '#64748b' }}>
+              💡 Tip: The website might use a different URL structure or requires manual submission. Check their footer or "Contact" page.
+            </Typography>
+          </Box>
         </Alert>
       )}
 

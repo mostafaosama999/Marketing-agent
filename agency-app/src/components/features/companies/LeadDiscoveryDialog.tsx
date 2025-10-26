@@ -43,6 +43,7 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { getUserPreferences, updateApolloJobTitles } from '../../../services/api/userPreferences';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getLeadCustomFieldNames } from '../../../services/api/tableColumnsService';
+import { incrementApolloCost } from '../../../services/api/userCostTracking';
 
 interface LeadDiscoveryDialogProps {
   open: boolean;
@@ -397,6 +398,19 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
 
       // Import leads in batch
       await createLeadsBatch(leadsData, user.uid, companyIdMap);
+
+      // Track Apollo credits used (1 credit per person with revealed email)
+      const creditsUsed = leadsToImport.filter(person => {
+        const email = person.email || '';
+        return email && !email.includes('email_not_unlocked@');
+      }).length;
+
+      if (creditsUsed > 0) {
+        await incrementApolloCost(user.uid, {
+          credits: creditsUsed,
+          category: 'peopleSearch',
+        });
+      }
 
       setImportedCount(leadsData.length);
       setImportSuccess(true);

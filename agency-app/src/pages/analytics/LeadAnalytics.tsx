@@ -69,7 +69,6 @@ const STATUS_COLORS: Record<LeadStatus, string> = {
 };
 
 const LeadAnalytics: React.FC = () => {
-  const { userProfile } = useAuth();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'daily' | 'weekly'>('weekly');
@@ -199,17 +198,17 @@ const LeadAnalytics: React.FC = () => {
     }
   }, [leads, viewMode]);
 
-  // Conversion funnel (leads moving through stages)
-  const conversionFunnelData = useMemo(() => {
-    const stages = [
-      { stage: 'New', count: leads.filter(l => l.status === 'new_lead').length },
-      { stage: 'Qualified', count: leads.filter(l => l.status === 'qualified').length },
-      { stage: 'Contacted', count: leads.filter(l => l.status === 'contacted').length },
-      { stage: 'Won', count: leads.filter(l => l.status === 'won').length },
-    ];
-
-    return stages.filter(s => s.count > 0);
-  }, [leads]);
+  // Conversion funnel (leads moving through stages) - Commented out as it's not currently used
+  // const conversionFunnelData = useMemo(() => {
+  //   const stages = [
+  //     { stage: 'New', count: leads.filter(l => l.status === 'new_lead').length },
+  //     { stage: 'Qualified', count: leads.filter(l => l.status === 'qualified').length },
+  //     { stage: 'Contacted', count: leads.filter(l => l.status === 'contacted').length },
+  //     { stage: 'Won', count: leads.filter(l => l.status === 'won').length },
+  //   ];
+  //
+  //   return stages.filter(s => s.count > 0);
+  // }, [leads]);
 
   return (
     <ThemeProvider theme={modernTheme}>

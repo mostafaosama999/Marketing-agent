@@ -140,7 +140,7 @@ export const CompaniesPage: React.FC = () => {
     }
 
     loadDefaultPreset();
-  }, [user]); // Only run once on mount
+  }, [user, tableColumns]); // Include tableColumns dependency
 
   // Load table columns (default + custom fields from companies)
   useEffect(() => {

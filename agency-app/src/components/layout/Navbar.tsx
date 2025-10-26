@@ -14,16 +14,14 @@ import {
   styled,
 } from '@mui/material';
 import {
-  AccountCircle,
   Logout,
   Dashboard,
-  People,
   Assignment,
   Group,
   Analytics,
-  NotificationImportant,
   TrendingUp,
   Business,
+  Settings,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import { useNavigate, useLocation } from 'react-router-dom';
@@ -188,6 +186,9 @@ const Navbar: React.FC = () => {
     if (!userProfile) return [];
 
     const items = [];
+
+    // All roles can see Settings (moved to first position)
+    items.push({ label: 'SETTINGS', path: '/settings', icon: Settings });
 
     // All roles can see Leads
     items.push({ label: 'LEADS', path: '/', icon: Dashboard });

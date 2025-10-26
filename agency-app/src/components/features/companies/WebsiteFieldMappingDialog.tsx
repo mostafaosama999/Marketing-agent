@@ -50,7 +50,7 @@ export const WebsiteFieldMappingDialog: React.FC<WebsiteFieldMappingDialogProps>
         setMappingType('customField');
       }
     }
-  }, [open, companies]);
+  }, [open, companies, selectedField]);
 
   const handleSave = () => {
     const mapping: WebsiteFieldMapping = {

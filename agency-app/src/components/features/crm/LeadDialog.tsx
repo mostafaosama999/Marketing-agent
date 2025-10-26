@@ -80,7 +80,6 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
   lead,
   mode,
 }) => {
-  const { user } = useAuth();
   const { stages, getLabel } = usePipelineConfigContext();
   const [tabValue, setTabValue] = useState(0);
   const [loading, setLoading] = useState(false);

@@ -54,7 +54,6 @@ interface User {
 const TeamMemberPerformance: React.FC = () => {
   const { userId } = useParams<{ userId: string }>();
   const navigate = useNavigate();
-  const { userProfile } = useAuth();
   const { getLabel } = usePipelineConfigContext();
   const [teamMember, setTeamMember] = useState<User | null>(null);
   const [leads, setLeads] = useState<Lead[]>([]);

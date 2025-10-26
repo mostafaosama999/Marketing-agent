@@ -2,13 +2,11 @@
 // Service for managing lead subcollections (timeline, state history)
 
 import {
-  collection,
   doc,
   getDoc,
   setDoc,
   updateDoc,
   serverTimestamp,
-  Timestamp,
 } from 'firebase/firestore';
 import { db } from '../firebase/firestore';
 import {

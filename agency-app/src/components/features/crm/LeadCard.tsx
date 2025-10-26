@@ -6,10 +6,6 @@ import {
   Email as EmailIcon,
   Phone as PhoneIcon,
   LinkedIn as LinkedInIcon,
-  Article as ArticleIcon,
-  CheckCircle as CheckCircleIcon,
-  Cancel as CancelIcon,
-  Schedule as ScheduleIcon,
 } from '@mui/icons-material';
 import { Lead } from '../../../types/lead';
 

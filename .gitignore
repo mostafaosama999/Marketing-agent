@@ -24,7 +24,6 @@ out/
 firebase-debug.log
 firestore-debug.log
 ui-debug.log
-.firebaserc
 
 # Firebase Functions
 functions/node_modules/
