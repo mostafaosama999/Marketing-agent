@@ -17,6 +17,11 @@ export interface Company {
   totalApiCosts?: number;
   lastApiCostUpdate?: Date;
 
+  // Archive status
+  archived?: boolean;
+  archivedAt?: Date;
+  archivedBy?: string; // User ID who archived the company
+
   // Writing Program Analysis
   writingProgramAnalysis?: {
     hasProgram: boolean;

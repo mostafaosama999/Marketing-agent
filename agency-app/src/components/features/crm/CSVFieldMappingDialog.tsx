@@ -83,7 +83,7 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
         let leadField: string | null = null;
         let entityType: EntityType = 'lead';
 
-        // Auto-detect standard fields (case-insensitive)
+        // Auto-detect standard lead fields (case-insensitive)
         if (lowerField === 'name' || lowerField === 'lead name' || lowerField === 'full name' || lowerField === 'name of person') {
           leadField = 'name';
           entityType = 'lead';
@@ -100,6 +100,45 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
           leadField = 'status';
           entityType = 'lead';
         }
+        // Company fields - Website
+        else if (lowerField.includes('website') || lowerField.includes('blog link') ||
+                 (lowerField.includes('url') && !lowerField.includes('linkedin'))) {
+          leadField = 'skip'; // Will be auto-created as custom field
+          entityType = 'company';
+        }
+        // Company fields - Description
+        else if (lowerField === 'description' || lowerField === 'company description' ||
+                 lowerField.includes('what they do') || lowerField.includes('company details') ||
+                 lowerField.includes('about') || lowerField === 'overview') {
+          leadField = 'skip'; // Will be auto-created as custom field
+          entityType = 'company';
+        }
+        // Company fields - Location
+        else if (lowerField === 'country' || lowerField === 'location' || lowerField === 'region' ||
+                 lowerField === 'city' || lowerField.includes('headquarters')) {
+          leadField = 'skip'; // Will be auto-created as custom field
+          entityType = 'company';
+        }
+        // Company fields - Rating/Score
+        else if (lowerField === 'rating' || lowerField === 'score' || lowerField === 'tier' ||
+                 lowerField.includes('quality')) {
+          leadField = 'skip'; // Will be auto-created as custom field
+          entityType = 'company';
+        }
+        // Company fields - Content/Programs
+        else if (lowerField === 'program' || lowerField.includes('writing program') ||
+                 lowerField.includes('ideas generated') || lowerField.includes('chosen idea') ||
+                 lowerField.includes('article name') || lowerField.includes('blog post') ||
+                 lowerField.includes('selected idea')) {
+          leadField = 'skip'; // Will be auto-created as custom field
+          entityType = 'company';
+        }
+        // Company fields - Industry
+        else if (lowerField === 'industry' || lowerField === 'sector' || lowerField === 'vertical' ||
+                 lowerField === 'niche' || lowerField === 'category') {
+          leadField = 'skip'; // Will be auto-created as custom field
+          entityType = 'company';
+        }
         // LinkedIn fields
         else if (lowerField.includes('linkedin') && (lowerField.includes('link') || lowerField.includes('url') || lowerField.includes('profile'))) {
           leadField = 'outreach.linkedIn.profileUrl';
@@ -108,8 +147,8 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
           leadField = 'outreach.linkedIn.status';
           entityType = 'lead';
         }
-        // Email fields
-        else if (section === 'email' && (lowerField.includes('status') || lowerField.includes('response'))) {
+        // Email/Response fields (lead-specific)
+        else if ((section === 'email' || lowerField === 'response') && (lowerField.includes('status') || lowerField.includes('response'))) {
           leadField = 'outreach.email.status';
           entityType = 'lead';
         }

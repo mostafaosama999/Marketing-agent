@@ -38,6 +38,9 @@ function convertToCompany(id: string, data: any): Company {
     updatedAt: data.updatedAt?.toDate() || new Date(),
     totalApiCosts: data.totalApiCosts,
     lastApiCostUpdate: data.lastApiCostUpdate?.toDate(),
+    archived: data.archived || false,
+    archivedAt: data.archivedAt?.toDate(),
+    archivedBy: data.archivedBy,
     writingProgramAnalysis: data.writingProgramAnalysis ? {
       ...data.writingProgramAnalysis,
       lastAnalyzedAt: data.writingProgramAnalysis.lastAnalyzedAt?.toDate
@@ -215,7 +218,7 @@ export async function getOrCreateCompaniesBatch(
 }
 
 /**
- * Get all companies
+ * Get all companies (excludes archived)
  */
 export async function getCompanies(): Promise<Company[]> {
   try {
@@ -225,7 +228,11 @@ export async function getCompanies(): Promise<Company[]> {
 
     const companies: Company[] = [];
     snapshot.forEach((doc) => {
-      companies.push(convertToCompany(doc.id, doc.data()));
+      const data = doc.data();
+      // Filter out archived companies
+      if (data.archived !== true) {
+        companies.push(convertToCompany(doc.id, data));
+      }
     });
 
     return companies;
@@ -236,7 +243,7 @@ export async function getCompanies(): Promise<Company[]> {
 }
 
 /**
- * Subscribe to companies with real-time updates
+ * Subscribe to companies with real-time updates (excludes archived)
  */
 export function subscribeToCompanies(
   callback: (companies: Company[]) => void
@@ -249,7 +256,11 @@ export function subscribeToCompanies(
     (snapshot) => {
       const companies: Company[] = [];
       snapshot.forEach((doc) => {
-        companies.push(convertToCompany(doc.id, doc.data()));
+        const data = doc.data();
+        // Filter out archived companies
+        if (data.archived !== true) {
+          companies.push(convertToCompany(doc.id, data));
+        }
       });
       callback(companies);
     },
@@ -473,4 +484,73 @@ export async function getCompaniesWithLeadCounts(): Promise<
     console.error('Error fetching companies with lead counts:', error);
     return [];
   }
+}
+
+/**
+ * Archive a company
+ * Sets archived flag and metadata
+ */
+export async function archiveCompany(companyId: string, userId: string): Promise<void> {
+  try {
+    const companyRef = doc(db, COMPANIES_COLLECTION, companyId);
+    await updateDoc(companyRef, {
+      archived: true,
+      archivedAt: serverTimestamp(),
+      archivedBy: userId,
+      updatedAt: serverTimestamp(),
+    });
+    console.log('✅ Company archived successfully:', companyId);
+  } catch (error) {
+    console.error('Error archiving company:', error);
+    throw new Error('Failed to archive company');
+  }
+}
+
+/**
+ * Unarchive a company
+ * Removes archived flag and metadata
+ */
+export async function unarchiveCompany(companyId: string): Promise<void> {
+  try {
+    const companyRef = doc(db, COMPANIES_COLLECTION, companyId);
+    await updateDoc(companyRef, {
+      archived: false,
+      archivedAt: null,
+      archivedBy: null,
+      updatedAt: serverTimestamp(),
+    });
+    console.log('✅ Company unarchived successfully:', companyId);
+  } catch (error) {
+    console.error('Error unarchiving company:', error);
+    throw new Error('Failed to unarchive company');
+  }
+}
+
+/**
+ * Subscribe to archived companies with real-time updates
+ */
+export function subscribeToArchivedCompanies(
+  callback: (companies: Company[]) => void
+): Unsubscribe {
+  const companiesRef = collection(db, COMPANIES_COLLECTION);
+  const q = query(
+    companiesRef,
+    where('archived', '==', true),
+    orderBy('archivedAt', 'desc')
+  );
+
+  return onSnapshot(
+    q,
+    (snapshot) => {
+      const companies: Company[] = [];
+      snapshot.forEach((doc) => {
+        companies.push(convertToCompany(doc.id, doc.data()));
+      });
+      callback(companies);
+    },
+    (error) => {
+      console.error('Error listening to archived companies:', error);
+      callback([]);
+    }
+  );
 }

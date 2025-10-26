@@ -11,6 +11,9 @@ export interface TableColumnConfig {
   fieldName?: string; // Only for custom fields (used to access customFields[fieldName])
 }
 
+// Column preferences type for localStorage
+export type ColumnPreferences = Record<string, { visible: boolean; order: number }>;
+
 // Leads table columns
 export const DEFAULT_LEADS_TABLE_COLUMNS: TableColumnConfig[] = [
   { id: 'name', label: 'Name', sortable: true, visible: true, type: 'default', order: 0 },

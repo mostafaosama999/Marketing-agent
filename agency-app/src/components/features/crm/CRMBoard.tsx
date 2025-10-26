@@ -1,5 +1,6 @@
 // src/components/features/crm/CRMBoard.tsx
 import React, { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
 import { Box, Typography, Fab, Button, ThemeProvider, createTheme, Alert, Snackbar, IconButton, Badge, Tooltip } from '@mui/material';
 import { Add as AddIcon, UploadFile as UploadFileIcon, Archive as ArchiveIcon } from '@mui/icons-material';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -20,8 +21,8 @@ import {
   SearchFilter,
   FilterButton,
 } from './filters';
-import { TableColumnConfig, DEFAULT_TABLE_COLUMNS, TABLE_COLUMNS_STORAGE_KEY, applyVisibilityPreferences } from '../../../types/table';
-import { buildTableColumns, columnsToVisibilityMap } from '../../../services/api/tableColumnsService';
+import { TableColumnConfig, DEFAULT_TABLE_COLUMNS, TABLE_COLUMNS_STORAGE_KEY } from '../../../types/table';
+import { buildTableColumns, columnsToPreferences, applyColumnPreferences } from '../../../services/api/tableColumnsService';
 import { FilterPresetsMenu } from './filters/FilterPresetsMenu';
 import { SavePresetDialog } from './filters/SavePresetDialog';
 import {
@@ -57,6 +58,7 @@ const modernTheme = createTheme({
 });
 
 function CRMBoard() {
+  const navigate = useNavigate();
   const { userProfile, user } = useAuth();
   const { stages, updateLabel, updateOrder } = usePipelineConfig(); // Load dynamic pipeline config
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -66,7 +68,6 @@ function CRMBoard() {
   const [draggedColumn, setDraggedColumn] = useState<string | null>(null); // Column being dragged
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null); // Column being dragged over
   const [openDialog, setOpenDialog] = useState(false);
-  const [openLeadDetail, setOpenLeadDetail] = useState(false);
   const [selectedLead, setSelectedLead] = useState<Lead | null>(null);
   const [dialogMode, setDialogMode] = useState<'create' | 'edit'>('create');
   const [alertOpen, setAlertOpen] = useState(false);
@@ -155,20 +156,20 @@ function CRMBoard() {
         // Build complete column list from default + custom fields from actual leads
         const allColumns = await buildTableColumns(leads);
 
-        // Load saved visibility preferences from localStorage
+        // Load saved preferences (visibility + order) from localStorage
         const savedPrefs = localStorage.getItem(TABLE_COLUMNS_STORAGE_KEY);
-        let visibilityMap: Record<string, boolean> | null = null;
+        let preferences: Record<string, boolean | { visible: boolean; order: number }> | null = null;
 
         if (savedPrefs) {
           try {
-            visibilityMap = JSON.parse(savedPrefs);
+            preferences = JSON.parse(savedPrefs);
           } catch (e) {
             console.error('Error parsing saved column preferences:', e);
           }
         }
 
-        // Apply saved preferences to columns
-        const columnsWithPreferences = applyVisibilityPreferences(allColumns, visibilityMap);
+        // Apply saved preferences to columns (handles both old and new format)
+        const columnsWithPreferences = applyColumnPreferences(allColumns, preferences);
 
         setTableColumns(columnsWithPreferences);
       } catch (error) {
@@ -336,9 +337,8 @@ function CRMBoard() {
   };
 
   const handleLeadClick = (lead: Lead) => {
-    setSelectedLead(lead);
-    setDialogMode('edit');
-    setOpenLeadDetail(true);
+    // Navigate to the lead details page instead of opening dialog
+    navigate(`/leads/${lead.id}`);
   };
 
   const handleAddLead = () => {
@@ -357,7 +357,6 @@ function CRMBoard() {
         await updateLead(selectedLead.id, leadData);
       }
       setOpenDialog(false);
-      setOpenLeadDetail(false);
       setSelectedLead(null);
     } catch (error) {
       console.error('Error saving lead:', error);
@@ -707,60 +706,18 @@ function CRMBoard() {
     }
 
     setTableColumns(updatedColumns);
-    // Save only visibility map (not full column objects) to localStorage
-    const visibilityMap = columnsToVisibilityMap(updatedColumns);
-    localStorage.setItem(TABLE_COLUMNS_STORAGE_KEY, JSON.stringify(visibilityMap));
+    // Save preferences (visibility + order) to localStorage
+    const preferences = columnsToPreferences(updatedColumns);
+    localStorage.setItem(TABLE_COLUMNS_STORAGE_KEY, JSON.stringify(preferences));
   };
 
-  // Column reordering handlers
-  const handleMoveColumnLeft = (columnId: string) => {
-    const currentIndex = tableColumns.findIndex(col => col.id === columnId);
+  // Column reordering handler
+  const handleReorderColumns = (reorderedColumns: TableColumnConfig[]) => {
+    setTableColumns(reorderedColumns);
 
-    // Can't move first column left
-    if (currentIndex <= 0) return;
-
-    // Create new array with swapped positions
-    const newColumns = [...tableColumns];
-    const targetIndex = currentIndex - 1;
-
-    // Swap order values
-    const currentOrder = newColumns[currentIndex].order;
-    newColumns[currentIndex] = { ...newColumns[currentIndex], order: newColumns[targetIndex].order };
-    newColumns[targetIndex] = { ...newColumns[targetIndex], order: currentOrder };
-
-    // Sort by new order
-    const sortedColumns = newColumns.sort((a, b) => a.order - b.order);
-
-    setTableColumns(sortedColumns);
-
-    // Save to localStorage
-    const visibilityMap = columnsToVisibilityMap(sortedColumns);
-    localStorage.setItem(TABLE_COLUMNS_STORAGE_KEY, JSON.stringify(visibilityMap));
-  };
-
-  const handleMoveColumnRight = (columnId: string) => {
-    const currentIndex = tableColumns.findIndex(col => col.id === columnId);
-
-    // Can't move last column right
-    if (currentIndex < 0 || currentIndex >= tableColumns.length - 1) return;
-
-    // Create new array with swapped positions
-    const newColumns = [...tableColumns];
-    const targetIndex = currentIndex + 1;
-
-    // Swap order values
-    const currentOrder = newColumns[currentIndex].order;
-    newColumns[currentIndex] = { ...newColumns[currentIndex], order: newColumns[targetIndex].order };
-    newColumns[targetIndex] = { ...newColumns[targetIndex], order: currentOrder };
-
-    // Sort by new order
-    const sortedColumns = newColumns.sort((a, b) => a.order - b.order);
-
-    setTableColumns(sortedColumns);
-
-    // Save to localStorage
-    const visibilityMap = columnsToVisibilityMap(sortedColumns);
-    localStorage.setItem(TABLE_COLUMNS_STORAGE_KEY, JSON.stringify(visibilityMap));
+    // Save preferences (visibility + order) to localStorage
+    const preferences = columnsToPreferences(reorderedColumns);
+    localStorage.setItem(TABLE_COLUMNS_STORAGE_KEY, JSON.stringify(preferences));
   };
 
   // Preset handlers
@@ -792,6 +749,7 @@ function CRMBoard() {
       advancedRules: advancedFilterRules,
       basicFilters: filters,
       viewMode: currentView,
+      tableColumns: columnsToPreferences(tableColumns),
     };
   };
 
@@ -920,6 +878,7 @@ function CRMBoard() {
                     <TableColumnVisibilityMenu
                       columns={tableColumns}
                       onToggleVisibility={handleToggleTableColumnVisibility}
+                      onReorderColumns={handleReorderColumns}
                     />
                     <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
                   </>
@@ -953,11 +912,7 @@ function CRMBoard() {
         {showArchivedView ? (
           <ArchivedLeadsView
             onClose={() => setShowArchivedView(false)}
-            onLeadClick={(lead) => {
-              setSelectedLead(lead);
-              setDialogMode('edit');
-              setOpenLeadDetail(true);
-            }}
+            onLeadClick={handleLeadClick}
             onUnarchive={handleUnarchiveLead}
           />
         ) : currentView === 'board' ? (
@@ -1030,8 +985,6 @@ function CRMBoard() {
                   onSelectAll={handleSelectAll}
                   onClearSelection={handleClearSelection}
                   visibleColumns={tableColumns}
-                  onMoveColumnLeft={handleMoveColumnLeft}
-                  onMoveColumnRight={handleMoveColumnRight}
                 />
               </Box>
             </Box>
@@ -1068,12 +1021,11 @@ function CRMBoard() {
           </Alert>
         </Snackbar>
 
-        {/* Lead Dialog */}
+        {/* Lead Dialog - Only used for creating new leads now */}
         <LeadDialog
-          open={openDialog || openLeadDetail}
+          open={openDialog}
           onClose={() => {
             setOpenDialog(false);
-            setOpenLeadDetail(false);
             setSelectedLead(null);
           }}
           onSave={handleSaveLead}

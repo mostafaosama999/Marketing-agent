@@ -15,6 +15,7 @@ import ProjectMonitoring from './pages/analytics/ProjectMonitoring';
 import LeadAnalytics from './pages/analytics/LeadAnalytics';
 import CompaniesPage from './pages/companies/CompaniesPage';
 import CompanyDetailPage from './pages/companies/CompanyDetailPage';
+import LeadDetailPage from './pages/leads/LeadDetailPage';
 
 // Components
 import Navbar from './components/layout/Navbar';
@@ -69,9 +70,9 @@ function AppContent() {
 
   // Normal scrollable layout for other pages
   return (
-    <Box sx={{ 
-      minHeight: '100vh', 
-      display: 'flex', 
+    <Box sx={{
+      minHeight: '100vh',
+      display: 'flex',
       flexDirection: 'column'
     }}>
       <Navbar />
@@ -82,6 +83,7 @@ function AppContent() {
         <Routes>
           <Route path="/review/:taskId" element={<TaskReview />} />
           <Route path="/companies/:companyId" element={<CompanyDetailPage />} />
+          <Route path="/leads/:leadId" element={<LeadDetailPage />} />
           <Route path="/team" element={<TeamManagement />} />
           <Route path="/team-member/:userId" element={<TeamMemberPerformance />} />
           <Route path="/analytics" element={<LeadAnalytics />} />

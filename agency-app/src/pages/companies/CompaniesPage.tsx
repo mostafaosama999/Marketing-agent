@@ -6,25 +6,36 @@ import {
   Typography,
   Fab,
   CircularProgress,
+  IconButton,
+  Badge,
+  Tooltip,
 } from '@mui/material';
 import {
   Add as AddIcon,
+  Archive as ArchiveIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import { Company } from '../../types/crm';
-import { subscribeToCompanies, countLeadsForCompany } from '../../services/api/companies';
+import {
+  subscribeToCompanies,
+  countLeadsForCompany,
+  subscribeToArchivedCompanies,
+  unarchiveCompany,
+  getLeadCountsForAllCompanies,
+} from '../../services/api/companies';
 import { CompanyDialog } from '../../components/features/companies/CompanyDialog';
 import { CompanyTable } from '../../components/features/companies/CompanyTable';
+import { ArchivedCompaniesView } from '../../components/features/companies/ArchivedCompaniesView';
 import { TableColumnVisibilityMenu } from '../../components/features/crm/TableColumnVisibilityMenu';
 import {
   TableColumnConfig,
   DEFAULT_COMPANIES_TABLE_COLUMNS,
   COMPANIES_TABLE_COLUMNS_STORAGE_KEY,
-  applyVisibilityPreferences,
 } from '../../types/table';
 import {
   buildCompaniesTableColumns,
-  columnsToVisibilityMap,
+  columnsToPreferences,
+  applyColumnPreferences,
 } from '../../services/api/tableColumnsService';
 import { CompanyFilterState, DEFAULT_COMPANY_FILTER_STATE, SaveCompanyPresetRequest } from '../../types/companyFilter';
 import { FilterRule } from '../../types/filter';
@@ -44,6 +55,11 @@ export const CompaniesPage: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
   const [openFiltersModal, setOpenFiltersModal] = useState(false);
+
+  // Archived companies state
+  const [showArchivedView, setShowArchivedView] = useState(false);
+  const [archivedCompaniesCount, setArchivedCompaniesCount] = useState(0);
+  const [leadCounts, setLeadCounts] = useState<Map<string, number>>(new Map());
 
   // Filter state
   const [filters, setFilters] = useState<CompanyFilterState>(DEFAULT_COMPANY_FILTER_STATE);
@@ -73,6 +89,25 @@ export const CompaniesPage: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
+  // Subscribe to archived companies count
+  useEffect(() => {
+    const unsubscribe = subscribeToArchivedCompanies((archivedCompanies) => {
+      setArchivedCompaniesCount(archivedCompanies.length);
+    });
+
+    return () => unsubscribe();
+  }, []);
+
+  // Load lead counts for all companies (for archived view)
+  useEffect(() => {
+    async function loadLeadCounts() {
+      const counts = await getLeadCountsForAllCompanies();
+      setLeadCounts(counts);
+    }
+
+    loadLeadCounts();
+  }, [companies]);
+
   // Load default preset on mount
   useEffect(() => {
     if (!user) return;
@@ -87,8 +122,8 @@ export const CompaniesPage: React.FC = () => {
 
           // Apply table column preferences if saved in preset
           if (defaultPreset.tableColumns) {
-            const visibilityMap = defaultPreset.tableColumns;
-            const columnsWithPreferences = applyVisibilityPreferences(tableColumns, visibilityMap);
+            const preferences = defaultPreset.tableColumns;
+            const columnsWithPreferences = applyColumnPreferences(tableColumns, preferences);
             setTableColumns(columnsWithPreferences);
           }
         }
@@ -107,20 +142,20 @@ export const CompaniesPage: React.FC = () => {
         // Build complete column list from default + company custom fields
         const allColumns = await buildCompaniesTableColumns(companies);
 
-        // Load saved visibility preferences from localStorage
+        // Load saved preferences (visibility + order) from localStorage
         const savedPrefs = localStorage.getItem(COMPANIES_TABLE_COLUMNS_STORAGE_KEY);
-        let visibilityMap: Record<string, boolean> | null = null;
+        let preferences: Record<string, boolean | { visible: boolean; order: number }> | null = null;
 
         if (savedPrefs) {
           try {
-            visibilityMap = JSON.parse(savedPrefs);
+            preferences = JSON.parse(savedPrefs);
           } catch (e) {
             console.error('Error parsing saved column preferences:', e);
           }
         }
 
-        // Apply saved preferences to columns
-        const columnsWithPreferences = applyVisibilityPreferences(allColumns, visibilityMap);
+        // Apply saved preferences to columns (handles both old and new format)
+        const columnsWithPreferences = applyColumnPreferences(allColumns, preferences);
 
         setTableColumns(columnsWithPreferences);
       } catch (error) {
@@ -199,51 +234,18 @@ export const CompaniesPage: React.FC = () => {
     );
     setTableColumns(updatedColumns);
 
-    // Save to localStorage
-    const visibilityMap = columnsToVisibilityMap(updatedColumns);
-    localStorage.setItem(COMPANIES_TABLE_COLUMNS_STORAGE_KEY, JSON.stringify(visibilityMap));
+    // Save preferences (visibility + order) to localStorage
+    const preferences = columnsToPreferences(updatedColumns);
+    localStorage.setItem(COMPANIES_TABLE_COLUMNS_STORAGE_KEY, JSON.stringify(preferences));
   };
 
-  const handleMoveColumnLeft = (columnId: string) => {
-    const columnIndex = tableColumns.findIndex(col => col.id === columnId);
-    if (columnIndex <= 0) return; // Already at start or not found
+  // Column reordering handler
+  const handleReorderColumns = (reorderedColumns: TableColumnConfig[]) => {
+    setTableColumns(reorderedColumns);
 
-    const newColumns = [...tableColumns];
-    const temp = newColumns[columnIndex];
-    newColumns[columnIndex] = newColumns[columnIndex - 1];
-    newColumns[columnIndex - 1] = temp;
-
-    // Update order values
-    newColumns.forEach((col, idx) => {
-      col.order = idx;
-    });
-
-    setTableColumns(newColumns);
-
-    // Save to localStorage
-    const visibilityMap = columnsToVisibilityMap(newColumns);
-    localStorage.setItem(COMPANIES_TABLE_COLUMNS_STORAGE_KEY, JSON.stringify(visibilityMap));
-  };
-
-  const handleMoveColumnRight = (columnId: string) => {
-    const columnIndex = tableColumns.findIndex(col => col.id === columnId);
-    if (columnIndex === -1 || columnIndex >= tableColumns.length - 1) return; // Already at end or not found
-
-    const newColumns = [...tableColumns];
-    const temp = newColumns[columnIndex];
-    newColumns[columnIndex] = newColumns[columnIndex + 1];
-    newColumns[columnIndex + 1] = temp;
-
-    // Update order values
-    newColumns.forEach((col, idx) => {
-      col.order = idx;
-    });
-
-    setTableColumns(newColumns);
-
-    // Save to localStorage
-    const visibilityMap = columnsToVisibilityMap(newColumns);
-    localStorage.setItem(COMPANIES_TABLE_COLUMNS_STORAGE_KEY, JSON.stringify(visibilityMap));
+    // Save preferences (visibility + order) to localStorage
+    const preferences = columnsToPreferences(reorderedColumns);
+    localStorage.setItem(COMPANIES_TABLE_COLUMNS_STORAGE_KEY, JSON.stringify(preferences));
   };
 
   // Filter handlers
@@ -276,8 +278,8 @@ export const CompaniesPage: React.FC = () => {
 
         // Apply table column preferences if saved in preset
         if (preset.tableColumns) {
-          const visibilityMap = preset.tableColumns;
-          const columnsWithPreferences = applyVisibilityPreferences(tableColumns, visibilityMap);
+          const preferences = preset.tableColumns;
+          const columnsWithPreferences = applyColumnPreferences(tableColumns, preferences);
           setTableColumns(columnsWithPreferences);
         }
       }
@@ -296,9 +298,22 @@ export const CompaniesPage: React.FC = () => {
       description: '',
       advancedRules: advancedFilterRules,
       basicFilters: filters,
-      tableColumns: columnsToVisibilityMap(tableColumns),
+      tableColumns: columnsToPreferences(tableColumns),
       isDefault: false,
     };
+  };
+
+  // Archive handlers
+  const handleUnarchiveCompany = async (companyId: string) => {
+    try {
+      await unarchiveCompany(companyId);
+    } catch (error) {
+      console.error('Error unarchiving company:', error);
+    }
+  };
+
+  const handleCompanyClick = (company: Company) => {
+    navigate(`/companies/${company.id}`);
   };
 
   if (loading) {
@@ -374,6 +389,7 @@ export const CompaniesPage: React.FC = () => {
           <TableColumnVisibilityMenu
             columns={tableColumns}
             onToggleVisibility={handleColumnVisibilityChange}
+            onReorderColumns={handleReorderColumns}
           />
           <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
 
@@ -403,75 +419,103 @@ export const CompaniesPage: React.FC = () => {
             isExpanded={openFiltersModal}
             onToggle={() => setOpenFiltersModal(!openFiltersModal)}
           />
+
+          {/* Archive Badge Button */}
+          <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
+          <Tooltip title="View Archived Companies">
+            <IconButton
+              onClick={() => setShowArchivedView(true)}
+              sx={{
+                color: '#667eea',
+                '&:hover': {
+                  bgcolor: 'rgba(102, 126, 234, 0.08)',
+                },
+              }}
+            >
+              <Badge badgeContent={archivedCompaniesCount} color="primary">
+                <ArchiveIcon />
+              </Badge>
+            </IconButton>
+          </Tooltip>
         </Box>
       </Box>
 
-      {/* Companies Table */}
-      <Box
-        sx={{
-          flex: 1,
-          minHeight: 0,
-          overflow: 'hidden',
-        }}
-      >
-        <CompanyTable
-          companies={filteredCompanies}
-          onView={handleViewCompany}
-          visibleColumns={tableColumns}
-          onMoveColumnLeft={handleMoveColumnLeft}
-          onMoveColumnRight={handleMoveColumnRight}
+      {/* Show either archived view or companies table */}
+      {showArchivedView ? (
+        <ArchivedCompaniesView
+          onClose={() => setShowArchivedView(false)}
+          onCompanyClick={handleCompanyClick}
+          onUnarchive={handleUnarchiveCompany}
+          leadCounts={leadCounts}
         />
-      </Box>
+      ) : (
+        <>
+          {/* Companies Table */}
+          <Box
+            sx={{
+              flex: 1,
+              minHeight: 0,
+              overflow: 'hidden',
+            }}
+          >
+            <CompanyTable
+              companies={filteredCompanies}
+              onView={handleViewCompany}
+              visibleColumns={tableColumns}
+            />
+          </Box>
 
-      {/* Add Company FAB */}
-      <Fab
-        color="primary"
-        aria-label="add company"
-        onClick={handleAddCompany}
-        sx={{
-          position: 'fixed',
-          bottom: 24,
-          right: 24,
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          '&:hover': {
-            background: 'linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%)',
-            transform: 'scale(1.05)',
-          },
-          transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
-        }}
-      >
-        <AddIcon />
-      </Fab>
+          {/* Add Company FAB */}
+          <Fab
+            color="primary"
+            aria-label="add company"
+            onClick={handleAddCompany}
+            sx={{
+              position: 'fixed',
+              bottom: 24,
+              right: 24,
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              '&:hover': {
+                background: 'linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%)',
+                transform: 'scale(1.05)',
+              },
+              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
+            }}
+          >
+            <AddIcon />
+          </Fab>
 
-      {/* Add Company Dialog (Create mode only) */}
-      <CompanyDialog
-        open={openDialog}
-        onClose={handleDialogClose}
-        onSuccess={() => {
-          // Dialog will close automatically
-          // Companies list will update automatically via subscription
-        }}
-      />
+          {/* Add Company Dialog (Create mode only) */}
+          <CompanyDialog
+            open={openDialog}
+            onClose={handleDialogClose}
+            onSuccess={() => {
+              // Dialog will close automatically
+              // Companies list will update automatically via subscription
+            }}
+          />
 
-      {/* Advanced Filters Modal */}
-      <AdvancedFiltersModal
-        open={openFiltersModal}
-        onClose={() => setOpenFiltersModal(false)}
-        onApplyFilters={handleApplyAdvancedFilters}
-        onClearFilters={handleClearAllFilters}
-        data={companies}
-        entityType="company"
-      />
+          {/* Advanced Filters Modal */}
+          <AdvancedFiltersModal
+            open={openFiltersModal}
+            onClose={() => setOpenFiltersModal(false)}
+            onApplyFilters={handleApplyAdvancedFilters}
+            onClearFilters={handleClearAllFilters}
+            data={companies}
+            entityType="company"
+          />
 
-      {/* Save Preset Dialog */}
-      {user && (
-        <SavePresetDialog
-          open={showSavePresetDialog}
-          onClose={() => setShowSavePresetDialog(false)}
-          userId={user.uid}
-          currentPreset={getCurrentPresetData()}
-          entityType="company"
-        />
+          {/* Save Preset Dialog */}
+          {user && (
+            <SavePresetDialog
+              open={showSavePresetDialog}
+              onClose={() => setShowSavePresetDialog(false)}
+              userId={user.uid}
+              currentPreset={getCurrentPresetData()}
+              entityType="company"
+            />
+          )}
+        </>
       )}
     </Box>
   );

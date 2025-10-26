@@ -23,8 +23,6 @@ import {
   Edit as EditIcon,
   KeyboardArrowDown as ExpandMoreIcon,
   KeyboardArrowRight as ChevronRightIcon,
-  ArrowBack as ArrowLeftIcon,
-  ArrowForward as ArrowRightIcon,
 } from '@mui/icons-material';
 import { Lead, LeadStatus } from '../../../types/lead';
 import { usePipelineConfigContext } from '../../../contexts/PipelineConfigContext';
@@ -39,8 +37,6 @@ interface CRMLeadsTableProps {
   onSelectAll: (selected: boolean) => void;
   onClearSelection: () => void;
   visibleColumns: TableColumnConfig[];
-  onMoveColumnLeft: (columnId: string) => void;
-  onMoveColumnRight: (columnId: string) => void;
 }
 
 type SortDirection = 'asc' | 'desc';
@@ -81,8 +77,6 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
   onSelectAll,
   onClearSelection,
   visibleColumns,
-  onMoveColumnLeft,
-  onMoveColumnRight,
 }) => {
   // Filter to only show visible columns
   const displayColumns = visibleColumns.filter(col => col.visible);
@@ -542,7 +536,7 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
               </TableCell>
 
               {/* Table columns */}
-              {displayColumns.map((column, index) => (
+              {displayColumns.map((column) => (
                 <TableCell
                   key={column.id}
                   sx={{
@@ -556,69 +550,29 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
                     height: '36px',
                   }}
                 >
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                    {/* Left arrow button */}
-                    <IconButton
-                      size="small"
-                      onClick={() => onMoveColumnLeft(column.id)}
-                      disabled={index === 0}
-                      sx={{
-                        p: 0.25,
+                  <TableSortLabel
+                    active={orderBy === column.id}
+                    direction={orderBy === column.id ? order : 'asc'}
+                    onClick={() => handleRequestSort(column.id)}
+                    disabled={!column.sortable}
+                    sx={{
+                      fontSize: '12px',
+                      color: '#64748b',
+                      '&:hover': {
+                        color: '#475569',
+                      },
+                      '&.Mui-active': {
                         color: '#667eea',
-                        '&:hover': {
-                          bgcolor: 'rgba(102, 126, 234, 0.1)',
-                        },
-                        '&.Mui-disabled': {
-                          color: '#cbd5e1',
-                        },
-                      }}
-                    >
-                      <ArrowLeftIcon fontSize="small" sx={{ fontSize: '14px' }} />
-                    </IconButton>
-
-                    <TableSortLabel
-                      active={orderBy === column.id}
-                      direction={orderBy === column.id ? order : 'asc'}
-                      onClick={() => handleRequestSort(column.id)}
-                      disabled={!column.sortable}
-                      sx={{
-                        fontSize: '12px',
-                        color: '#64748b',
-                        '&:hover': {
-                          color: '#475569',
-                        },
-                        '&.Mui-active': {
-                          color: '#667eea',
-                        },
-                        '& .MuiTableSortLabel-icon': {
-                          fontSize: '16px',
-                          opacity: 1,
-                          color: 'inherit',
-                        },
-                      }}
-                    >
-                      {column.label}
-                    </TableSortLabel>
-
-                    {/* Right arrow button */}
-                    <IconButton
-                      size="small"
-                      onClick={() => onMoveColumnRight(column.id)}
-                      disabled={index === displayColumns.length - 1}
-                      sx={{
-                        p: 0.25,
-                        color: '#667eea',
-                        '&:hover': {
-                          bgcolor: 'rgba(102, 126, 234, 0.1)',
-                        },
-                        '&.Mui-disabled': {
-                          color: '#cbd5e1',
-                        },
-                      }}
-                    >
-                      <ArrowRightIcon fontSize="small" sx={{ fontSize: '14px' }} />
-                    </IconButton>
-                  </Box>
+                      },
+                      '& .MuiTableSortLabel-icon': {
+                        fontSize: '16px',
+                        opacity: 1,
+                        color: 'inherit',
+                      },
+                    }}
+                  >
+                    {column.label}
+                  </TableSortLabel>
                 </TableCell>
               ))}
             </TableRow>

@@ -100,7 +100,7 @@ export interface FilterPreset {
 
   // View preferences
   viewMode: 'board' | 'table';
-  tableColumns?: Record<string, boolean>;
+  tableColumns?: Record<string, boolean | { visible: boolean; order: number }>;
 
   // Metadata
   createdAt: string; // ISO string
@@ -122,7 +122,7 @@ export interface SavePresetRequest {
   advancedRules: FilterRule[];
   basicFilters: FilterState;
   viewMode: 'board' | 'table';
-  tableColumns?: Record<string, boolean>;
+  tableColumns?: Record<string, boolean | { visible: boolean; order: number }>;
   isDefault?: boolean;
 }
 

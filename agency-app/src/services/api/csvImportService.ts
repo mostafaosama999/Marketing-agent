@@ -99,27 +99,82 @@ export function detectEntityType(columnName: string, leadFieldName: string | nul
 
   // Company-related keywords in column name
   const companyKeywords = [
+    // Website & online presence
     'website',
+    'blog',
+    'blog link',
+    'url',
+    'domain',
+
+    // Industry & classification
     'industry',
     'sector',
+    'vertical',
+    'niche',
+    'category',
+
+    // Company size & structure
     'company size',
     'company_size',
     'companysize',
     'employees',
     'employee count',
     'headcount',
+    'team size',
+
+    // Financial
     'revenue',
     'funding',
+    'valuation',
+    'arr',
+    'mrr',
+
+    // Location
     'headquarters',
     'hq',
     'location',
+    'country',
+    'region',
+    'city',
+    'address',
     'company location',
+
+    // Description & details
     'company description',
+    'description',
     'about company',
     'company info',
+    'company details',
+    'what they do',
+    'what the company does',
+    'business description',
+    'overview',
+
+    // Organization type
     'organization',
     'firm',
     'business type',
+    'company type',
+
+    // Rating & evaluation
+    'rating',
+    'score',
+    'company rating',
+    'quality',
+    'tier',
+
+    // Content & programs
+    'program',
+    'writing program',
+    'content program',
+    'contributor program',
+    'ideas generated',
+    'chosen idea',
+    'selected idea',
+    'article name',
+    'blog post',
+    'content ideas',
+    'topics',
   ];
 
   for (const keyword of companyKeywords) {
@@ -243,10 +298,19 @@ function transformRowToLead(
       if (!mapping.autoCreate) continue; // Skip if not auto-creating
 
       // Generate field name from CSV column name
-      mapping.leadField = mapping.csvField
+      let fieldName = mapping.csvField
         .toLowerCase()
         .trim()
         .replace(/[^a-z0-9]+/g, '_'); // Convert "What they do" → "what_they_do"
+
+      // Prefix with section if it's linkedin or email to organize in outreach tab
+      if (mapping.section === 'linkedin') {
+        fieldName = `linkedin_${fieldName}`;
+      } else if (mapping.section === 'email') {
+        fieldName = `email_${fieldName}`;
+      }
+
+      mapping.leadField = fieldName;
     }
 
     const value = row[mapping.csvField];

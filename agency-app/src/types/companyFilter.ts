@@ -39,8 +39,8 @@ export interface CompanyFilterPreset {
   advancedRules: FilterRule[];
   basicFilters: CompanyFilterState;
 
-  // View preferences
-  tableColumns?: Record<string, boolean>;
+  // View preferences (supports both old and new format for backward compatibility)
+  tableColumns?: Record<string, boolean | { visible: boolean; order: number }>;
 
   // Metadata
   createdAt: string; // ISO string
@@ -61,7 +61,7 @@ export interface SaveCompanyPresetRequest {
   description?: string;
   advancedRules: FilterRule[];
   basicFilters: CompanyFilterState;
-  tableColumns?: Record<string, boolean>;
+  tableColumns?: Record<string, boolean | { visible: boolean; order: number }>;
   isDefault?: boolean;
 }
 

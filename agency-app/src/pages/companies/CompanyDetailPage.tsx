@@ -25,11 +25,14 @@ import {
   DialogContent,
   DialogActions,
   DialogContentText,
+  Snackbar,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
   Edit as EditIcon,
   Delete as DeleteIcon,
+  Archive as ArchiveIcon,
+  Unarchive as UnarchiveIcon,
   LinkedIn as LinkedInIcon,
   Email as EmailIcon,
   Save as SaveIcon,
@@ -43,6 +46,8 @@ import {
   deleteCompany,
   getCompanies,
   countLeadsForCompany,
+  archiveCompany,
+  unarchiveCompany,
 } from '../../services/api/companies';
 import { subscribeToCompanyLeads, subscribeToCompanyLeadsByName } from '../../services/api/leads';
 import { Lead } from '../../types/lead';
@@ -62,10 +67,12 @@ import {
   getCompanyWebsite,
   getWebsiteFieldMapping,
 } from '../../services/api/websiteFieldMappingService';
+import { useAuth } from '../../contexts/AuthContext';
 
 export const CompanyDetailPage: React.FC = () => {
   const { companyId } = useParams<{ companyId: string }>();
   const navigate = useNavigate();
+  const { user } = useAuth();
 
   const [company, setCompany] = useState<Company | null>(null);
   const [loading, setLoading] = useState(true);
@@ -94,6 +101,21 @@ export const CompanyDetailPage: React.FC = () => {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [leadCount, setLeadCount] = useState(0);
+
+  // Snackbar state for notifications
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean;
+    message: string;
+    severity: 'success' | 'error';
+  }>({
+    open: false,
+    message: '',
+    severity: 'success',
+  });
+
+  // Archive dialog state
+  const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
+  const [archiving, setArchiving] = useState(false);
 
   // Analysis state
   const [writingProgramLoading, setWritingProgramLoading] = useState(false);
@@ -312,9 +334,23 @@ export const CompanyDetailPage: React.FC = () => {
       setCompany({ ...company, ...companyData });
       setEditMode(false);
       setDuplicateWarning('');
+
+      // Show success notification
+      setSnackbar({
+        open: true,
+        message: 'Company saved successfully!',
+        severity: 'success',
+      });
     } catch (err: any) {
       console.error('Error saving company:', err);
       setError(err.message || 'Failed to save company. Please try again.');
+
+      // Show error notification
+      setSnackbar({
+        open: true,
+        message: err.message || 'Failed to save company. Please try again.',
+        severity: 'error',
+      });
     } finally {
       setSaving(false);
     }
@@ -363,6 +399,36 @@ export const CompanyDetailPage: React.FC = () => {
     } finally {
       setDeleting(false);
       setDeleteDialogOpen(false);
+    }
+  };
+
+  // Archive/Unarchive handlers
+  const handleArchiveToggle = () => {
+    setArchiveDialogOpen(true);
+  };
+
+  const confirmArchiveToggle = async () => {
+    if (!company || !user) return;
+
+    setArchiving(true);
+    try {
+      if (company.archived) {
+        await unarchiveCompany(company.id);
+        // Reload company to update local state
+        const updatedCompany = await getCompany(company.id);
+        if (updatedCompany) {
+          setCompany(updatedCompany);
+        }
+      } else {
+        await archiveCompany(company.id, user.uid);
+        navigate('/companies');
+      }
+    } catch (error) {
+      console.error('Error toggling archive status:', error);
+      setError('Failed to update archive status. Please try again.');
+    } finally {
+      setArchiving(false);
+      setArchiveDialogOpen(false);
     }
   };
 
@@ -902,6 +968,17 @@ export const CompanyDetailPage: React.FC = () => {
                     }}
                   >
                     <EditIcon />
+                  </IconButton>
+                  <IconButton
+                    onClick={handleArchiveToggle}
+                    sx={{
+                      color: '#f59e0b',
+                      '&:hover': {
+                        bgcolor: 'rgba(245, 158, 11, 0.08)',
+                      },
+                    }}
+                  >
+                    {company.archived ? <UnarchiveIcon /> : <ArchiveIcon />}
                   </IconButton>
                   <IconButton
                     onClick={handleDelete}
@@ -1555,6 +1632,62 @@ export const CompanyDetailPage: React.FC = () => {
         </DialogActions>
       </Dialog>
 
+      {/* Archive/Unarchive Company Dialog */}
+      <Dialog
+        open={archiveDialogOpen}
+        onClose={() => !archiving && setArchiveDialogOpen(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle sx={{ fontWeight: 700 }}>
+          {company.archived ? 'Unarchive Company?' : 'Archive Company?'}
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText>
+            {company.archived ? (
+              <>
+                Are you sure you want to restore <strong>{company.name}</strong> to the active companies list?
+              </>
+            ) : (
+              <>
+                Are you sure you want to archive <strong>{company.name}</strong>?
+                {leadCount > 0 && (
+                  <>
+                    <br /><br />
+                    This company has <strong>{leadCount} associated lead{leadCount !== 1 ? 's' : ''}</strong>.
+                    The company will be hidden from the main list, but all leads will remain accessible.
+                  </>
+                )}
+              </>
+            )}
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 3 }}>
+          <Button
+            onClick={() => setArchiveDialogOpen(false)}
+            disabled={archiving}
+            sx={{ textTransform: 'none', fontWeight: 600 }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={confirmArchiveToggle}
+            disabled={archiving}
+            variant="contained"
+            sx={{
+              textTransform: 'none',
+              fontWeight: 600,
+              bgcolor: company.archived ? '#10b981' : '#f59e0b',
+              '&:hover': {
+                bgcolor: company.archived ? '#059669' : '#d97706',
+              },
+            }}
+          >
+            {archiving ? <CircularProgress size={24} /> : company.archived ? 'Unarchive' : 'Archive'}
+          </Button>
+        </DialogActions>
+      </Dialog>
+
       {/* Website Field Mapping Dialog */}
       <WebsiteFieldMappingDialog
         open={websiteMappingDialogOpen}
@@ -1590,6 +1723,22 @@ export const CompanyDetailPage: React.FC = () => {
           }}
         />
       )}
+
+      {/* Snackbar for success/error notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'top', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

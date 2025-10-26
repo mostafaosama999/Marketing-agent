@@ -20,8 +20,6 @@ import {
 import {
   OpenInNew as OpenInNewIcon,
   Business as BusinessIcon,
-  ArrowBack as ArrowLeftIcon,
-  ArrowForward as ArrowRightIcon,
 } from '@mui/icons-material';
 import { Company } from '../../../types/crm';
 import { TableColumnConfig } from '../../../types/table';
@@ -30,8 +28,6 @@ interface CompanyTableProps {
   companies: Array<Company & { leadCount: number }>;
   onView: (company: Company) => void;
   visibleColumns: TableColumnConfig[];
-  onMoveColumnLeft: (columnId: string) => void;
-  onMoveColumnRight: (columnId: string) => void;
   selectedCompanyIds?: string[];
   onSelectCompany?: (companyId: string) => void;
   onSelectAll?: (selected: boolean) => void;
@@ -43,8 +39,6 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
   companies,
   onView,
   visibleColumns,
-  onMoveColumnLeft,
-  onMoveColumnRight,
   selectedCompanyIds = [],
   onSelectCompany,
   onSelectAll,
@@ -435,7 +429,7 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
               )}
 
               {/* Table columns */}
-              {displayColumns.map((column, index) => (
+              {displayColumns.map((column) => (
                 <TableCell
                   key={column.id}
                   align={column.id === 'leadCount' ? 'center' : 'left'}
@@ -450,69 +444,29 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
                     height: '36px',
                   }}
                 >
-                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, justifyContent: column.id === 'leadCount' ? 'center' : 'flex-start' }}>
-                    {/* Left arrow button */}
-                    <IconButton
-                      size="small"
-                      onClick={() => onMoveColumnLeft(column.id)}
-                      disabled={index === 0}
-                      sx={{
-                        p: 0.25,
+                  <TableSortLabel
+                    active={orderBy === column.id}
+                    direction={orderBy === column.id ? order : 'asc'}
+                    onClick={() => handleRequestSort(column.id)}
+                    disabled={!column.sortable}
+                    sx={{
+                      fontSize: '12px',
+                      color: '#64748b',
+                      '&:hover': {
+                        color: '#475569',
+                      },
+                      '&.Mui-active': {
                         color: '#667eea',
-                        '&:hover': {
-                          bgcolor: 'rgba(102, 126, 234, 0.1)',
-                        },
-                        '&.Mui-disabled': {
-                          color: '#cbd5e1',
-                        },
-                      }}
-                    >
-                      <ArrowLeftIcon fontSize="small" sx={{ fontSize: '14px' }} />
-                    </IconButton>
-
-                    <TableSortLabel
-                      active={orderBy === column.id}
-                      direction={orderBy === column.id ? order : 'asc'}
-                      onClick={() => handleRequestSort(column.id)}
-                      disabled={!column.sortable}
-                      sx={{
-                        fontSize: '12px',
-                        color: '#64748b',
-                        '&:hover': {
-                          color: '#475569',
-                        },
-                        '&.Mui-active': {
-                          color: '#667eea',
-                        },
-                        '& .MuiTableSortLabel-icon': {
-                          fontSize: '16px',
-                          opacity: 1,
-                          color: 'inherit',
-                        },
-                      }}
-                    >
-                      {column.label}
-                    </TableSortLabel>
-
-                    {/* Right arrow button */}
-                    <IconButton
-                      size="small"
-                      onClick={() => onMoveColumnRight(column.id)}
-                      disabled={index === displayColumns.length - 1}
-                      sx={{
-                        p: 0.25,
-                        color: '#667eea',
-                        '&:hover': {
-                          bgcolor: 'rgba(102, 126, 234, 0.1)',
-                        },
-                        '&.Mui-disabled': {
-                          color: '#cbd5e1',
-                        },
-                      }}
-                    >
-                      <ArrowRightIcon fontSize="small" sx={{ fontSize: '14px' }} />
-                    </IconButton>
-                  </Box>
+                      },
+                      '& .MuiTableSortLabel-icon': {
+                        fontSize: '16px',
+                        opacity: 1,
+                        color: 'inherit',
+                      },
+                    }}
+                  >
+                    {column.label}
+                  </TableSortLabel>
                 </TableCell>
               ))}
 

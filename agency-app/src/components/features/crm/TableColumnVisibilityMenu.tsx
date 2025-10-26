@@ -12,20 +12,24 @@ import {
   Box,
   Divider,
 } from '@mui/material';
-import { ViewColumn as ViewColumnIcon } from '@mui/icons-material';
+import { ViewColumn as ViewColumnIcon, DragIndicator as DragIndicatorIcon } from '@mui/icons-material';
 import { TableColumnConfig } from '../../../types/table';
 
 interface TableColumnVisibilityMenuProps {
   columns: TableColumnConfig[];
   onToggleVisibility: (columnId: string, visible: boolean) => void;
+  onReorderColumns: (reorderedColumns: TableColumnConfig[]) => void;
 }
 
 export function TableColumnVisibilityMenu({
   columns,
   onToggleVisibility,
+  onReorderColumns,
 }: TableColumnVisibilityMenuProps) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
+  const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
+  const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -41,6 +45,52 @@ export function TableColumnVisibilityMenu({
 
   const visibleCount = columns.filter(c => c.visible).length;
   const isLastVisible = (column: TableColumnConfig) => column.visible && visibleCount === 1;
+
+  // Drag and drop handlers
+  const handleDragStart = (e: React.DragEvent, index: number) => {
+    setDraggedIndex(index);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+
+  const handleDragOver = (e: React.DragEvent, index: number) => {
+    e.preventDefault();
+    e.dataTransfer.dropEffect = 'move';
+    setDragOverIndex(index);
+  };
+
+  const handleDragLeave = () => {
+    setDragOverIndex(null);
+  };
+
+  const handleDrop = (e: React.DragEvent, dropIndex: number) => {
+    e.preventDefault();
+
+    if (draggedIndex === null || draggedIndex === dropIndex) {
+      setDraggedIndex(null);
+      setDragOverIndex(null);
+      return;
+    }
+
+    // Create a new array with reordered columns
+    const reordered = [...columns];
+    const [draggedColumn] = reordered.splice(draggedIndex, 1);
+    reordered.splice(dropIndex, 0, draggedColumn);
+
+    // Update order property for each column
+    const reorderedWithOrder = reordered.map((col, idx) => ({
+      ...col,
+      order: idx,
+    }));
+
+    onReorderColumns(reorderedWithOrder);
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
+
+  const handleDragEnd = () => {
+    setDraggedIndex(null);
+    setDragOverIndex(null);
+  };
 
   return (
     <>
@@ -113,22 +163,60 @@ export function TableColumnVisibilityMenu({
 
         <Divider sx={{ my: 0.5 }} />
 
-        {columns.map((column) => {
+        {columns.map((column, index) => {
           const disabled = isLastVisible(column);
+          const isDragging = draggedIndex === index;
+          const isDragOver = dragOverIndex === index;
 
           return (
             <MenuItem
               key={column.id}
-              onClick={() => handleToggle(column.id, column.visible)}
+              draggable
+              onDragStart={(e) => handleDragStart(e, index)}
+              onDragOver={(e) => handleDragOver(e, index)}
+              onDragLeave={handleDragLeave}
+              onDrop={(e) => handleDrop(e, index)}
+              onDragEnd={handleDragEnd}
+              onClick={(e) => {
+                // Only toggle if not clicking on the drag handle
+                const target = e.target as HTMLElement;
+                if (!target.closest('[data-drag-handle]')) {
+                  handleToggle(column.id, column.visible);
+                }
+              }}
               disabled={disabled}
               sx={{
                 py: 1,
                 px: 2,
+                cursor: isDragging ? 'grabbing' : 'grab',
+                opacity: isDragging ? 0.5 : 1,
+                backgroundColor: isDragOver && !isDragging ? 'rgba(102, 126, 234, 0.15)' : 'transparent',
+                transition: 'opacity 0.2s, background-color 0.2s',
                 '&:hover': {
                   background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%)',
                 },
               }}
             >
+              {/* Drag Handle */}
+              <Box
+                data-drag-handle
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  mr: 1,
+                  cursor: 'grab',
+                  color: '#94a3b8',
+                  '&:hover': {
+                    color: '#667eea',
+                  },
+                  '&:active': {
+                    cursor: 'grabbing',
+                  },
+                }}
+              >
+                <DragIndicatorIcon sx={{ fontSize: '18px' }} />
+              </Box>
+
               <ListItemIcon sx={{ minWidth: 36 }}>
                 <Checkbox
                   checked={column.visible}

@@ -129,11 +129,59 @@ export async function buildCompaniesTableColumns(companies: Company[]): Promise<
 }
 
 /**
- * Convert column list to visibility map for localStorage
+ * Convert column list to visibility map for localStorage (backward compatibility)
  */
 export function columnsToVisibilityMap(columns: TableColumnConfig[]): Record<string, boolean> {
   return columns.reduce((acc, col) => {
     acc[col.id] = col.visible;
     return acc;
   }, {} as Record<string, boolean>);
+}
+
+/**
+ * Convert column list to full preferences (visibility + order) for localStorage
+ */
+export function columnsToPreferences(columns: TableColumnConfig[]): Record<string, { visible: boolean; order: number }> {
+  return columns.reduce((acc, col) => {
+    acc[col.id] = {
+      visible: col.visible,
+      order: col.order,
+    };
+    return acc;
+  }, {} as Record<string, { visible: boolean; order: number }>);
+}
+
+/**
+ * Apply saved preferences (visibility + order) to column list
+ * Handles both old format (visibility only) and new format (visibility + order)
+ */
+export function applyColumnPreferences(
+  columns: TableColumnConfig[],
+  savedPreferences: Record<string, boolean | { visible: boolean; order: number }> | null
+): TableColumnConfig[] {
+  if (!savedPreferences) return columns;
+
+  // Apply preferences to columns
+  const columnsWithPrefs = columns.map(col => {
+    const pref = savedPreferences[col.id];
+
+    if (pref === undefined) {
+      return col;
+    }
+
+    // Old format: boolean (visibility only)
+    if (typeof pref === 'boolean') {
+      return { ...col, visible: pref };
+    }
+
+    // New format: object with visibility and order
+    return {
+      ...col,
+      visible: pref.visible,
+      order: pref.order,
+    };
+  });
+
+  // Sort by order property
+  return columnsWithPrefs.sort((a, b) => a.order - b.order);
 }
