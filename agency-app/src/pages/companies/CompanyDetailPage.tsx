@@ -29,14 +29,12 @@ import {
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
-  Edit as EditIcon,
   Delete as DeleteIcon,
   Archive as ArchiveIcon,
   Unarchive as UnarchiveIcon,
   LinkedIn as LinkedInIcon,
   Email as EmailIcon,
   Save as SaveIcon,
-  Cancel as CancelIcon,
   Search as SearchIcon,
 } from '@mui/icons-material';
 import { Company, CompanyFormData } from '../../types/crm';
@@ -143,6 +141,11 @@ export const CompanyDetailPage: React.FC = () => {
   // Lead discovery dialog state
   const [leadDiscoveryDialogOpen, setLeadDiscoveryDialogOpen] = useState(false);
 
+  // Offer state
+  const [offerText, setOfferText] = useState('');
+  const [offerSaving, setOfferSaving] = useState(false);
+  const [offerError, setOfferError] = useState<string | null>(null);
+
   // Load company data
   useEffect(() => {
     const loadCompany = async () => {
@@ -169,6 +172,11 @@ export const CompanyDetailPage: React.FC = () => {
           description: companyData.description || '',
           customFields: companyData.customFields || {},
         });
+
+        // Load offer text if exists
+        if (companyData.offer?.blogIdea) {
+          setOfferText(companyData.offer.blogIdea);
+        }
 
         // Get lead count
         const count = await countLeadsForCompany(companyId);
@@ -356,20 +364,6 @@ export const CompanyDetailPage: React.FC = () => {
     }
   };
 
-  const handleCancelEdit = () => {
-    if (company) {
-      setFormData({
-        name: company.name || '',
-        website: company.website || '',
-        industry: company.industry || '',
-        description: company.description || '',
-        customFields: company.customFields || {},
-      });
-    }
-    setEditMode(false);
-    setError('');
-    setDuplicateWarning('');
-  };
 
   // Handle website mapping dialog save
   const handleWebsiteMappingSave = () => {
@@ -567,9 +561,6 @@ export const CompanyDetailPage: React.FC = () => {
       // Close dialog
       setUrlSelectionDialogOpen(false);
       setFoundUrls([]);
-
-      // Enter edit mode after successful analysis
-      setEditMode(true);
     } catch (err: any) {
       console.error('Error analyzing writing program details:', err);
       setWritingProgramError(err.message || 'Failed to analyze writing program details');
@@ -693,9 +684,6 @@ export const CompanyDetailPage: React.FC = () => {
         ...company,
         blogAnalysis: analysisData,
       });
-
-      // Enter edit mode after successful analysis
-      setEditMode(true);
     } catch (err: any) {
       console.error('Error analyzing blog:', err);
       setBlogAnalysisError(err.message || 'Failed to analyze blog');
@@ -750,6 +738,50 @@ export const CompanyDetailPage: React.FC = () => {
       setApolloEnrichmentError(err.message || 'Failed to enrich organization with Apollo');
     } finally {
       setApolloEnrichmentLoading(false);
+    }
+  };
+
+  // Handle offer save
+  const handleOfferSave = async () => {
+    if (!company || !companyId) return;
+
+    setOfferSaving(true);
+    setOfferError(null);
+
+    try {
+      const now = new Date();
+      const offerData = {
+        offer: {
+          blogIdea: offerText.trim(),
+          createdAt: company.offer?.createdAt || now,
+          updatedAt: now,
+        },
+      };
+
+      await updateCompany(companyId, offerData);
+
+      // Update local company state
+      const updatedCompany = await getCompany(companyId);
+      if (updatedCompany) {
+        setCompany(updatedCompany);
+      }
+
+      // Show success message
+      setSnackbar({
+        open: true,
+        message: 'Offer saved successfully!',
+        severity: 'success',
+      });
+    } catch (err: any) {
+      console.error('Error saving offer:', err);
+      setOfferError(err.message || 'Failed to save offer');
+      setSnackbar({
+        open: true,
+        message: 'Failed to save offer. Please try again.',
+        severity: 'error',
+      });
+    } finally {
+      setOfferSaving(false);
     }
   };
 
@@ -926,19 +958,8 @@ export const CompanyDetailPage: React.FC = () => {
             </Box>
 
             <Box sx={{ display: 'flex', gap: 1 }}>
-              {editMode && !blogAnalysisLoading && !writingProgramLoading ? (
+              {!blogAnalysisLoading && !writingProgramLoading && (
                 <>
-                  <Button
-                    startIcon={<CancelIcon />}
-                    onClick={handleCancelEdit}
-                    disabled={saving}
-                    sx={{
-                      textTransform: 'none',
-                      fontWeight: 600,
-                    }}
-                  >
-                    Cancel
-                  </Button>
                   <Button
                     startIcon={<SaveIcon />}
                     variant="contained"
@@ -953,22 +974,8 @@ export const CompanyDetailPage: React.FC = () => {
                       },
                     }}
                   >
-                    {saving ? <CircularProgress size={24} sx={{ color: 'white' }} /> : 'Save Changes'}
+                    {saving ? <CircularProgress size={24} sx={{ color: 'white' }} /> : 'Save'}
                   </Button>
-                </>
-              ) : !blogAnalysisLoading && !writingProgramLoading ? (
-                <>
-                  <IconButton
-                    onClick={() => setEditMode(true)}
-                    sx={{
-                      color: '#667eea',
-                      '&:hover': {
-                        bgcolor: 'rgba(102, 126, 234, 0.08)',
-                      },
-                    }}
-                  >
-                    <EditIcon />
-                  </IconButton>
                   <IconButton
                     onClick={handleArchiveToggle}
                     sx={{
@@ -992,7 +999,7 @@ export const CompanyDetailPage: React.FC = () => {
                     <DeleteIcon />
                   </IconButton>
                 </>
-              ) : null}
+              )}
             </Box>
           </Box>
         </Box>
@@ -1005,6 +1012,7 @@ export const CompanyDetailPage: React.FC = () => {
             <Tab label="Writing Program" />
             <Tab label="Blog" />
             <Tab label="Apollo Enrichment" />
+            <Tab label="Offer" />
           </Tabs>
         </Box>
 
@@ -1032,7 +1040,7 @@ export const CompanyDetailPage: React.FC = () => {
                   label="Company Name"
                   value={formData.name}
                   onChange={handleChange('name')}
-                  disabled={!editMode || saving}
+                  disabled={saving}
                   placeholder="e.g., Acme Corporation"
                 />
               </Grid>
@@ -1043,7 +1051,7 @@ export const CompanyDetailPage: React.FC = () => {
                   label="Website"
                   value={formData.website}
                   onChange={handleChange('website')}
-                  disabled={!editMode || saving}
+                  disabled={saving}
                   placeholder="e.g., acme.com or https://acme.com"
                   helperText="Optional - Enter domain name or full URL"
                 />
@@ -1055,7 +1063,7 @@ export const CompanyDetailPage: React.FC = () => {
                   label="Industry"
                   value={formData.industry}
                   onChange={handleChange('industry')}
-                  disabled={!editMode || saving}
+                  disabled={saving}
                   placeholder="e.g., Technology, Healthcare, Finance"
                   helperText="Optional - Business sector or category"
                 />
@@ -1069,7 +1077,7 @@ export const CompanyDetailPage: React.FC = () => {
                   label="Description"
                   value={formData.description}
                   onChange={handleChange('description')}
-                  disabled={!editMode || saving}
+                  disabled={saving}
                   placeholder="Optional notes about this company..."
                   helperText="Optional - Any additional information"
                 />
@@ -1126,7 +1134,7 @@ export const CompanyDetailPage: React.FC = () => {
                               },
                             });
                           }}
-                          disabled={!editMode || saving}
+                          disabled={saving}
                           type={isNumberField ? 'number' : 'text'}
                           placeholder={
                             isNumberField
@@ -1580,6 +1588,78 @@ export const CompanyDetailPage: React.FC = () => {
                   </Grid>
                 </Box>
               )}
+            </Box>
+          )}
+
+          {/* Offer Tab */}
+          {tabValue === 5 && (
+            <Box>
+              {offerError && (
+                <Alert severity="error" sx={{ mb: 3 }}>
+                  {offerError}
+                </Alert>
+              )}
+
+              <Paper sx={{ p: 4 }}>
+                <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
+                  Blog Idea Offer
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#64748b', mb: 3 }}>
+                  Create a compelling blog idea to offer this company for lead outreach. This offer will be used in personalized messages to prospects.
+                </Typography>
+
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={6}
+                  value={offerText}
+                  onChange={(e) => setOfferText(e.target.value)}
+                  placeholder="Enter a blog idea or topic to pitch to this company... (e.g., 'How to Scale Your SaaS Platform with Serverless Architecture')"
+                  variant="outlined"
+                  sx={{
+                    mb: 2,
+                    '& .MuiOutlinedInput-root': {
+                      fontSize: '14px',
+                      '&:hover fieldset': {
+                        borderColor: '#667eea',
+                      },
+                      '&.Mui-focused fieldset': {
+                        borderColor: '#667eea',
+                      },
+                    },
+                  }}
+                />
+
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+                  <Typography variant="caption" sx={{ color: '#94a3b8' }}>
+                    {offerText.length} characters
+                  </Typography>
+                  {company?.offer?.updatedAt && (
+                    <Typography variant="caption" sx={{ color: '#94a3b8' }}>
+                      Last updated: {new Date(company.offer.updatedAt).toLocaleString()}
+                    </Typography>
+                  )}
+                </Box>
+
+                <Button
+                  variant="contained"
+                  onClick={handleOfferSave}
+                  disabled={offerSaving || !offerText.trim()}
+                  startIcon={offerSaving ? <CircularProgress size={20} /> : null}
+                  sx={{
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    textTransform: 'none',
+                    px: 4,
+                    fontWeight: 500,
+                    '&:disabled': {
+                      background: '#e2e8f0',
+                      color: '#94a3b8',
+                    },
+                  }}
+                >
+                  {offerSaving ? 'Saving...' : 'Save Offer'}
+                </Button>
+              </Paper>
             </Box>
           )}
         </Box>

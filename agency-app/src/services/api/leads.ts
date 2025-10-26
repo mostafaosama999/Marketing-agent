@@ -14,6 +14,7 @@ import {
   where,
   getDoc,
   writeBatch,
+  deleteField,
 } from 'firebase/firestore';
 import { db } from '../firebase/firestore';
 import { Lead, LeadFormData, LeadStatus } from '../../types/lead';
@@ -788,6 +789,64 @@ export async function bulkDeleteLeads(leadIds: string[]): Promise<void> {
     console.log('✅ [BULK DELETE] Bulk deletion complete');
   } catch (error) {
     console.error('❌ [BULK DELETE] Error bulk deleting leads:', error);
+    throw error;
+  }
+}
+
+/**
+ * Deletes a custom field from ALL leads in the system
+ * Used when user wants to permanently remove a custom column
+ * @param fieldName The custom field name to delete (e.g., "linkedin_job", "priority")
+ * @returns Object with number of leads affected
+ */
+export async function deleteCustomFieldFromAllLeads(
+  fieldName: string
+): Promise<{ deleted: number }> {
+  console.log(`🗑️ [DELETE FIELD] Starting deletion of custom field: ${fieldName}`);
+
+  try {
+    const leadsRef = collection(db, LEADS_COLLECTION);
+
+    // Query for all leads that have this custom field
+    const q = query(
+      leadsRef,
+      where(`customFields.${fieldName}`, '!=', null)
+    );
+
+    const snapshot = await getDocs(q);
+    const affectedCount = snapshot.docs.length;
+
+    console.log(`📊 [DELETE FIELD] Found ${affectedCount} leads with field "${fieldName}"`);
+
+    if (affectedCount === 0) {
+      console.log(`ℹ️ [DELETE FIELD] No leads found with field "${fieldName}"`);
+      return { deleted: 0 };
+    }
+
+    // Firebase batch has a limit of 500 operations
+    const batchSize = 500;
+    const batches: any[] = [];
+
+    for (let i = 0; i < snapshot.docs.length; i += batchSize) {
+      const batch = writeBatch(db);
+      const batchDocs = snapshot.docs.slice(i, i + batchSize);
+
+      batchDocs.forEach((docSnapshot) => {
+        batch.update(docSnapshot.ref, {
+          [`customFields.${fieldName}`]: deleteField()
+        });
+      });
+
+      batches.push(batch);
+    }
+
+    // Execute all batches
+    await Promise.all(batches.map(batch => batch.commit()));
+
+    console.log(`✅ [DELETE FIELD] Successfully deleted field "${fieldName}" from ${affectedCount} leads`);
+    return { deleted: affectedCount };
+  } catch (error) {
+    console.error(`❌ [DELETE FIELD] Error deleting custom field "${fieldName}":`, error);
     throw error;
   }
 }

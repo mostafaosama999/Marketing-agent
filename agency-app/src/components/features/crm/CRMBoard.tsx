@@ -35,6 +35,7 @@ import {
   bulkDeleteLeads,
   archiveLead,
   unarchiveLead,
+  deleteCustomFieldFromAllLeads,
 } from '../../../services/api/leads';
 import { ArchivedLeadsView } from './ArchivedLeadsView';
 import { usePipelineConfig } from '../../../hooks/usePipelineConfig';
@@ -546,6 +547,62 @@ function CRMBoard() {
     }
   };
 
+  // LinkedIn status update handler
+  const handleUpdateLinkedInStatus = async (leadId: string, status: string) => {
+    const lead = leads.find(l => l.id === leadId);
+    if (!lead) return;
+
+    try {
+      const updateData: any = {
+        outreach: {
+          ...lead.outreach,
+          linkedIn: {
+            ...lead.outreach?.linkedIn,
+            status,
+          },
+        },
+      };
+
+      // Auto-set sentAt timestamp if status is sent or opened
+      if ((status === 'sent' || status === 'opened') && !lead.outreach?.linkedIn?.sentAt) {
+        updateData.outreach.linkedIn.sentAt = new Date();
+      }
+
+      await updateLead(leadId, updateData);
+    } catch (error) {
+      console.error('Error updating LinkedIn status:', error);
+      showAlert('Failed to update LinkedIn status. Please try again.');
+    }
+  };
+
+  // Email status update handler
+  const handleUpdateEmailStatus = async (leadId: string, status: string) => {
+    const lead = leads.find(l => l.id === leadId);
+    if (!lead) return;
+
+    try {
+      const updateData: any = {
+        outreach: {
+          ...lead.outreach,
+          email: {
+            ...lead.outreach?.email,
+            status,
+          },
+        },
+      };
+
+      // Auto-set sentAt timestamp if status is sent or opened
+      if ((status === 'sent' || status === 'opened') && !lead.outreach?.email?.sentAt) {
+        updateData.outreach.email.sentAt = new Date();
+      }
+
+      await updateLead(leadId, updateData);
+    } catch (error) {
+      console.error('Error updating email status:', error);
+      showAlert('Failed to update email status. Please try again.');
+    }
+  };
+
   // Bulk action handlers
   const handleBulkChangeStatus = async (newStatus: LeadStatus) => {
     if (!user || selectedLeadIds.length === 0) return;
@@ -720,6 +777,28 @@ function CRMBoard() {
     localStorage.setItem(TABLE_COLUMNS_STORAGE_KEY, JSON.stringify(preferences));
   };
 
+  // Column deletion handler
+  const handleDeleteColumn = async (columnId: string, fieldName: string) => {
+    try {
+      // Delete the custom field from all leads in Firestore
+      const result = await deleteCustomFieldFromAllLeads(fieldName);
+
+      // Remove the column from state
+      const updatedColumns = tableColumns.filter(col => col.id !== columnId);
+      setTableColumns(updatedColumns);
+
+      // Save preferences to localStorage
+      const preferences = columnsToPreferences(updatedColumns);
+      localStorage.setItem(TABLE_COLUMNS_STORAGE_KEY, JSON.stringify(preferences));
+
+      showAlert(`Column "${columnId}" deleted from ${result.deleted} lead${result.deleted !== 1 ? 's' : ''}`);
+    } catch (error) {
+      console.error('Error deleting column:', error);
+      showAlert('Failed to delete column. Please try again.');
+      throw error; // Re-throw so dialog can handle loading state
+    }
+  };
+
   // Preset handlers
   const handleLoadPreset = async (presetId: string) => {
     if (!user) return;
@@ -879,6 +958,7 @@ function CRMBoard() {
                       columns={tableColumns}
                       onToggleVisibility={handleToggleTableColumnVisibility}
                       onReorderColumns={handleReorderColumns}
+                      onDeleteColumn={handleDeleteColumn}
                     />
                     <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
                   </>
@@ -980,6 +1060,8 @@ function CRMBoard() {
                   leads={getFilteredLeads()}
                   onLeadClick={handleLeadClick}
                   onUpdateStatus={handleUpdateStatus}
+                  onUpdateLinkedInStatus={handleUpdateLinkedInStatus}
+                  onUpdateEmailStatus={handleUpdateEmailStatus}
                   selectedLeadIds={selectedLeadIds}
                   onSelectLead={handleSelectLead}
                   onSelectAll={handleSelectAll}

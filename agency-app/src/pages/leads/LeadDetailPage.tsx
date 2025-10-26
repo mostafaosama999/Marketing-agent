@@ -28,6 +28,7 @@ import {
   InputLabel,
   Select,
   Snackbar,
+  Paper,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -44,6 +45,8 @@ import { leadTimelineService } from '../../services/api/leadSubcollections';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePipelineConfigContext } from '../../contexts/PipelineConfigContext';
 import { fetchEmail } from '../../services/api/apolloService';
+import { getCompany } from '../../services/api/companies';
+import { Company } from '../../types/crm';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -89,6 +92,9 @@ export const LeadDetailPage: React.FC = () => {
   const [apolloError, setApolloError] = useState<string | null>(null);
   const [apolloSuccess, setApolloSuccess] = useState<string | null>(null);
 
+  // Company state (for fetching offer)
+  const [company, setCompany] = useState<Company | null>(null);
+
   // Form state
   const [formData, setFormData] = useState<LeadFormData>({
     name: '',
@@ -103,6 +109,9 @@ export const LeadDetailPage: React.FC = () => {
   const [linkedInStatus, setLinkedInStatus] = useState<'not_sent' | 'sent' | 'opened' | 'replied' | 'refused' | 'no_response'>('not_sent');
   const [linkedInProfileUrl, setLinkedInProfileUrl] = useState('');
   const [emailStatus, setEmailStatus] = useState<'not_sent' | 'sent' | 'opened' | 'replied' | 'bounced' | 'refused' | 'no_response'>('not_sent');
+
+  // Offer template state
+  const [offerTemplate, setOfferTemplate] = useState<string>('');
 
   // Delete dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -160,6 +169,26 @@ export const LeadDetailPage: React.FC = () => {
           setEmailStatus(leadData.outreach.email.status);
         } else {
           setEmailStatus('not_sent');
+        }
+
+        // Load offer template from customFields
+        if (leadData.customFields?.offer_template) {
+          setOfferTemplate(leadData.customFields.offer_template as string);
+        } else {
+          setOfferTemplate('');
+        }
+
+        // Fetch company data if companyId exists
+        if (leadData.companyId) {
+          try {
+            const companyData = await getCompany(leadData.companyId);
+            if (companyData) {
+              setCompany(companyData);
+            }
+          } catch (error) {
+            console.error('Error fetching company:', error);
+            // Don't fail the whole page if company fetch fails
+          }
         }
       } catch (err) {
         console.error('Error loading lead:', err);
@@ -256,6 +285,10 @@ export const LeadDetailPage: React.FC = () => {
       // Include outreach in form data (only if there's actual data)
       const dataToSave = {
         ...formData,
+        customFields: {
+          ...formData.customFields,
+          offer_template: offerTemplate, // Save offer template
+        },
       };
 
       if (Object.keys(outreachData).length > 0) {
@@ -455,6 +488,30 @@ export const LeadDetailPage: React.FC = () => {
     );
   }
 
+  // Render offer preview with variables replaced
+  const renderPreview = () => {
+    if (!offerTemplate) {
+      return <em style={{ color: '#94a3b8' }}>No template yet. Start typing above to see a preview.</em>;
+    }
+
+    let preview = offerTemplate;
+
+    // Replace variables with actual data
+    const replacements: Record<string, string> = {
+      '{{name}}': formData.name || '[Name]',
+      '{{email}}': formData.email || '[Email]',
+      '{{company}}': formData.company || '[Company]',
+      '{{phone}}': formData.phone || '[Phone]',
+      '{{job}}': (formData.customFields?.job as string) || '[Job]',
+    };
+
+    Object.entries(replacements).forEach(([variable, value]) => {
+      preview = preview.replace(new RegExp(variable.replace(/[{}]/g, '\\$&'), 'g'), value);
+    });
+
+    return preview;
+  };
+
   return (
     <Box
       sx={{
@@ -550,6 +607,7 @@ export const LeadDetailPage: React.FC = () => {
           <Tabs value={tabValue} onChange={handleTabChange}>
             <Tab label="Details" />
             <Tab label="Outreach" />
+            <Tab label="Offer" />
             <Tab label="Activity" />
           </Tabs>
         </Box>
@@ -807,6 +865,61 @@ export const LeadDetailPage: React.FC = () => {
           {/* Outreach Tab */}
           <TabPanel value={tabValue} index={1}>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {/* Company Offer Section */}
+              {company?.offer?.blogIdea && (
+                <Paper
+                  sx={{
+                    p: 3,
+                    background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.05) 0%, rgba(118, 75, 162, 0.05) 100%)',
+                    border: '1px solid rgba(102, 126, 234, 0.2)',
+                    borderRadius: '12px',
+                  }}
+                >
+                  <Typography
+                    variant="subtitle2"
+                    sx={{
+                      fontWeight: 600,
+                      color: '#667eea',
+                      mb: 1,
+                      textTransform: 'uppercase',
+                      fontSize: '12px',
+                      letterSpacing: '0.5px',
+                    }}
+                  >
+                    Company Offer
+                  </Typography>
+                  <Typography
+                    variant="h6"
+                    sx={{
+                      fontWeight: 600,
+                      color: '#1e293b',
+                      mb: 0.5,
+                    }}
+                  >
+                    Blog Idea
+                  </Typography>
+                  <Typography
+                    variant="body1"
+                    sx={{
+                      color: '#64748b',
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    {company.offer.blogIdea}
+                  </Typography>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      display: 'block',
+                      mt: 2,
+                      color: '#94a3b8',
+                    }}
+                  >
+                    Last updated: {new Date(company.offer.updatedAt).toLocaleString()}
+                  </Typography>
+                </Paper>
+              )}
+
               {/* LinkedIn Outreach Section */}
               <Box>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
@@ -947,8 +1060,96 @@ export const LeadDetailPage: React.FC = () => {
             </Box>
           </TabPanel>
 
-          {/* Activity Tab */}
+          {/* Offer Tab */}
           <TabPanel value={tabValue} index={2}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+              {/* Template Editor */}
+              <Box>
+                <Typography variant="h6" sx={{ mb: 2, color: '#1e293b', fontWeight: 600 }}>
+                  Offer Template
+                </Typography>
+                <Typography variant="body2" sx={{ mb: 2, color: '#64748b' }}>
+                  Create a message template with variables. Use double curly braces for variables (e.g., {'{{name}}'}, {'{{company}}'}, {'{{job}}'}).
+                </Typography>
+
+                {/* Available Variables Chips */}
+                <Box sx={{ mb: 2, display: 'flex', gap: 1, flexWrap: 'wrap', alignItems: 'center' }}>
+                  <Typography variant="caption" sx={{ color: '#64748b', mr: 1 }}>
+                    Available variables:
+                  </Typography>
+                  {['{{name}}', '{{email}}', '{{company}}', '{{phone}}', '{{job}}'].map((variable) => (
+                    <Chip
+                      key={variable}
+                      label={variable}
+                      size="small"
+                      onClick={() => {
+                        // Insert variable at cursor position
+                        setOfferTemplate((prev) => prev + variable + ' ');
+                      }}
+                      sx={{
+                        bgcolor: '#e0e7ff',
+                        color: '#667eea',
+                        cursor: 'pointer',
+                        fontFamily: 'monospace',
+                        fontSize: '12px',
+                        '&:hover': {
+                          bgcolor: '#c7d2fe',
+                        },
+                      }}
+                    />
+                  ))}
+                </Box>
+
+                {/* Template TextField */}
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={12}
+                  value={offerTemplate}
+                  onChange={(e) => setOfferTemplate(e.target.value)}
+                  placeholder={`Hi {{name}},
+
+I noticed you work at {{company}} as a {{job}}. We specialize in...
+
+[Your offer details here]
+
+Best regards`}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      fontFamily: 'monospace',
+                      fontSize: '14px',
+                    },
+                  }}
+                />
+              </Box>
+
+              {/* Preview Section */}
+              <Box>
+                <Typography variant="h6" sx={{ mb: 2, color: '#1e293b', fontWeight: 600 }}>
+                  Preview (with current lead data)
+                </Typography>
+                <Box
+                  sx={{
+                    p: 3,
+                    bgcolor: '#f8fafc',
+                    borderRadius: '8px',
+                    border: '1px solid #e2e8f0',
+                    fontFamily: 'system-ui',
+                    fontSize: '14px',
+                    lineHeight: 1.6,
+                    color: '#1e293b',
+                    whiteSpace: 'pre-wrap',
+                    minHeight: '100px',
+                  }}
+                >
+                  {renderPreview()}
+                </Box>
+              </Box>
+            </Box>
+          </TabPanel>
+
+          {/* Activity Tab */}
+          <TabPanel value={tabValue} index={3}>
             {activityLoading ? (
               <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
                 <CircularProgress />

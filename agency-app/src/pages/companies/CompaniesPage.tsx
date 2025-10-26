@@ -22,10 +22,13 @@ import {
   subscribeToArchivedCompanies,
   unarchiveCompany,
   getLeadCountsForAllCompanies,
+  bulkUpdateCompanyFields,
 } from '../../services/api/companies';
 import { CompanyDialog } from '../../components/features/companies/CompanyDialog';
 import { CompanyTable } from '../../components/features/companies/CompanyTable';
 import { ArchivedCompaniesView } from '../../components/features/companies/ArchivedCompaniesView';
+import { CompanyBulkActionsToolbar } from '../../components/features/companies/CompanyBulkActionsToolbar';
+import { CompanyBulkEditDialog } from '../../components/features/companies/CompanyBulkEditDialog';
 import { TableColumnVisibilityMenu } from '../../components/features/crm/TableColumnVisibilityMenu';
 import {
   TableColumnConfig,
@@ -60,6 +63,10 @@ export const CompaniesPage: React.FC = () => {
   const [showArchivedView, setShowArchivedView] = useState(false);
   const [archivedCompaniesCount, setArchivedCompaniesCount] = useState(0);
   const [leadCounts, setLeadCounts] = useState<Map<string, number>>(new Map());
+
+  // Selection state for bulk actions
+  const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([]);
+  const [showBulkEditDialog, setShowBulkEditDialog] = useState(false);
 
   // Filter state
   const [filters, setFilters] = useState<CompanyFilterState>(DEFAULT_COMPANY_FILTER_STATE);
@@ -316,6 +323,93 @@ export const CompaniesPage: React.FC = () => {
     navigate(`/companies/${company.id}`);
   };
 
+  // Bulk selection handlers
+  const handleSelectCompany = (companyId: string, selected: boolean) => {
+    if (selected) {
+      setSelectedCompanyIds(prev => [...prev, companyId]);
+    } else {
+      setSelectedCompanyIds(prev => prev.filter(id => id !== companyId));
+    }
+  };
+
+  const handleSelectAll = (selected: boolean) => {
+    if (selected) {
+      setSelectedCompanyIds(filteredCompanies.map(c => c.id));
+    } else {
+      setSelectedCompanyIds([]);
+    }
+  };
+
+  const handleClearSelection = () => {
+    setSelectedCompanyIds([]);
+  };
+
+  // Bulk action handlers
+  const handleBulkEdit = () => {
+    setShowBulkEditDialog(true);
+  };
+
+  const handleBulkEditSave = async (updates: Partial<Company>) => {
+    try {
+      await bulkUpdateCompanyFields(selectedCompanyIds, updates);
+      handleClearSelection();
+    } catch (error) {
+      console.error('Error in bulk edit:', error);
+      alert('Failed to update companies. Please try again.');
+    }
+  };
+
+  const handleBulkExportCSV = () => {
+    const selectedCompanies = companies.filter(c => selectedCompanyIds.includes(c.id));
+
+    // Prepare CSV data
+    const csvRows = [
+      // Header row
+      ['Name', 'Website', 'Industry', 'Description', 'Lead Count'].join(','),
+      // Data rows
+      ...selectedCompanies.map(company =>
+        [
+          `"${company.name || ''}"`,
+          `"${company.website || ''}"`,
+          `"${company.industry || ''}"`,
+          `"${(company.description || '').replace(/"/g, '""')}"`,
+          company.leadCount || 0,
+        ].join(',')
+      ),
+    ];
+
+    const csvContent = csvRows.join('\n');
+    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+    const link = document.createElement('a');
+    const url = URL.createObjectURL(blob);
+
+    link.setAttribute('href', url);
+    link.setAttribute('download', `companies_export_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+
+    // Clear selection after export
+    handleClearSelection();
+  };
+
+  const handleBulkDelete = async () => {
+    if (!window.confirm(`Are you sure you want to delete ${selectedCompanyIds.length} ${selectedCompanyIds.length === 1 ? 'company' : 'companies'}?`)) {
+      return;
+    }
+
+    try {
+      const { deleteCompanies } = await import('../../services/api/companies');
+      await deleteCompanies(selectedCompanyIds);
+      handleClearSelection();
+    } catch (error) {
+      console.error('Error deleting companies:', error);
+      alert('Failed to delete companies. Please try again.');
+    }
+  };
+
   if (loading) {
     return (
       <Box
@@ -450,19 +544,45 @@ export const CompaniesPage: React.FC = () => {
         />
       ) : (
         <>
-          {/* Companies Table */}
+          {/* Content container with BulkActionsToolbar and Table */}
           <Box
             sx={{
               flex: 1,
               minHeight: 0,
-              overflow: 'hidden',
+              overflow: 'auto',
+              display: 'flex',
+              flexDirection: 'column',
             }}
           >
-            <CompanyTable
-              companies={filteredCompanies}
-              onView={handleViewCompany}
-              visibleColumns={tableColumns}
+            {/* Bulk Actions Toolbar */}
+            <CompanyBulkActionsToolbar
+              selectedCount={selectedCompanyIds.length}
+              onEditFields={handleBulkEdit}
+              onExportCSV={handleBulkExportCSV}
+              onDelete={handleBulkDelete}
+              onClear={handleClearSelection}
             />
+
+            {/* Companies Table */}
+            <Box
+              sx={{
+                flex: 1,
+                minHeight: 0,
+                overflow: 'hidden',
+              }}
+            >
+              <CompanyTable
+                companies={filteredCompanies}
+                onView={handleViewCompany}
+                visibleColumns={tableColumns}
+                selectedCompanyIds={selectedCompanyIds}
+                onSelectCompany={(companyId) => {
+                  const isSelected = selectedCompanyIds.includes(companyId);
+                  handleSelectCompany(companyId, !isSelected);
+                }}
+                onSelectAll={handleSelectAll}
+              />
+            </Box>
           </Box>
 
           {/* Add Company FAB */}
@@ -515,6 +635,14 @@ export const CompaniesPage: React.FC = () => {
               entityType="company"
             />
           )}
+
+          {/* Bulk Edit Dialog */}
+          <CompanyBulkEditDialog
+            open={showBulkEditDialog}
+            onClose={() => setShowBulkEditDialog(false)}
+            onSave={handleBulkEditSave}
+            selectedCount={selectedCompanyIds.length}
+          />
         </>
       )}
     </Box>

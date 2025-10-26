@@ -63,9 +63,19 @@ export async function buildLeadsTableColumns(leads: Lead[]): Promise<TableColumn
       .map((fieldName, index) => {
         const totalIndex = columns.length + index;
 
+        // Clean up label by removing section prefixes (linkedin_, email_)
+        const cleanFieldName = fieldName
+          .replace(/^linkedin_/, '')
+          .replace(/^email_/, '');
+
+        const label = cleanFieldName
+          .split('_')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
+
         return {
           id: `custom_${fieldName}`,
-          label: fieldName.charAt(0).toUpperCase() + fieldName.slice(1).replace(/_/g, ' '),
+          label: label,
           sortable: true,
           visible: totalIndex < 30, // Show first 30 total columns by default
           type: 'custom' as const,
@@ -108,9 +118,19 @@ export async function buildCompaniesTableColumns(companies: Company[]): Promise<
       .map((fieldName, index) => {
         const totalIndex = columns.length + index;
 
+        // Clean up label by removing section prefixes (linkedin_, email_)
+        const cleanFieldName = fieldName
+          .replace(/^linkedin_/, '')
+          .replace(/^email_/, '');
+
+        const label = cleanFieldName
+          .split('_')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
+
         return {
           id: `custom_${fieldName}`,
-          label: fieldName.charAt(0).toUpperCase() + fieldName.slice(1).replace(/_/g, ' '),
+          label: label,
           sortable: true,
           visible: totalIndex < 10, // Show first 10 total columns by default
           type: 'custom' as const,

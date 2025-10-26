@@ -22,6 +22,13 @@ export interface Company {
   archivedAt?: Date;
   archivedBy?: string; // User ID who archived the company
 
+  // Offer/Pitch for lead outreach
+  offer?: {
+    blogIdea: string; // The blog idea/topic to offer
+    createdAt: Date;
+    updatedAt: Date;
+  };
+
   // Writing Program Analysis
   writingProgramAnalysis?: {
     hasProgram: boolean;

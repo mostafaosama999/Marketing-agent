@@ -69,6 +69,19 @@ function convertToCompany(id: string, data: any): Company {
           : undefined,
       } : undefined,
     } : undefined,
+    offer: data.offer ? {
+      blogIdea: data.offer.blogIdea,
+      createdAt: data.offer.createdAt?.toDate
+        ? data.offer.createdAt.toDate()
+        : data.offer.createdAt
+        ? new Date(data.offer.createdAt)
+        : new Date(),
+      updatedAt: data.offer.updatedAt?.toDate
+        ? data.offer.updatedAt.toDate()
+        : data.offer.updatedAt
+        ? new Date(data.offer.updatedAt)
+        : new Date(),
+    } : undefined,
   };
 }
 
@@ -553,4 +566,69 @@ export function subscribeToArchivedCompanies(
       callback([]);
     }
   );
+}
+
+/**
+ * Bulk update company fields
+ * @param companyIds Array of company IDs to update
+ * @param updates Object containing fields to update
+ */
+export async function bulkUpdateCompanyFields(
+  companyIds: string[],
+  updates: Partial<Company>
+): Promise<void> {
+  try {
+    const BATCH_SIZE = 500;
+
+    // Process in batches of 500 (Firestore limit)
+    for (let i = 0; i < companyIds.length; i += BATCH_SIZE) {
+      const batchCompanyIds = companyIds.slice(i, i + BATCH_SIZE);
+      const batch = writeBatch(db);
+
+      batchCompanyIds.forEach((companyId) => {
+        const companyRef = doc(db, COMPANIES_COLLECTION, companyId);
+        const updateData: any = { ...updates };
+
+        // Add updatedAt timestamp
+        updateData.updatedAt = serverTimestamp();
+
+        batch.update(companyRef, updateData);
+      });
+
+      await batch.commit();
+    }
+
+    console.log('✅ Companies updated successfully:', companyIds.length);
+  } catch (error) {
+    console.error('Error bulk updating companies:', error);
+    throw new Error('Failed to update companies');
+  }
+}
+
+/**
+ * Bulk delete companies
+ * @param companyIds Array of company IDs to delete
+ */
+export async function deleteCompanies(companyIds: string[]): Promise<void> {
+  try {
+    const BATCH_SIZE = 500;
+
+    // Process in batches of 500 (Firestore limit)
+    for (let i = 0; i < companyIds.length; i += BATCH_SIZE) {
+      const batchCompanyIds = companyIds.slice(i, i + BATCH_SIZE);
+      const batch = writeBatch(db);
+
+      batchCompanyIds.forEach((companyId) => {
+        const companyRef = doc(db, COMPANIES_COLLECTION, companyId);
+        batch.delete(companyRef);
+      });
+
+      await batch.commit();
+    }
+
+    console.log('✅ Companies deleted successfully:', companyIds.length);
+  } catch (error) {
+    console.error('Error bulk deleting companies:', error);
+    throw new Error('Failed to delete companies');
+  }
 }

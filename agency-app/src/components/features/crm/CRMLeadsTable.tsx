@@ -20,9 +20,7 @@ import {
   TablePagination,
 } from '@mui/material';
 import {
-  Edit as EditIcon,
   KeyboardArrowDown as ExpandMoreIcon,
-  KeyboardArrowRight as ChevronRightIcon,
 } from '@mui/icons-material';
 import { Lead, LeadStatus } from '../../../types/lead';
 import { usePipelineConfigContext } from '../../../contexts/PipelineConfigContext';
@@ -32,6 +30,8 @@ interface CRMLeadsTableProps {
   leads: Lead[];
   onLeadClick: (lead: Lead) => void;
   onUpdateStatus: (leadId: string, status: LeadStatus) => void;
+  onUpdateLinkedInStatus: (leadId: string, status: string) => void;
+  onUpdateEmailStatus: (leadId: string, status: string) => void;
   selectedLeadIds: string[];
   onSelectLead: (leadId: string) => void;
   onSelectAll: (selected: boolean) => void;
@@ -72,6 +72,8 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
   leads,
   onLeadClick,
   onUpdateStatus,
+  onUpdateLinkedInStatus,
+  onUpdateEmailStatus,
   selectedLeadIds,
   onSelectLead,
   onSelectAll,
@@ -86,6 +88,10 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
   const [order, setOrder] = useState<SortDirection>('desc');
   const [statusMenuAnchor, setStatusMenuAnchor] = useState<null | HTMLElement>(null);
   const [selectedLeadForStatus, setSelectedLeadForStatus] = useState<Lead | null>(null);
+  const [linkedInMenuAnchor, setLinkedInMenuAnchor] = useState<null | HTMLElement>(null);
+  const [selectedLeadForLinkedIn, setSelectedLeadForLinkedIn] = useState<Lead | null>(null);
+  const [emailMenuAnchor, setEmailMenuAnchor] = useState<null | HTMLElement>(null);
+  const [selectedLeadForEmail, setSelectedLeadForEmail] = useState<Lead | null>(null);
   const [collapsedCompanies, setCollapsedCompanies] = useState<Set<string>>(new Set());
 
   // Pagination state
@@ -109,25 +115,6 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
       }
       return newSet;
     });
-  };
-
-  // Handle company group checkbox
-  const handleCompanySelect = (companyLeadIds: string[], selected: boolean) => {
-    if (selected) {
-      // Add all company leads to selection
-      companyLeadIds.forEach(id => {
-        if (!selectedLeadIds.includes(id)) {
-          onSelectLead(id);
-        }
-      });
-    } else {
-      // Remove all company leads from selection
-      companyLeadIds.forEach(id => {
-        if (selectedLeadIds.includes(id)) {
-          onSelectLead(id);
-        }
-      });
-    }
   };
 
   // Sorting handler
@@ -154,6 +141,44 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
       onUpdateStatus(selectedLeadForStatus.id, newStatus);
     }
     handleStatusMenuClose();
+  };
+
+  // LinkedIn menu handlers
+  const handleLinkedInClick = (event: React.MouseEvent<HTMLElement>, lead: Lead) => {
+    event.stopPropagation();
+    setLinkedInMenuAnchor(event.currentTarget);
+    setSelectedLeadForLinkedIn(lead);
+  };
+
+  const handleLinkedInMenuClose = () => {
+    setLinkedInMenuAnchor(null);
+    setSelectedLeadForLinkedIn(null);
+  };
+
+  const handleLinkedInStatusChange = (newStatus: string) => {
+    if (selectedLeadForLinkedIn) {
+      onUpdateLinkedInStatus(selectedLeadForLinkedIn.id, newStatus);
+    }
+    handleLinkedInMenuClose();
+  };
+
+  // Email menu handlers
+  const handleEmailClick = (event: React.MouseEvent<HTMLElement>, lead: Lead) => {
+    event.stopPropagation();
+    setEmailMenuAnchor(event.currentTarget);
+    setSelectedLeadForEmail(lead);
+  };
+
+  const handleEmailMenuClose = () => {
+    setEmailMenuAnchor(null);
+    setSelectedLeadForEmail(null);
+  };
+
+  const handleEmailStatusChange = (newStatus: string) => {
+    if (selectedLeadForEmail) {
+      onUpdateEmailStatus(selectedLeadForEmail.id, newStatus);
+    }
+    handleEmailMenuClose();
   };
 
   // Sort leads
@@ -229,21 +254,6 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
       return 0;
     });
   }, [leads, orderBy, order, displayColumns]);
-
-  // Group leads by company
-  const groupedLeads = useMemo(() => {
-    const groups: { [company: string]: Lead[] } = {};
-
-    sortedLeads.forEach(lead => {
-      const company = lead.company || lead.companyName || 'No Company';
-      if (!groups[company]) {
-        groups[company] = [];
-      }
-      groups[company].push(lead);
-    });
-
-    return groups;
-  }, [sortedLeads]);
 
   // Paginate leads (not companies)
   const paginatedLeads = useMemo(() => {
@@ -356,7 +366,22 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
         if (!status || status === 'not_sent') {
           return (
             <TableCell key={columnId}>
-              <Typography variant="body2" sx={{ fontSize: '11px', lineHeight: 1.2, color: 'text.secondary' }}>-</Typography>
+              <Chip
+                label="Not Sent"
+                size="small"
+                onClick={(e) => handleLinkedInClick(e, lead)}
+                sx={{
+                  bgcolor: '#f3f4f6',
+                  color: '#6b7280',
+                  fontWeight: 500,
+                  fontSize: '10px',
+                  height: '20px',
+                  cursor: 'pointer',
+                  '&:hover': {
+                    bgcolor: '#e5e7eb',
+                  },
+                }}
+              />
             </TableCell>
           );
         }
@@ -365,6 +390,7 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
           sent: 'Sent',
           opened: 'Opened',
           replied: 'Replied',
+          refused: 'Refused',
           no_response: 'No Response',
         };
         return (
@@ -372,12 +398,17 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
             <Chip
               label={labels[status] || status}
               size="small"
+              onClick={(e) => handleLinkedInClick(e, lead)}
               sx={{
                 bgcolor: colors.bg,
                 color: colors.color,
                 fontWeight: 500,
                 fontSize: '10px',
                 height: '20px',
+                cursor: 'pointer',
+                '&:hover': {
+                  opacity: 0.8,
+                },
               }}
             />
           </TableCell>
@@ -389,7 +420,22 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
         if (!status || status === 'not_sent') {
           return (
             <TableCell key={columnId}>
-              <Typography variant="body2" sx={{ fontSize: '11px', lineHeight: 1.2, color: 'text.secondary' }}>-</Typography>
+              <Chip
+                label="Not Sent"
+                size="small"
+                onClick={(e) => handleEmailClick(e, lead)}
+                sx={{
+                  bgcolor: '#f3f4f6',
+                  color: '#6b7280',
+                  fontWeight: 500,
+                  fontSize: '10px',
+                  height: '20px',
+                  cursor: 'pointer',
+                  '&:hover': {
+                    bgcolor: '#e5e7eb',
+                  },
+                }}
+              />
             </TableCell>
           );
         }
@@ -399,6 +445,7 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
           opened: 'Opened',
           replied: 'Replied',
           bounced: 'Bounced',
+          refused: 'Refused',
           no_response: 'No Response',
         };
         return (
@@ -406,12 +453,17 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
             <Chip
               label={labels[status] || status}
               size="small"
+              onClick={(e) => handleEmailClick(e, lead)}
               sx={{
                 bgcolor: colors.bg,
                 color: colors.color,
                 fontWeight: 500,
                 fontSize: '10px',
                 height: '20px',
+                cursor: 'pointer',
+                '&:hover': {
+                  opacity: 0.8,
+                },
               }}
             />
           </TableCell>
@@ -519,6 +571,7 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
                   width: 48,
                   py: 0,
                   px: 1,
+                  pl: 2,
                   height: '36px',
                 }}
               >
@@ -536,12 +589,13 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
               </TableCell>
 
               {/* Table columns */}
-              {displayColumns.map((column) => (
+              {displayColumns.map((column, index) => (
                 <TableCell
                   key={column.id}
                   sx={{
                     py: 0,
                     px: 1,
+                    ...(index === 0 && column.id === 'name' ? { pl: 3 } : {}),
                     fontSize: '10px',
                     fontWeight: 600,
                     color: '#64748b',
@@ -590,59 +644,62 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
               paginatedCompanies.map((companyName) => {
                 const companyLeads = paginatedGroupedLeads[companyName];
                 const isCollapsed = collapsedCompanies.has(companyName);
-                const companyLeadIds = companyLeads.map(l => l.id);
-                const allCompanySelected = companyLeadIds.every(id => selectedLeadIds.includes(id));
-                const someCompanySelected = companyLeadIds.some(id => selectedLeadIds.includes(id)) && !allCompanySelected;
 
                 return (
                   <React.Fragment key={companyName}>
                     {/* Company Header Row */}
                     <TableRow
                       sx={{
-                        bgcolor: '#f8fafc',
-                        height: '36px',
-                        '&:hover': { bgcolor: '#f1f5f9' },
+                        background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.15) 0%, rgba(118, 75, 162, 0.15) 100%)',
+                        height: '40px',
+                        borderTop: '2px solid rgba(102, 126, 234, 0.5)',
+                        borderBottom: '2px solid rgba(102, 126, 234, 0.5)',
+                        '&:hover': {
+                          background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.2) 0%, rgba(118, 75, 162, 0.2) 100%)',
+                        },
                         '& .MuiTableCell-root': {
-                          borderBottom: '2px solid #e2e8f0',
+                          borderBottom: 'none',
                           py: 0,
                           px: 1,
-                          height: '36px',
+                          height: '40px',
+                          fontWeight: 600,
                         },
                       }}
                     >
-                      <TableCell padding="checkbox" sx={{ py: 0, px: 1 }}>
-                        <Checkbox
-                          checked={allCompanySelected}
-                          indeterminate={someCompanySelected}
-                          onChange={(e) => handleCompanySelect(companyLeadIds, e.target.checked)}
-                          size="small"
-                          sx={{
-                            color: '#667eea',
-                            '&.Mui-checked': { color: '#667eea' },
-                            '&.MuiCheckbox-indeterminate': { color: '#667eea' },
-                          }}
-                        />
-                      </TableCell>
-                      <TableCell colSpan={displayColumns.length}>
-                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                      <TableCell colSpan={displayColumns.length + 1}>
+                        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, pl: 1 }}>
                           <IconButton
                             size="small"
                             onClick={() => toggleCompanyCollapse(companyName)}
-                            sx={{ p: 0.25 }}
+                            sx={{
+                              p: 0.25,
+                              color: '#667eea',
+                              transition: 'all 0.3s ease',
+                              '&:hover': {
+                                bgcolor: 'rgba(102, 126, 234, 0.2)',
+                                transform: 'scale(1.1)',
+                              },
+                            }}
                           >
-                            {isCollapsed ? <ChevronRightIcon sx={{ fontSize: '16px' }} /> : <ExpandMoreIcon sx={{ fontSize: '16px' }} />}
+                            <ExpandMoreIcon
+                              sx={{
+                                fontSize: '18px',
+                                transform: isCollapsed ? 'rotate(-90deg)' : 'rotate(0deg)',
+                                transition: 'transform 0.3s ease',
+                              }}
+                            />
                           </IconButton>
-                          <Typography variant="body2" sx={{ fontWeight: 600, fontSize: '11px', lineHeight: 1.2 }}>
+                          <Typography variant="body2" sx={{ fontWeight: 700, fontSize: '12px', lineHeight: 1.2, color: '#667eea' }}>
                             {companyName}
                           </Typography>
                           <Chip
                             label={`${companyLeads.length} lead${companyLeads.length > 1 ? 's' : ''}`}
                             size="small"
                             sx={{
-                              height: '18px',
-                              fontSize: '9px',
-                              bgcolor: '#e0e7ff',
-                              color: '#667eea',
+                              height: '20px',
+                              fontSize: '10px',
+                              bgcolor: '#667eea',
+                              color: 'white',
                               fontWeight: 600,
                             }}
                           />
@@ -650,7 +707,7 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
                       </TableCell>
                     </TableRow>
 
-                    {/* Company Leads */}
+                    {/* Company Leads - Direct rows without nested table */}
                     {!isCollapsed && companyLeads.map((lead) => {
                       const isSelected = selectedLeadIds.includes(lead.id);
                       return (
@@ -772,6 +829,77 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
             />
           </MenuItem>
         ))}
+      </Menu>
+
+      {/* LinkedIn Status Menu */}
+      <Menu
+        anchorEl={linkedInMenuAnchor}
+        open={Boolean(linkedInMenuAnchor)}
+        onClose={handleLinkedInMenuClose}
+      >
+        {[
+          { value: 'not_sent', label: 'Not Sent' },
+          { value: 'sent', label: 'Sent' },
+          { value: 'opened', label: 'Opened' },
+          { value: 'replied', label: 'Replied' },
+          { value: 'refused', label: 'Refused' },
+          { value: 'no_response', label: 'No Response' },
+        ].map((option) => {
+          const colors = getOutreachStatusColor(option.value);
+          return (
+            <MenuItem
+              key={option.value}
+              onClick={() => handleLinkedInStatusChange(option.value)}
+              selected={selectedLeadForLinkedIn?.outreach?.linkedIn?.status === option.value}
+            >
+              <Chip
+                label={option.label}
+                size="small"
+                sx={{
+                  bgcolor: colors.bg,
+                  color: colors.color,
+                  fontWeight: 500,
+                }}
+              />
+            </MenuItem>
+          );
+        })}
+      </Menu>
+
+      {/* Email Status Menu */}
+      <Menu
+        anchorEl={emailMenuAnchor}
+        open={Boolean(emailMenuAnchor)}
+        onClose={handleEmailMenuClose}
+      >
+        {[
+          { value: 'not_sent', label: 'Not Sent' },
+          { value: 'sent', label: 'Sent' },
+          { value: 'opened', label: 'Opened' },
+          { value: 'replied', label: 'Replied' },
+          { value: 'bounced', label: 'Bounced' },
+          { value: 'refused', label: 'Refused' },
+          { value: 'no_response', label: 'No Response' },
+        ].map((option) => {
+          const colors = getOutreachStatusColor(option.value);
+          return (
+            <MenuItem
+              key={option.value}
+              onClick={() => handleEmailStatusChange(option.value)}
+              selected={selectedLeadForEmail?.outreach?.email?.status === option.value}
+            >
+              <Chip
+                label={option.label}
+                size="small"
+                sx={{
+                  bgcolor: colors.bg,
+                  color: colors.color,
+                  fontWeight: 500,
+                }}
+              />
+            </MenuItem>
+          );
+        })}
       </Menu>
     </Box>
   );

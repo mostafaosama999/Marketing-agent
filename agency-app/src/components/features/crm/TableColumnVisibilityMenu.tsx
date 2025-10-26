@@ -11,25 +11,40 @@ import {
   Typography,
   Box,
   Divider,
+  IconButton,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
 } from '@mui/material';
-import { ViewColumn as ViewColumnIcon, DragIndicator as DragIndicatorIcon } from '@mui/icons-material';
+import {
+  ViewColumn as ViewColumnIcon,
+  DragIndicator as DragIndicatorIcon,
+  Delete as DeleteIcon,
+} from '@mui/icons-material';
 import { TableColumnConfig } from '../../../types/table';
 
 interface TableColumnVisibilityMenuProps {
   columns: TableColumnConfig[];
   onToggleVisibility: (columnId: string, visible: boolean) => void;
   onReorderColumns: (reorderedColumns: TableColumnConfig[]) => void;
+  onDeleteColumn?: (columnId: string, fieldName: string) => Promise<void>;
 }
 
 export function TableColumnVisibilityMenu({
   columns,
   onToggleVisibility,
   onReorderColumns,
+  onDeleteColumn,
 }: TableColumnVisibilityMenuProps) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
   const [draggedIndex, setDraggedIndex] = useState<number | null>(null);
   const [dragOverIndex, setDragOverIndex] = useState<number | null>(null);
+  const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
+  const [columnToDelete, setColumnToDelete] = useState<TableColumnConfig | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -90,6 +105,32 @@ export function TableColumnVisibilityMenu({
   const handleDragEnd = () => {
     setDraggedIndex(null);
     setDragOverIndex(null);
+  };
+
+  const handleDeleteClick = (e: React.MouseEvent, column: TableColumnConfig) => {
+    e.stopPropagation();
+    setColumnToDelete(column);
+    setDeleteDialogOpen(true);
+  };
+
+  const handleDeleteConfirm = async () => {
+    if (!columnToDelete || !onDeleteColumn || !columnToDelete.fieldName) return;
+
+    setIsDeleting(true);
+    try {
+      await onDeleteColumn(columnToDelete.id, columnToDelete.fieldName);
+      setDeleteDialogOpen(false);
+      setColumnToDelete(null);
+    } catch (error) {
+      console.error('Error deleting column:', error);
+    } finally {
+      setIsDeleting(false);
+    }
+  };
+
+  const handleDeleteCancel = () => {
+    setDeleteDialogOpen(false);
+    setColumnToDelete(null);
   };
 
   return (
@@ -247,6 +288,24 @@ export function TableColumnVisibilityMenu({
                   </Typography>
                 }
               />
+
+              {/* Delete Button - only for custom columns with fieldName */}
+              {column.type === 'custom' && column.fieldName && onDeleteColumn && (
+                <IconButton
+                  size="small"
+                  onClick={(e) => handleDeleteClick(e, column)}
+                  sx={{
+                    ml: 'auto',
+                    color: '#94a3b8',
+                    '&:hover': {
+                      color: '#ef4444',
+                      backgroundColor: 'rgba(239, 68, 68, 0.1)',
+                    },
+                  }}
+                >
+                  <DeleteIcon sx={{ fontSize: '18px' }} />
+                </IconButton>
+              )}
             </MenuItem>
           );
         })}
@@ -269,6 +328,76 @@ export function TableColumnVisibilityMenu({
           </>
         )}
       </Menu>
+
+      {/* Delete Confirmation Dialog */}
+      <Dialog
+        open={deleteDialogOpen}
+        onClose={handleDeleteCancel}
+        PaperProps={{
+          sx: {
+            borderRadius: '12px',
+            minWidth: '400px',
+          },
+        }}
+      >
+        <DialogTitle
+          sx={{
+            fontWeight: 600,
+            fontSize: '18px',
+            color: '#1e293b',
+          }}
+        >
+          Delete Column?
+        </DialogTitle>
+        <DialogContent>
+          <DialogContentText
+            sx={{
+              color: '#64748b',
+              fontSize: '14px',
+              mb: 2,
+            }}
+          >
+            Are you sure you want to delete the column "<strong>{columnToDelete?.label}</strong>"?
+          </DialogContentText>
+          <DialogContentText
+            sx={{
+              color: '#ef4444',
+              fontSize: '13px',
+              fontWeight: 500,
+            }}
+          >
+            ⚠️ This will permanently remove this custom field from ALL leads. This action cannot be undone.
+          </DialogContentText>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button
+            onClick={handleDeleteCancel}
+            disabled={isDeleting}
+            sx={{
+              textTransform: 'none',
+              color: '#64748b',
+              fontWeight: 500,
+            }}
+          >
+            Cancel
+          </Button>
+          <Button
+            onClick={handleDeleteConfirm}
+            disabled={isDeleting}
+            variant="contained"
+            sx={{
+              textTransform: 'none',
+              fontWeight: 500,
+              background: '#ef4444',
+              '&:hover': {
+                background: '#dc2626',
+              },
+            }}
+          >
+            {isDeleting ? 'Deleting...' : 'Delete'}
+          </Button>
+        </DialogActions>
+      </Dialog>
     </>
   );
 }
