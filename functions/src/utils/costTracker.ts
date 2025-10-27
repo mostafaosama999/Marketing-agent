@@ -77,7 +77,18 @@ export function calculateCost(
 }
 
 /**
+ * Map service names to categories for users.apiUsage.ai.breakdown
+ */
+const SERVICE_TO_CATEGORY: Record<string, string> = {
+  "blog-qualification": "blogAnalysis",
+  "writing-program-finder": "writingProgram",
+  "writing-program-analyzer": "writingProgram",
+  "idea-generation": "other",
+};
+
+/**
  * Log API cost to Firestore
+ * Updates BOTH apiCosts collection (detailed records) AND users.apiUsage (dashboard aggregates)
  */
 export async function logApiCost(
   userId: string,
@@ -110,11 +121,29 @@ export async function logApiCost(
       },
     };
 
-    // Save to apiCosts collection
+    // Save to apiCosts collection (detailed audit trail)
     await db.collection("apiCosts").add(costRecord);
 
     console.log(
       `Logged API cost: $${costInfo.totalCost.toFixed(4)} for ${service} (user: ${userId})`
+    );
+
+    // Update user's aggregated API usage stats (for dashboard)
+    const userRef = db.collection("users").doc(userId);
+    const category = SERVICE_TO_CATEGORY[service] || "other";
+
+    await userRef.update({
+      "apiUsage.ai.totalCost": FieldValue.increment(costInfo.totalCost),
+      "apiUsage.ai.totalTokens": FieldValue.increment(costInfo.totalTokens),
+      "apiUsage.ai.totalCalls": FieldValue.increment(1),
+      "apiUsage.ai.lastUpdated": FieldValue.serverTimestamp(),
+      [`apiUsage.ai.breakdown.${category}.cost`]: FieldValue.increment(costInfo.totalCost),
+      [`apiUsage.ai.breakdown.${category}.tokens`]: FieldValue.increment(costInfo.totalTokens),
+      [`apiUsage.ai.breakdown.${category}.calls`]: FieldValue.increment(1),
+    });
+
+    console.log(
+      `Updated user ${userId} API usage: +$${costInfo.totalCost.toFixed(4)} (${costInfo.totalTokens} tokens, ${category})`
     );
 
     // Update lead's total API costs if leadId provided

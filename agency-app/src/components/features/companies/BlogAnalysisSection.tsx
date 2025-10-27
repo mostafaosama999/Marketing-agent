@@ -30,15 +30,6 @@ export const BlogAnalysisSection: React.FC<BlogAnalysisSectionProps> = ({
   const [dialogOpen, setDialogOpen] = useState(false);
   const analysis = company.blogAnalysis;
 
-  // Debug logs
-  console.log('🔍 BlogAnalysisSection Debug:', {
-    hasAnalysis: !!analysis,
-    blogUrl: analysis?.blogUrl,
-    rssFeedUrl: analysis?.rssFeedUrl,
-    lastPostUrl: analysis?.lastPostUrl,
-    fullAnalysis: analysis
-  });
-
   const handleOpenDialog = () => {
     setDialogOpen(true);
   };
@@ -231,48 +222,34 @@ export const BlogAnalysisSection: React.FC<BlogAnalysisSectionProps> = ({
           )}
 
           {/* Last Post URL Display */}
-          {analysis?.lastPostUrl && (() => {
-            const href = analysis.lastPostUrl.startsWith('http')
-              ? analysis.lastPostUrl
-              : `https://${analysis.lastPostUrl}`;
-            console.log('🔗 Rendering Last Post URL:', {
-              lastPostUrl: analysis.lastPostUrl,
-              href,
-              hasHttp: analysis.lastPostUrl.startsWith('http')
-            });
-            return (
-              <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: '#64748b' }}>
-                Last Post URL:{' '}
-                <a
-                  href={href}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  onClick={(e) => {
-                    console.log('🖱️ Last Post URL clicked:', href);
-                  }}
-                  style={{
-                    color: '#667eea',
-                    textDecoration: 'none',
-                    fontWeight: 500,
-                    borderBottom: '1px solid rgba(102, 126, 234, 0.3)',
-                    transition: 'all 0.2s',
-                    cursor: 'pointer',
-                  }}
-                  onMouseEnter={(e) => {
-                    console.log('🖱️ Mouse enter on Last Post URL');
-                    e.currentTarget.style.borderBottomColor = '#667eea';
-                    e.currentTarget.style.color = '#5568d3';
-                  }}
-                  onMouseLeave={(e) => {
-                    e.currentTarget.style.borderBottomColor = 'rgba(102, 126, 234, 0.3)';
-                    e.currentTarget.style.color = '#667eea';
-                  }}
-                >
-                  {analysis.lastPostUrl}
-                </a>
-              </Typography>
-            );
-          })()}
+          {analysis?.lastPostUrl && (
+            <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: '#64748b' }}>
+              Last Post URL:{' '}
+              <a
+                href={analysis.lastPostUrl.startsWith('http') ? analysis.lastPostUrl : `https://${analysis.lastPostUrl}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                style={{
+                  color: '#667eea',
+                  textDecoration: 'none',
+                  fontWeight: 500,
+                  borderBottom: '1px solid rgba(102, 126, 234, 0.3)',
+                  transition: 'all 0.2s',
+                  cursor: 'pointer',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderBottomColor = '#667eea';
+                  e.currentTarget.style.color = '#5568d3';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderBottomColor = 'rgba(102, 126, 234, 0.3)';
+                  e.currentTarget.style.color = '#667eea';
+                }}
+              >
+                {analysis.lastPostUrl}
+              </a>
+            </Typography>
+          )}
         </Box>
 
         <Box sx={{ textAlign: 'right' }}>
@@ -460,12 +437,7 @@ export const BlogAnalysisSection: React.FC<BlogAnalysisSectionProps> = ({
               icon={<StarIcon />}
               title="Content Quality"
               value={`${getRatingStars(analysis.blogNature.rating)} ${analysis.blogNature.rating.toUpperCase()}`}
-              subtitle={
-                analysis.blogNature.reasoning ||
-                (analysis.blogNature.isTechnical
-                  ? 'Technical & Bottom-of-funnel'
-                  : 'Top-of-funnel content')
-              }
+              subtitle="Not working for now"
               status={
                 analysis.blogNature.rating === 'high'
                   ? 'success'
@@ -475,19 +447,18 @@ export const BlogAnalysisSection: React.FC<BlogAnalysisSectionProps> = ({
               }
               badges={getContentBadges()}
             >
-              {analysis.contentSummary && !analysis.blogNature.reasoning && (
-                <Typography
-                  variant="caption"
-                  sx={{
-                    color: '#64748b',
-                    fontSize: '10px',
-                    display: 'block',
-                    mt: 1,
-                  }}
-                >
-                  {analysis.contentSummary.split('\n').slice(0, 2).join(', ')}
-                </Typography>
-              )}
+              <Typography
+                variant="caption"
+                sx={{
+                  color: '#f59e0b',
+                  fontSize: '11px',
+                  display: 'block',
+                  mt: 1,
+                  fontWeight: 600,
+                }}
+              >
+                Feature temporarily disabled
+              </Typography>
             </AnalysisCard>
           </Grid>
         </Grid>

@@ -50,7 +50,7 @@ async function scrapeWebsite(url: string): Promise<string> {
  * Find RSS feed URL for a website
  */
 async function findRssFeed(website: string): Promise<string | null> {
-  const baseUrl = website.replace(/\/$/, "");
+  const baseUrl = website.replace(/\/+$/, "");  // Remove all trailing slashes
 
   // Platform-specific RSS patterns
   const platformPatterns: Record<string, (url: string) => string> = {
@@ -616,7 +616,7 @@ async function analyzeBlogWithAI(
   }
 
   // Try to find blog page (for general analysis if no post URLs provided)
-  const baseUrl = website.replace(/\/$/, "");
+  const baseUrl = website.replace(/\/+$/, "");  // Remove all trailing slashes
   const blogPages = ["/blog", "/blogs", "/news", "/articles", "/resources", "/insights", "/posts", ""];
 
   let blogContent: string | null = null;
@@ -1101,7 +1101,7 @@ export async function qualifyCompany(
     result.blogPostCount = blogActivity.postCount;
     result.lastBlogCreatedAt = blogActivity.lastPostDate || "";
     result.blogLinkUsed = blogActivity.rssUrl || "";
-    result.rssFeedUrl = blogActivity.rssUrl || undefined;
+    result.rssFeedUrl = blogActivity.rssUrl || null;  // Use null instead of undefined for Firebase serialization
     result.rssFeedFound = blogActivity.recentPosts.length > 0;
     result.analysisMethod = "RSS";
 

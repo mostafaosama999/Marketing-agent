@@ -13,11 +13,13 @@ import {
   Chip,
   Alert,
   Link,
+  TextField,
 } from '@mui/material';
 import {
   CheckCircle as CheckIcon,
   Error as ErrorIcon,
   OpenInNew as OpenIcon,
+  Edit as EditIcon,
 } from '@mui/icons-material';
 
 interface URLOption {
@@ -43,16 +45,27 @@ export const WritingProgramUrlSelectionDialog: React.FC<WritingProgramUrlSelecti
   loading = false,
 }) => {
   const [selectedUrl, setSelectedUrl] = useState<string>('');
+  const [customUrl, setCustomUrl] = useState<string>('');
+  const [useCustom, setUseCustom] = useState<boolean>(false);
 
   const handleSelect = () => {
-    if (selectedUrl) {
-      onSelect(selectedUrl);
+    const urlToUse = useCustom ? customUrl.trim() : selectedUrl;
+    if (urlToUse) {
+      onSelect(urlToUse);
     }
   };
 
   const handleClose = () => {
     setSelectedUrl('');
+    setCustomUrl('');
+    setUseCustom(false);
     onClose();
+  };
+
+  const handleCustomUrlChange = (value: string) => {
+    setCustomUrl(value);
+    setUseCustom(true);
+    setSelectedUrl('');
   };
 
   const getConfidenceColor = (confidence?: 'high' | 'medium' | 'low') => {
@@ -242,6 +255,43 @@ export const WritingProgramUrlSelectionDialog: React.FC<WritingProgramUrlSelecti
           ))}
         </RadioGroup>
 
+        {/* Custom URL Input */}
+        <Box
+          sx={{
+            mt: 3,
+            p: 2,
+            border: '1px solid',
+            borderColor: useCustom ? '#667eea' : '#e2e8f0',
+            borderRadius: 2,
+            backgroundColor: useCustom ? 'rgba(102, 126, 234, 0.04)' : 'transparent',
+            transition: 'all 0.2s',
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+            <EditIcon sx={{ color: '#667eea', fontSize: 20 }} />
+            <Typography variant="body2" sx={{ fontWeight: 600, color: '#1e293b' }}>
+              Or Enter Custom URL
+            </Typography>
+          </Box>
+          <TextField
+            fullWidth
+            placeholder="https://example.com/write-for-us"
+            value={customUrl}
+            onChange={(e) => handleCustomUrlChange(e.target.value)}
+            size="small"
+            sx={{
+              '& .MuiOutlinedInput-root': {
+                '&.Mui-focused fieldset': {
+                  borderColor: '#667eea',
+                },
+              },
+            }}
+          />
+          <Typography variant="caption" sx={{ color: '#64748b', display: 'block', mt: 1 }}>
+            Enter a custom writing program URL if the ones above are incorrect
+          </Typography>
+        </Box>
+
         {urls.length === 0 && (
           <Box sx={{ textAlign: 'center', py: 4 }}>
             <Typography variant="body2" color="text.secondary">
@@ -265,7 +315,7 @@ export const WritingProgramUrlSelectionDialog: React.FC<WritingProgramUrlSelecti
         </Button>
         <Button
           onClick={handleSelect}
-          disabled={!selectedUrl || loading}
+          disabled={(!selectedUrl && !customUrl.trim()) || loading}
           variant="contained"
           sx={{
             textTransform: 'none',

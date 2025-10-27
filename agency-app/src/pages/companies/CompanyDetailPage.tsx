@@ -65,7 +65,6 @@ import {
   getWebsiteFieldMapping,
 } from '../../services/api/websiteFieldMappingService';
 import { useAuth } from '../../contexts/AuthContext';
-import { incrementAICost } from '../../services/api/userCostTracking';
 
 export const CompanyDetailPage: React.FC = () => {
   const { companyId } = useParams<{ companyId: string }>();
@@ -172,14 +171,6 @@ export const CompanyDetailPage: React.FC = () => {
           setTimeout(() => navigate('/companies'), 2000);
           return;
         }
-
-        console.log('📊 CompanyDetailPage - Loaded company data:', {
-          companyId,
-          companyName: companyData.name,
-          hasBlogAnalysis: !!companyData.blogAnalysis,
-          blogAnalysis: companyData.blogAnalysis,
-          fullCompanyData: companyData
-        });
 
         setCompany(companyData);
         setFormData({
@@ -462,6 +453,18 @@ export const CompanyDetailPage: React.FC = () => {
   };
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+    // Check if user is trying to open in new tab/window (Ctrl+Click, Cmd+Click, Middle-click, or Shift+Click)
+    // In these cases, don't change the current tab
+    const nativeEvent = event.nativeEvent as MouseEvent;
+    if (
+      nativeEvent.ctrlKey ||   // Ctrl+Click (Windows/Linux)
+      nativeEvent.metaKey ||   // Cmd+Click (Mac)
+      nativeEvent.shiftKey ||  // Shift+Click (new window)
+      nativeEvent.button === 1 // Middle mouse button
+    ) {
+      return; // Don't change tab in current window
+    }
+
     setSearchParams({ tab: tabNames[newValue] });
   };
 
@@ -496,14 +499,7 @@ export const CompanyDetailPage: React.FC = () => {
       // Phase 1: Find URLs
       const result = await analyzeWritingProgram(website);
 
-      // Track AI cost for current user
-      if (user && result.costInfo) {
-        await incrementAICost(user.uid, {
-          cost: result.costInfo.totalCost,
-          tokens: result.costInfo.totalTokens,
-          category: 'writingProgram',
-        });
-      }
+      // Note: Cost tracking is now handled automatically by Cloud Functions
 
       if (result.validUrls.length === 0 && (!result.aiSuggestions || result.aiSuggestions.length === 0)) {
         // No URLs found at all - show detailed message with checked patterns
@@ -592,14 +588,7 @@ export const CompanyDetailPage: React.FC = () => {
         company.id
       );
 
-      // Track AI cost for current user
-      if (user && detailsResult.costInfo) {
-        await incrementAICost(user.uid, {
-          cost: detailsResult.costInfo.totalCost,
-          tokens: detailsResult.costInfo.totalTokens,
-          category: 'writingProgram',
-        });
-      }
+      // Note: Cost tracking is now handled automatically by Cloud Functions
 
       const analysisData: any = {
         hasProgram: detailsResult.hasProgram,
@@ -681,21 +670,24 @@ export const CompanyDetailPage: React.FC = () => {
 
     try {
       const result = await analyzeBlog(company.name, urlToAnalyze);
-      console.log('🔬 analyzeBlog result:', {
-        companyName: company.name,
-        urlToAnalyze,
-        result,
-        lastPostUrl: result.lastPostUrl
-      });
 
-      // Track AI cost for current user
-      if (user && result.costInfo) {
-        await incrementAICost(user.uid, {
-          cost: result.costInfo.totalCost,
-          tokens: result.costInfo.totalTokens,
-          category: 'blogAnalysis',
-        });
+      // Check if RSS feed was found
+      if (!result.rssFeedUrl && result.blogPostCount === 0) {
+        throw new Error(
+          'No RSS feed found at this URL. Please verify the blog URL is correct and has an RSS feed. ' +
+          'Common RSS feed patterns: /feed, /rss, /feed.xml, /blog/feed'
+        );
       }
+
+      // Warn if no posts found but RSS exists
+      if (result.rssFeedUrl && result.blogPostCount === 0) {
+        setBlogAnalysisError(
+          'RSS feed found but no blog posts detected. The blog might be empty or inactive.'
+        );
+        // Continue with analysis but show warning
+      }
+
+      // Note: Cost tracking is now handled automatically by Cloud Functions
 
       // Parse writer information
       const authorNames = result.authorNames ? result.authorNames.split(', ') : [];
@@ -755,7 +747,7 @@ export const CompanyDetailPage: React.FC = () => {
         blogNature,
         isDeveloperB2BSaas: result.isDeveloperB2BSaas,
         contentSummary: result.contentSummary,
-        blogUrl: result.blogLinkUsed || null,
+        blogUrl: urlToAnalyze, // Store the original URL user entered/selected
         lastPostUrl: result.lastPostUrl || null,
         rssFeedUrl: result.rssFeedUrl || null,
         lastAnalyzedAt: new Date(),
@@ -779,11 +771,6 @@ export const CompanyDetailPage: React.FC = () => {
         ...company,
         blogAnalysis: analysisData,
       };
-      console.log('📝 handleAnalyzeBlog - Updating company state:', {
-        analysisData,
-        updatedCompany,
-        lastPostUrl: analysisData.lastPostUrl
-      });
       setCompany(updatedCompany);
     } catch (err: any) {
       console.error('Error analyzing blog:', err);

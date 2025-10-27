@@ -467,13 +467,31 @@ export const BlogUrlSelectionDialog: React.FC<BlogUrlSelectionDialogProps> = ({
                               {searchedUrl}
                             </a>
                           </Typography>
-                          <Button
-                            size="small"
-                            onClick={handleSearch}
-                            sx={{ mt: 1, textTransform: 'none', color: '#667eea' }}
-                          >
-                            Search Again
-                          </Button>
+                          <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                            <Button
+                              size="small"
+                              onClick={handleSearch}
+                              sx={{ textTransform: 'none', color: '#667eea' }}
+                            >
+                              Search Again
+                            </Button>
+                            <Button
+                              size="small"
+                              onClick={() => setMode('manual')}
+                              variant="outlined"
+                              sx={{
+                                textTransform: 'none',
+                                borderColor: '#667eea',
+                                color: '#667eea',
+                                '&:hover': {
+                                  borderColor: '#5568d3',
+                                  bgcolor: 'rgba(102, 126, 234, 0.08)',
+                                },
+                              }}
+                            >
+                              Use Different URL
+                            </Button>
+                          </Box>
                         </Box>
                       )}
                     </Box>
