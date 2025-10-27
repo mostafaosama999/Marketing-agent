@@ -24,7 +24,7 @@ import {
   Settings,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
-import { useNavigate, useLocation } from 'react-router-dom';
+import { useLocation, Link } from 'react-router-dom';
 
 // Styled Components for Modern Design
 const ModernAppBar = styled(AppBar)(({ theme }) => ({
@@ -165,7 +165,6 @@ const UserSection = styled(Box)(({ theme }) => ({
 
 const Navbar: React.FC = () => {
   const { userProfile, logout } = useAuth();
-  const navigate = useNavigate();
   const location = useLocation();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
 
@@ -231,13 +230,13 @@ const Navbar: React.FC = () => {
           {getNavItems().map((item) => {
             const Icon = item.icon;
             const isActive = location.pathname === item.path;
-            
+
             return (
               <NavButton
                 key={item.path}
                 isActive={isActive}
                 startIcon={<Icon />}
-                onClick={() => navigate(item.path)}
+                {...({ component: Link, to: item.path } as any)}
               >
                 {item.label}
               </NavButton>

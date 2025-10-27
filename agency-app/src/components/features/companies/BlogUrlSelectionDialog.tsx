@@ -443,7 +443,29 @@ export const BlogUrlSelectionDialog: React.FC<BlogUrlSelectionDialogProps> = ({
                               fontFamily: 'monospace',
                             }}
                           >
-                            {searchedUrl}
+                            <a
+                              href={searchedUrl.startsWith('http') ? searchedUrl : `https://${searchedUrl}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              style={{
+                                color: '#667eea',
+                                textDecoration: 'none',
+                                fontWeight: 500,
+                                borderBottom: '1px solid rgba(102, 126, 234, 0.3)',
+                                transition: 'all 0.2s',
+                                cursor: 'pointer',
+                              }}
+                              onMouseEnter={(e) => {
+                                e.currentTarget.style.borderBottomColor = '#667eea';
+                                e.currentTarget.style.color = '#5568d3';
+                              }}
+                              onMouseLeave={(e) => {
+                                e.currentTarget.style.borderBottomColor = 'rgba(102, 126, 234, 0.3)';
+                                e.currentTarget.style.color = '#667eea';
+                              }}
+                            >
+                              {searchedUrl}
+                            </a>
                           </Typography>
                           <Button
                             size="small"

@@ -30,6 +30,15 @@ export const BlogAnalysisSection: React.FC<BlogAnalysisSectionProps> = ({
   const [dialogOpen, setDialogOpen] = useState(false);
   const analysis = company.blogAnalysis;
 
+  // Debug logs
+  console.log('🔍 BlogAnalysisSection Debug:', {
+    hasAnalysis: !!analysis,
+    blogUrl: analysis?.blogUrl,
+    rssFeedUrl: analysis?.rssFeedUrl,
+    lastPostUrl: analysis?.lastPostUrl,
+    fullAnalysis: analysis
+  });
+
   const handleOpenDialog = () => {
     setDialogOpen(true);
   };
@@ -168,10 +177,24 @@ export const BlogAnalysisSection: React.FC<BlogAnalysisSectionProps> = ({
             <Typography variant="caption" sx={{ display: 'block', mt: 1, color: '#64748b' }}>
               Blog URL:{' '}
               <a
-                href={analysis.blogUrl}
+                href={analysis.blogUrl.startsWith('http') ? analysis.blogUrl : `https://${analysis.blogUrl}`}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{ color: '#667eea', textDecoration: 'none', fontWeight: 500 }}
+                style={{
+                  color: '#667eea',
+                  textDecoration: 'none',
+                  fontWeight: 500,
+                  borderBottom: '1px solid rgba(102, 126, 234, 0.3)',
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderBottomColor = '#667eea';
+                  e.currentTarget.style.color = '#5568d3';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderBottomColor = 'rgba(102, 126, 234, 0.3)';
+                  e.currentTarget.style.color = '#667eea';
+                }}
               >
                 {analysis.blogUrl}
               </a>
@@ -186,12 +209,70 @@ export const BlogAnalysisSection: React.FC<BlogAnalysisSectionProps> = ({
                 href={analysis.rssFeedUrl}
                 target="_blank"
                 rel="noopener noreferrer"
-                style={{ color: '#667eea', textDecoration: 'none' }}
+                style={{
+                  color: '#667eea',
+                  textDecoration: 'none',
+                  fontWeight: 500,
+                  borderBottom: '1px solid rgba(102, 126, 234, 0.3)',
+                  transition: 'all 0.2s',
+                }}
+                onMouseEnter={(e) => {
+                  e.currentTarget.style.borderBottomColor = '#667eea';
+                  e.currentTarget.style.color = '#5568d3';
+                }}
+                onMouseLeave={(e) => {
+                  e.currentTarget.style.borderBottomColor = 'rgba(102, 126, 234, 0.3)';
+                  e.currentTarget.style.color = '#667eea';
+                }}
               >
                 {analysis.rssFeedUrl}
               </a>
             </Typography>
           )}
+
+          {/* Last Post URL Display */}
+          {analysis?.lastPostUrl && (() => {
+            const href = analysis.lastPostUrl.startsWith('http')
+              ? analysis.lastPostUrl
+              : `https://${analysis.lastPostUrl}`;
+            console.log('🔗 Rendering Last Post URL:', {
+              lastPostUrl: analysis.lastPostUrl,
+              href,
+              hasHttp: analysis.lastPostUrl.startsWith('http')
+            });
+            return (
+              <Typography variant="caption" sx={{ display: 'block', mt: 0.5, color: '#64748b' }}>
+                Last Post URL:{' '}
+                <a
+                  href={href}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  onClick={(e) => {
+                    console.log('🖱️ Last Post URL clicked:', href);
+                  }}
+                  style={{
+                    color: '#667eea',
+                    textDecoration: 'none',
+                    fontWeight: 500,
+                    borderBottom: '1px solid rgba(102, 126, 234, 0.3)',
+                    transition: 'all 0.2s',
+                    cursor: 'pointer',
+                  }}
+                  onMouseEnter={(e) => {
+                    console.log('🖱️ Mouse enter on Last Post URL');
+                    e.currentTarget.style.borderBottomColor = '#667eea';
+                    e.currentTarget.style.color = '#5568d3';
+                  }}
+                  onMouseLeave={(e) => {
+                    e.currentTarget.style.borderBottomColor = 'rgba(102, 126, 234, 0.3)';
+                    e.currentTarget.style.color = '#667eea';
+                  }}
+                >
+                  {analysis.lastPostUrl}
+                </a>
+              </Typography>
+            );
+          })()}
         </Box>
 
         <Box sx={{ textAlign: 'right' }}>

@@ -1,6 +1,6 @@
 // src/pages/companies/CompanyDetailPage.tsx
 import React, { useState, useEffect } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -70,6 +70,8 @@ import { incrementAICost } from '../../services/api/userCostTracking';
 export const CompanyDetailPage: React.FC = () => {
   const { companyId } = useParams<{ companyId: string }>();
   const navigate = useNavigate();
+  const location = useLocation();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
 
   const [company, setCompany] = useState<Company | null>(null);
@@ -78,6 +80,7 @@ export const CompanyDetailPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [duplicateWarning, setDuplicateWarning] = useState('');
+  const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
 
   // Form data
   const [formData, setFormData] = useState<CompanyFormData>({
@@ -88,8 +91,10 @@ export const CompanyDetailPage: React.FC = () => {
     customFields: {},
   });
 
-  // Tab state
-  const [tabValue, setTabValue] = useState(0);
+  // Tab state - derive from URL search params
+  const tabNames = ['details', 'leads', 'writing-program', 'blog', 'apollo', 'offer'];
+  const tabParam = searchParams.get('tab') || 'details';
+  const tabValue = Math.max(0, tabNames.indexOf(tabParam));
 
   // Leads state
   const [companyLeads, setCompanyLeads] = useState<Lead[]>([]);
@@ -168,6 +173,14 @@ export const CompanyDetailPage: React.FC = () => {
           return;
         }
 
+        console.log('📊 CompanyDetailPage - Loaded company data:', {
+          companyId,
+          companyName: companyData.name,
+          hasBlogAnalysis: !!companyData.blogAnalysis,
+          blogAnalysis: companyData.blogAnalysis,
+          fullCompanyData: companyData
+        });
+
         setCompany(companyData);
         setFormData({
           name: companyData.name || '',
@@ -209,6 +222,24 @@ export const CompanyDetailPage: React.FC = () => {
 
     loadCompanies();
   }, []);
+
+  // Detect unsaved changes
+  useEffect(() => {
+    if (!company) return;
+
+    // Normalize values for comparison
+    const normalizeValue = (val: any) => val?.trim() || '';
+
+    // Compare form data with original company data
+    const hasChanges =
+      normalizeValue(formData.name) !== normalizeValue(company.name) ||
+      normalizeValue(formData.website) !== normalizeValue(company.website) ||
+      normalizeValue(formData.industry) !== normalizeValue(company.industry) ||
+      normalizeValue(formData.description) !== normalizeValue(company.description) ||
+      JSON.stringify(formData.customFields || {}) !== JSON.stringify(company.customFields || {});
+
+    setHasUnsavedChanges(hasChanges);
+  }, [formData, company]);
 
   // Subscribe to company leads
   useEffect(() => {
@@ -431,7 +462,7 @@ export const CompanyDetailPage: React.FC = () => {
   };
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    setTabValue(newValue);
+    setSearchParams({ tab: tabNames[newValue] });
   };
 
   // Handle writing program analysis (Phase 1: Find URLs)
@@ -650,6 +681,12 @@ export const CompanyDetailPage: React.FC = () => {
 
     try {
       const result = await analyzeBlog(company.name, urlToAnalyze);
+      console.log('🔬 analyzeBlog result:', {
+        companyName: company.name,
+        urlToAnalyze,
+        result,
+        lastPostUrl: result.lastPostUrl
+      });
 
       // Track AI cost for current user
       if (user && result.costInfo) {
@@ -738,10 +775,16 @@ export const CompanyDetailPage: React.FC = () => {
       });
 
       // Update local state
-      setCompany({
+      const updatedCompany = {
         ...company,
         blogAnalysis: analysisData,
+      };
+      console.log('📝 handleAnalyzeBlog - Updating company state:', {
+        analysisData,
+        updatedCompany,
+        lastPostUrl: analysisData.lastPostUrl
       });
+      setCompany(updatedCompany);
     } catch (err: any) {
       console.error('Error analyzing blog:', err);
       setBlogAnalysisError(err.message || 'Failed to analyze blog');
@@ -1018,22 +1061,24 @@ export const CompanyDetailPage: React.FC = () => {
             <Box sx={{ display: 'flex', gap: 1 }}>
               {!blogAnalysisLoading && !writingProgramLoading && (
                 <>
-                  <Button
-                    startIcon={<SaveIcon />}
-                    variant="contained"
-                    onClick={handleSave}
-                    disabled={saving}
-                    sx={{
-                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                      textTransform: 'none',
-                      fontWeight: 600,
-                      '&:hover': {
-                        background: 'linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%)',
-                      },
-                    }}
-                  >
-                    {saving ? <CircularProgress size={24} sx={{ color: 'white' }} /> : 'Save'}
-                  </Button>
+                  {hasUnsavedChanges && (
+                    <Button
+                      startIcon={<SaveIcon />}
+                      variant="contained"
+                      onClick={handleSave}
+                      disabled={saving}
+                      sx={{
+                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        textTransform: 'none',
+                        fontWeight: 600,
+                        '&:hover': {
+                          background: 'linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%)',
+                        },
+                      }}
+                    >
+                      {saving ? <CircularProgress size={24} sx={{ color: 'white' }} /> : 'Save'}
+                    </Button>
+                  )}
                   <IconButton
                     onClick={handleArchiveToggle}
                     sx={{
@@ -1065,12 +1110,12 @@ export const CompanyDetailPage: React.FC = () => {
         {/* Tabs */}
         <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 4 }}>
           <Tabs value={tabValue} onChange={handleTabChange}>
-            <Tab label="Details" />
-            <Tab label={`Leads (${companyLeads.length})`} />
-            <Tab label="Writing Program" />
-            <Tab label="Blog" />
-            <Tab label="Apollo Enrichment" />
-            <Tab label="Offer" />
+            <Tab label="Details" {...({ component: Link, to: `?tab=details` } as any)} />
+            <Tab label={`Leads (${companyLeads.length})`} {...({ component: Link, to: `?tab=leads` } as any)} />
+            <Tab label="Writing Program" {...({ component: Link, to: `?tab=writing-program` } as any)} />
+            <Tab label="Blog" {...({ component: Link, to: `?tab=blog` } as any)} />
+            <Tab label="Apollo Enrichment" {...({ component: Link, to: `?tab=apollo` } as any)} />
+            <Tab label="Offer" {...({ component: Link, to: `?tab=offer` } as any)} />
           </Tabs>
         </Box>
 

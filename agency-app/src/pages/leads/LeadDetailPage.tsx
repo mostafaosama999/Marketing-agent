@@ -1,6 +1,6 @@
 // src/pages/leads/LeadDetailPage.tsx
 import React, { useState, useEffect, useMemo } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import {
   Box,
   Button,
@@ -81,6 +81,7 @@ function TabPanel(props: TabPanelProps) {
 export const LeadDetailPage: React.FC = () => {
   const { leadId } = useParams<{ leadId: string }>();
   const navigate = useNavigate();
+  const [searchParams, setSearchParams] = useSearchParams();
   const { user } = useAuth();
   const { stages, getLabel } = usePipelineConfigContext();
 
@@ -89,8 +90,10 @@ export const LeadDetailPage: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
 
-  // Tab state
-  const [tabValue, setTabValue] = useState(0);
+  // Tab state - derive from URL search params
+  const tabNames = ['details', 'outreach', 'offer', 'activity'];
+  const tabParam = searchParams.get('tab') || 'details';
+  const tabValue = Math.max(0, tabNames.indexOf(tabParam));
 
   // Activity state
   const [activityLoading, setActivityLoading] = useState(false);
@@ -441,7 +444,7 @@ export const LeadDetailPage: React.FC = () => {
   };
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    setTabValue(newValue);
+    setSearchParams({ tab: tabNames[newValue] });
   };
 
   const formatDate = (dateString: string) => {
@@ -968,10 +971,10 @@ export const LeadDetailPage: React.FC = () => {
         {/* Tabs */}
         <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 4 }}>
           <Tabs value={tabValue} onChange={handleTabChange}>
-            <Tab label="Details" />
-            <Tab label="Outreach" />
-            <Tab label="Offer" />
-            <Tab label="Activity" />
+            <Tab label="Details" {...({ component: Link, to: `?tab=details` } as any)} />
+            <Tab label="Outreach" {...({ component: Link, to: `?tab=outreach` } as any)} />
+            <Tab label="Offer" {...({ component: Link, to: `?tab=offer` } as any)} />
+            <Tab label="Activity" {...({ component: Link, to: `?tab=activity` } as any)} />
           </Tabs>
         </Box>
 
