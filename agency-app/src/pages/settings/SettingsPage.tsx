@@ -12,10 +12,13 @@ import {
   Paper,
   CircularProgress,
   Divider,
+  IconButton,
+  InputAdornment,
 } from '@mui/material';
 import {
   Save as SaveIcon,
   ContentCopy as CopyIcon,
+  Check as CheckIcon,
   Person as PersonIcon,
   Business as BusinessIcon,
   Article as ArticleIcon,
@@ -27,7 +30,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { getSettings, updateSettings, subscribeToSettings } from '../../services/api/settings';
 import { AppSettings, DEFAULT_TEMPLATE_VARIABLES, TemplateVariable } from '../../types/settings';
-import { AI_PROMPTS, PROMPT_CATEGORIES } from '../../data/prompts';
+import { AI_PROMPTS, PROMPT_CATEGORIES, PromptMetadata } from '../../data/prompts';
 import PromptCard from '../../components/settings/PromptCard';
 import { subscribeToLeads } from '../../services/api/leads';
 import { subscribeToCompanies } from '../../services/api/companies';
@@ -72,6 +75,14 @@ export const SettingsPage: React.FC = () => {
   // Settings state
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [offerTemplate, setOfferTemplate] = useState('');
+  const [offerHeadline, setOfferHeadline] = useState('');
+
+  // Copy button states
+  const [headlineCopied, setHeadlineCopied] = useState(false);
+  const [messageCopied, setMessageCopied] = useState(false);
+
+  // Custom prompts state (loaded from localStorage)
+  const [customPrompts, setCustomPrompts] = useState<Record<string, PromptMetadata>>({});
 
   // Leads, companies, and dynamic template variables
   const [leads, setLeads] = useState<Lead[]>([]);
@@ -86,6 +97,7 @@ export const SettingsPage: React.FC = () => {
         const data = await getSettings();
         setSettings(data);
         setOfferTemplate(data.offerTemplate);
+        setOfferHeadline(data.offerHeadline || '');
       } catch (err) {
         console.error('Error loading settings:', err);
         setError('Failed to load settings');
@@ -100,6 +112,7 @@ export const SettingsPage: React.FC = () => {
     const unsubscribe = subscribeToSettings((updatedSettings) => {
       setSettings(updatedSettings);
       setOfferTemplate(updatedSettings.offerTemplate);
+      setOfferHeadline(updatedSettings.offerHeadline || '');
     });
 
     return () => unsubscribe();
@@ -131,6 +144,37 @@ export const SettingsPage: React.FC = () => {
     }
   }, [leads, companies]);
 
+  // Load custom prompts from localStorage on mount
+  useEffect(() => {
+    const saved = localStorage.getItem('custom_prompts');
+    if (saved) {
+      try {
+        setCustomPrompts(JSON.parse(saved));
+      } catch (err) {
+        console.error('Error loading custom prompts:', err);
+      }
+    }
+  }, []);
+
+  // Save custom prompt
+  const handleSavePrompt = (updatedPrompt: PromptMetadata) => {
+    const newCustomPrompts = {
+      ...customPrompts,
+      [updatedPrompt.id]: updatedPrompt,
+    };
+    setCustomPrompts(newCustomPrompts);
+    localStorage.setItem('custom_prompts', JSON.stringify(newCustomPrompts));
+    setSuccess(`Prompt "${updatedPrompt.name}" saved successfully!`);
+    setTimeout(() => setSuccess(null), 3000);
+  };
+
+  // Get merged prompt (custom overrides default)
+  const getPrompt = (promptId: string): PromptMetadata => {
+    const defaultPrompt = AI_PROMPTS.find(p => p.id === promptId);
+    const customPrompt = customPrompts[promptId];
+    return customPrompt || defaultPrompt!;
+  };
+
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     setTabValue(newValue);
   };
@@ -143,7 +187,7 @@ export const SettingsPage: React.FC = () => {
     setSuccess(null);
 
     try {
-      await updateSettings({ offerTemplate }, user.uid);
+      await updateSettings({ offerTemplate, offerHeadline }, user.uid);
       setSuccess('Offer template saved successfully!');
 
       // Clear success message after 3 seconds
@@ -153,6 +197,27 @@ export const SettingsPage: React.FC = () => {
       setError(err.message || 'Failed to save settings');
     } finally {
       setSaving(false);
+    }
+  };
+
+  // Handle copy to clipboard with feedback
+  const handleCopyHeadline = async () => {
+    try {
+      await navigator.clipboard.writeText(offerHeadline);
+      setHeadlineCopied(true);
+      setTimeout(() => setHeadlineCopied(false), 3000);
+    } catch (err) {
+      console.error('Failed to copy headline:', err);
+    }
+  };
+
+  const handleCopyMessage = async () => {
+    try {
+      await navigator.clipboard.writeText(offerTemplate);
+      setMessageCopied(true);
+      setTimeout(() => setMessageCopied(false), 3000);
+    } catch (err) {
+      console.error('Failed to copy message:', err);
     }
   };
 
@@ -227,9 +292,7 @@ export const SettingsPage: React.FC = () => {
   };
 
   // Generate preview with sample data
-  const templatePreview = useMemo(() => {
-    if (!offerTemplate) return 'No template yet. Start typing above to see a preview.';
-
+  const { headlinePreview, templatePreview } = useMemo(() => {
     // Create sample lead data for preview (includes custom fields)
     const sampleLead: Partial<Lead> = {
       name: 'John Doe',
@@ -258,8 +321,19 @@ export const SettingsPage: React.FC = () => {
     // Create sample company data for preview
     const sampleCompany: Company | undefined = companies[0]; // Use first company if available
 
-    return replaceTemplateVariables(offerTemplate, sampleLead, sampleCompany);
-  }, [offerTemplate, companies]);
+    const headlineText = offerHeadline
+      ? replaceTemplateVariables(offerHeadline, sampleLead, sampleCompany)
+      : '';
+
+    const messageText = offerTemplate
+      ? replaceTemplateVariables(offerTemplate, sampleLead, sampleCompany)
+      : 'No template yet. Start typing above to see a preview.';
+
+    return {
+      headlinePreview: headlineText,
+      templatePreview: messageText,
+    };
+  }, [offerTemplate, offerHeadline, companies]);
 
   const formatDate = (date: Date) => {
     return new Date(date).toLocaleString('en-US', {
@@ -465,29 +539,91 @@ export const SettingsPage: React.FC = () => {
                 })}
               </Paper>
 
-              {/* Template Editor */}
-              <TextField
-                fullWidth
-                multiline
-                rows={12}
-                value={offerTemplate}
-                onChange={(e) => setOfferTemplate(e.target.value)}
-                placeholder="Enter your offer template here... Use double curly braces for variables (e.g., {{name}}, {{company}})."
-                variant="outlined"
-                sx={{
-                  mb: 2,
-                  '& .MuiOutlinedInput-root': {
-                    fontFamily: 'monospace',
-                    fontSize: '14px',
-                    '&:hover fieldset': {
-                      borderColor: '#667eea',
+              {/* Headline Field */}
+              <Box sx={{ mb: 3 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, color: '#1e293b' }}>
+                  Offer Headline
+                </Typography>
+                <TextField
+                  fullWidth
+                  value={offerHeadline}
+                  onChange={(e) => setOfferHeadline(e.target.value)}
+                  placeholder="Enter your offer headline... (e.g., New Blog Idea: {{company_chosen_idea}})"
+                  variant="outlined"
+                  InputProps={{
+                    endAdornment: (
+                      <InputAdornment position="end">
+                        <IconButton
+                          onClick={handleCopyHeadline}
+                          edge="end"
+                          size="small"
+                          sx={{
+                            color: headlineCopied ? '#10b981' : '#94a3b8',
+                            '&:hover': {
+                              color: headlineCopied ? '#10b981' : '#667eea',
+                            },
+                          }}
+                        >
+                          {headlineCopied ? <CheckIcon /> : <CopyIcon />}
+                        </IconButton>
+                      </InputAdornment>
+                    ),
+                  }}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      fontSize: '14px',
+                      '&:hover fieldset': {
+                        borderColor: '#667eea',
+                      },
+                      '&.Mui-focused fieldset': {
+                        borderColor: '#667eea',
+                      },
                     },
-                    '&.Mui-focused fieldset': {
-                      borderColor: '#667eea',
+                  }}
+                />
+              </Box>
+
+              {/* Template Editor (Message Body) */}
+              <Box sx={{ mb: 2, position: 'relative' }}>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#1e293b' }}>
+                    Message Body
+                  </Typography>
+                  <IconButton
+                    onClick={handleCopyMessage}
+                    size="small"
+                    sx={{
+                      color: messageCopied ? '#10b981' : '#94a3b8',
+                      '&:hover': {
+                        color: messageCopied ? '#10b981' : '#667eea',
+                      },
+                    }}
+                  >
+                    {messageCopied ? <CheckIcon /> : <CopyIcon />}
+                  </IconButton>
+                </Box>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={12}
+                  value={offerTemplate}
+                  onChange={(e) => setOfferTemplate(e.target.value)}
+                  placeholder="Enter your offer message here... Use double curly braces for variables (e.g., {{name}}, {{company}})."
+                  variant="outlined"
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      fontFamily: 'monospace',
+                      fontSize: '14px',
+                      '&:hover fieldset': {
+                        borderColor: '#667eea',
+                      },
+                      '&.Mui-focused fieldset': {
+                        borderColor: '#667eea',
+                      },
                     },
-                  },
-                }}
-              />
+                  }}
+                />
+              </Box>
 
               {/* Character Count */}
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
@@ -517,6 +653,22 @@ export const SettingsPage: React.FC = () => {
                   minHeight: 120,
                 }}
               >
+                {/* Headline Preview */}
+                {headlinePreview && (
+                  <Typography
+                    variant="subtitle1"
+                    sx={{
+                      fontWeight: 600,
+                      mb: 2,
+                      color: '#1e293b',
+                      fontFamily: '"Inter", sans-serif',
+                    }}
+                  >
+                    Headline: {headlinePreview}
+                  </Typography>
+                )}
+
+                {/* Message Preview */}
                 <Typography
                   variant="body2"
                   sx={{
@@ -568,17 +720,10 @@ export const SettingsPage: React.FC = () => {
                 blog analysis, and more. Click on any prompt to expand and view its full configuration.
               </Typography>
 
-              {/* Note about editing */}
-              <Alert severity="info" sx={{ mb: 4 }}>
-                <Typography variant="body2">
-                  <strong>Read-Only Mode:</strong> Currently viewing prompts in read-only mode. Editing
-                  functionality will be available in a future update.
-                </Typography>
-              </Alert>
 
               {/* Group prompts by category */}
               {PROMPT_CATEGORIES.map((category) => {
-                const categoryPrompts = AI_PROMPTS.filter((p) => p.category === category);
+                const categoryPrompts = AI_PROMPTS.filter((p) => p.category === category && p.id !== 'linkedin-condensed-insights');
                 if (categoryPrompts.length === 0) return null;
 
                 return (
@@ -609,9 +754,35 @@ export const SettingsPage: React.FC = () => {
                       />
                     </Typography>
 
-                    {categoryPrompts.map((prompt) => (
-                      <PromptCard key={prompt.id} prompt={prompt} />
-                    ))}
+                    {categoryPrompts.map((defaultPrompt) => {
+                      const prompt = getPrompt(defaultPrompt.id);
+                      const isCustomized = !!customPrompts[defaultPrompt.id];
+                      return (
+                        <Box key={defaultPrompt.id} sx={{ position: 'relative' }}>
+                          {isCustomized && (
+                            <Chip
+                              label="Customized"
+                              size="small"
+                              sx={{
+                                position: 'absolute',
+                                top: 16,
+                                right: 16,
+                                zIndex: 1,
+                                bgcolor: '#f59e0b',
+                                color: 'white',
+                                fontWeight: 600,
+                                fontSize: '11px',
+                              }}
+                            />
+                          )}
+                          <PromptCard
+                            prompt={prompt}
+                            editable={true}
+                            onSave={handleSavePrompt}
+                          />
+                        </Box>
+                      );
+                    })}
                   </Box>
                 );
               })}

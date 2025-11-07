@@ -7,8 +7,10 @@ export interface TableColumnConfig {
   visible: boolean;
   type: 'default' | 'custom';
   order: number; // Order position in the table
-  fieldType?: 'text' | 'number' | 'date' | 'select' | 'boolean'; // Only for custom fields
+  section?: 'general' | 'linkedin' | 'email'; // Section for visual grouping and styling
+  fieldType?: 'text' | 'number' | 'date' | 'select' | 'dropdown' | 'boolean'; // Only for custom fields
   fieldName?: string; // Only for custom fields (used to access customFields[fieldName])
+  dropdownOptions?: string[]; // For dropdown/select fields - available options
 }
 
 // Column preferences type for localStorage
@@ -16,13 +18,13 @@ export type ColumnPreferences = Record<string, { visible: boolean; order: number
 
 // Leads table columns
 export const DEFAULT_LEADS_TABLE_COLUMNS: TableColumnConfig[] = [
-  { id: 'name', label: 'Name', sortable: true, visible: true, type: 'default', order: 0 },
-  { id: 'email', label: 'Email', sortable: true, visible: true, type: 'default', order: 1 },
-  { id: 'company', label: 'Company', sortable: true, visible: true, type: 'default', order: 2 },
-  { id: 'status', label: 'Status', sortable: true, visible: true, type: 'default', order: 3 },
-  { id: 'linkedin_status', label: 'LinkedIn', sortable: true, visible: true, type: 'default', order: 4 },
-  { id: 'email_outreach_status', label: 'Email Outreach', sortable: true, visible: true, type: 'default', order: 5 },
-  { id: 'createdAt', label: 'Created', sortable: true, visible: true, type: 'default', order: 6 },
+  { id: 'name', label: 'Name', sortable: true, visible: true, type: 'default', order: 0, section: 'general' },
+  { id: 'email', label: 'Email', sortable: true, visible: true, type: 'default', order: 1, section: 'email' },
+  { id: 'company', label: 'Company', sortable: true, visible: true, type: 'default', order: 2, section: 'general' },
+  { id: 'status', label: 'Status', sortable: true, visible: true, type: 'default', order: 3, section: 'general' },
+  { id: 'linkedin_status', label: 'LinkedIn', sortable: true, visible: true, type: 'default', order: 4, section: 'linkedin' },
+  { id: 'email_outreach_status', label: 'Email Outreach', sortable: true, visible: true, type: 'default', order: 5, section: 'email' },
+  { id: 'createdAt', label: 'Created', sortable: true, visible: true, type: 'default', order: 6, section: 'general' },
 ];
 
 // Companies table columns

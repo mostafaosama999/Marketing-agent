@@ -16,13 +16,22 @@ import {
   Chip,
   Link,
   Checkbox,
+  Menu,
+  MenuItem,
+  Popover,
 } from '@mui/material';
 import {
   OpenInNew as OpenInNewIcon,
   Business as BusinessIcon,
 } from '@mui/icons-material';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { Company } from '../../../types/crm';
 import { TableColumnConfig } from '../../../types/table';
+import { FieldDefinition } from '../../../types/fieldDefinitions';
+import { getDropdownFieldDefinitions } from '../../../services/api/fieldDefinitionsService';
+import { updateCompanyCustomField } from '../../../services/api/companies';
 
 interface CompanyTableProps {
   companies: Array<Company & { leadCount: number }>;
@@ -49,6 +58,17 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
   const [orderBy, setOrderBy] = useState<string>('name');
   const [order, setOrder] = useState<SortDirection>('asc');
 
+  // Dropdown field definitions
+  const [fieldDefinitions, setFieldDefinitions] = useState<FieldDefinition[]>([]);
+  const [customFieldMenuAnchor, setCustomFieldMenuAnchor] = useState<null | HTMLElement>(null);
+  const [selectedCompanyForCustomField, setSelectedCompanyForCustomField] = useState<Company | null>(null);
+  const [selectedCustomFieldName, setSelectedCustomFieldName] = useState<string | null>(null);
+
+  // Date picker state
+  const [datePickerAnchor, setDatePickerAnchor] = useState<null | HTMLElement>(null);
+  const [selectedCompanyForDate, setSelectedCompanyForDate] = useState<Company | null>(null);
+  const [selectedDateFieldName, setSelectedDateFieldName] = useState<string | null>(null);
+
   // Pagination state
   const [page, setPage] = useState(() => {
     const saved = localStorage.getItem('companies_table_page');
@@ -59,11 +79,120 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
     return saved ? parseInt(saved, 10) : 25;
   });
 
+  // Fetch dropdown field definitions on mount
+  useEffect(() => {
+    const fetchFieldDefinitions = async () => {
+      try {
+        const definitions = await getDropdownFieldDefinitions('company');
+        setFieldDefinitions(definitions);
+      } catch (error) {
+        console.error('Error fetching field definitions:', error);
+      }
+    };
+
+    fetchFieldDefinitions();
+  }, []);
+
   // Sorting handler
   const handleRequestSort = (fieldId: string) => {
     const isAsc = orderBy === fieldId && order === 'asc';
     setOrder(isAsc ? 'desc' : 'asc');
     setOrderBy(fieldId);
+  };
+
+  // Custom field dropdown menu handlers
+  const handleCustomFieldClick = (
+    event: React.MouseEvent<HTMLElement>,
+    company: Company,
+    fieldName: string
+  ) => {
+    event.stopPropagation();
+    setCustomFieldMenuAnchor(event.currentTarget);
+    setSelectedCompanyForCustomField(company);
+    setSelectedCustomFieldName(fieldName);
+  };
+
+  const handleCustomFieldMenuClose = () => {
+    setCustomFieldMenuAnchor(null);
+    setSelectedCompanyForCustomField(null);
+    setSelectedCustomFieldName(null);
+  };
+
+  const handleCustomFieldChange = async (newValue: string) => {
+    if (selectedCompanyForCustomField && selectedCustomFieldName) {
+      try {
+        await updateCompanyCustomField(
+          selectedCompanyForCustomField.id,
+          selectedCustomFieldName,
+          newValue
+        );
+      } catch (error) {
+        console.error('Error updating custom field:', error);
+      }
+    }
+    handleCustomFieldMenuClose();
+  };
+
+  // Helper function to get dropdown options for a field
+  const getDropdownOptions = (fieldName: string): string[] => {
+    const fieldDef = fieldDefinitions.find(def => def.name === fieldName);
+    return fieldDef?.options || [];
+  };
+
+  // Helper function to check if a custom field is a dropdown
+  const isDropdownField = (fieldName: string): boolean => {
+    return fieldDefinitions.some(def => def.name === fieldName);
+  };
+
+  // Date picker handlers
+  const handleDateFieldClick = (
+    event: React.MouseEvent<HTMLElement>,
+    company: Company,
+    fieldName: string
+  ) => {
+    event.stopPropagation();
+    setDatePickerAnchor(event.currentTarget);
+    setSelectedCompanyForDate(company);
+    setSelectedDateFieldName(fieldName);
+  };
+
+  const handleDatePickerClose = () => {
+    setDatePickerAnchor(null);
+    setSelectedCompanyForDate(null);
+    setSelectedDateFieldName(null);
+  };
+
+  const handleDateChange = async (newDate: Date | null) => {
+    if (selectedCompanyForDate && selectedDateFieldName && newDate) {
+      try {
+        // Convert to ISO string for storage
+        const isoDate = newDate.toISOString();
+        await updateCompanyCustomField(
+          selectedCompanyForDate.id,
+          selectedDateFieldName,
+          isoDate
+        );
+      } catch (error) {
+        console.error('Error updating date field:', error);
+      }
+    }
+    handleDatePickerClose();
+  };
+
+  // Helper function to check if a custom field is a date
+  const isDateField = (fieldName: string): boolean => {
+    return fieldDefinitions.some(def => def.name === fieldName && def.fieldType === 'date');
+  };
+
+  // Helper function to parse date string to Date object
+  const parseDateValue = (value: any): Date | null => {
+    if (!value) return null;
+    try {
+      const date = new Date(value);
+      return isNaN(date.getTime()) ? null : date;
+    } catch {
+      return null;
+    }
   };
 
   // Sort companies
@@ -347,6 +476,65 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
             );
           }
 
+          // Check if this is a dropdown field (check column.fieldType first, then fallback to fieldDefinitions)
+          const isDropdown = column.fieldType === 'dropdown' || isDropdownField(column.fieldName);
+
+          if (isDropdown) {
+            return (
+              <TableCell key={columnId}>
+                <Chip
+                  label={String(value)}
+                  size="small"
+                  onClick={(e) => handleCustomFieldClick(e, company, column.fieldName!)}
+                  sx={{
+                    fontSize: '10px',
+                    height: '20px',
+                    cursor: 'pointer',
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    color: 'white',
+                    '&:hover': {
+                      background: 'linear-gradient(135deg, #5568d3 0%, #6b408e 100%)',
+                    },
+                  }}
+                />
+              </TableCell>
+            );
+          }
+
+          // Check if this is a date field (check column.fieldType first, then fallback to fieldDefinitions)
+          const isDate = column.fieldType === 'date' || isDateField(column.fieldName);
+
+          if (isDate) {
+            const dateValue = parseDateValue(value);
+            const displayDate = dateValue
+              ? dateValue.toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                })
+              : String(value);
+
+            return (
+              <TableCell key={columnId}>
+                <Chip
+                  label={displayDate}
+                  size="small"
+                  onClick={(e) => handleDateFieldClick(e, company, column.fieldName!)}
+                  sx={{
+                    fontSize: '10px',
+                    height: '20px',
+                    cursor: 'pointer',
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    color: 'white',
+                    '&:hover': {
+                      background: 'linear-gradient(135deg, #5568d3 0%, #6b408e 100%)',
+                    },
+                  }}
+                />
+              </TableCell>
+            );
+          }
+
           // Check if value is a URL
           const isUrl = typeof value === 'string' &&
                         (value.startsWith('http://') || value.startsWith('https://'));
@@ -603,6 +791,71 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
           },
         }}
       />
+
+      {/* Custom field dropdown menu */}
+      <Menu
+        anchorEl={customFieldMenuAnchor}
+        open={Boolean(customFieldMenuAnchor)}
+        onClose={handleCustomFieldMenuClose}
+        PaperProps={{
+          sx: {
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            borderRadius: '8px',
+            minWidth: 160,
+          }
+        }}
+      >
+        {selectedCustomFieldName && getDropdownOptions(selectedCustomFieldName).map((option) => (
+          <MenuItem
+            key={option}
+            onClick={() => handleCustomFieldChange(option)}
+            sx={{
+              fontSize: '13px',
+              py: 1,
+              '&:hover': {
+                bgcolor: 'rgba(102, 126, 234, 0.1)',
+              },
+            }}
+          >
+            {option}
+          </MenuItem>
+        ))}
+      </Menu>
+
+      {/* Date Picker Popover */}
+      <Popover
+        open={Boolean(datePickerAnchor)}
+        anchorEl={datePickerAnchor}
+        onClose={handleDatePickerClose}
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'left',
+        }}
+        transformOrigin={{
+          vertical: 'top',
+          horizontal: 'left',
+        }}
+      >
+        <Box sx={{ p: 2 }}>
+          <LocalizationProvider dateAdapter={AdapterDateFns}>
+            <DatePicker
+              label="Select Date"
+              value={
+                selectedCompanyForDate && selectedDateFieldName
+                  ? parseDateValue(selectedCompanyForDate.customFields?.[selectedDateFieldName])
+                  : null
+              }
+              onChange={handleDateChange}
+              slotProps={{
+                textField: {
+                  size: 'small',
+                  sx: { width: 250 }
+                }
+              }}
+            />
+          </LocalizationProvider>
+        </Box>
+      </Popover>
     </Box>
   );
 };

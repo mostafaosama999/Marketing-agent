@@ -25,12 +25,23 @@ import {
   Info as InfoIcon,
   LinkedIn as LinkedInIcon,
   Email as EmailIcon,
+  Business as BusinessIcon,
 } from '@mui/icons-material';
 import { CSVRow, FieldMapping, EntityType } from '../../../types/crm';
 import { LeadStatus } from '../../../types/lead';
-import { importLeadsFromCSV, ImportResult, detectFieldSection, detectEntityType } from '../../../services/api/csvImportService';
+import {
+  importLeadsFromCSV,
+  ImportResult,
+  detectFieldSection,
+  detectEntityType,
+  detectDropdownFields,
+  isPersonalLinkedInProfile,
+  isCompanyLinkedInField
+} from '../../../services/api/csvImportService';
 import { useAuth } from '../../../contexts/AuthContext';
 import { usePipelineConfigContext } from '../../../contexts/PipelineConfigContext';
+import { DetectedDropdownField, isDropdownColumn } from '../../../types/fieldDefinitions';
+import { DropdownOptionsEditor } from './DropdownOptionsEditor';
 
 interface CSVFieldMappingDialogProps {
   open: boolean;
@@ -41,7 +52,7 @@ interface CSVFieldMappingDialogProps {
 }
 
 const STANDARD_FIELDS = [
-  { value: 'name', label: 'Lead Name (Required)', section: 'general', entityType: 'lead' as EntityType },
+  { value: 'name', label: 'Lead Name (Optional)', section: 'general', entityType: 'lead' as EntityType },
   { value: 'email', label: 'Email', section: 'general', entityType: 'lead' as EntityType },
   { value: 'company', label: 'Company (Required)', section: 'general', entityType: 'lead' as EntityType },
   { value: 'phone', label: 'Phone', section: 'general', entityType: 'lead' as EntityType },
@@ -73,6 +84,7 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
   const [importProgress, setImportProgress] = useState({ current: 0, total: 0 });
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [dropdownFields, setDropdownFields] = useState<DetectedDropdownField[]>([]);
 
   // Auto-detect mappings on mount (only run once when headers change)
   useEffect(() => {
@@ -139,11 +151,24 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
           leadField = 'skip'; // Will be auto-created as custom field
           entityType = 'company';
         }
-        // LinkedIn fields
-        else if (lowerField.includes('linkedin') && (lowerField.includes('link') || lowerField.includes('url') || lowerField.includes('profile'))) {
+        // LinkedIn fields - use helper functions for better detection
+        // Personal LinkedIn Profile URL (lead-level standard field)
+        else if (isPersonalLinkedInProfile(csvField)) {
           leadField = 'outreach.linkedIn.profileUrl';
           entityType = 'lead';
-        } else if (section === 'linkedin' && (lowerField.includes('status') || lowerField.includes('response'))) {
+        }
+        // Company LinkedIn fields (should be company custom fields)
+        else if (isCompanyLinkedInField(csvField)) {
+          leadField = 'skip'; // Will be auto-created as company custom field
+          entityType = 'company';
+        }
+        // LinkedIn dropdown fields (custom fields, not standard)
+        else if (isDropdownColumn(csvField) && lowerField.includes('linkedin')) {
+          leadField = 'skip'; // Will be auto-created as custom dropdown field
+          entityType = detectEntityType(csvField, null);
+        }
+        // LinkedIn status (only if not a dropdown and in linkedin section)
+        else if (section === 'linkedin' && (lowerField.includes('status') || lowerField.includes('response')) && !isDropdownColumn(csvField)) {
           leadField = 'outreach.linkedIn.status';
           entityType = 'lead';
         }
@@ -171,6 +196,14 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [headers]); // Only re-run when headers change, not when autoCreateFields changes
+
+  // Detect dropdown fields when mappings change
+  useEffect(() => {
+    if (mappings.length > 0 && data.length > 0) {
+      const detected = detectDropdownFields(headers, data, mappings);
+      setDropdownFields(detected);
+    }
+  }, [mappings, headers, data]);
 
   const handleMappingChange = (csvField: string, leadField: string) => {
     setMappings((prev) =>
@@ -208,6 +241,14 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
     );
   };
 
+  const handleDropdownOptionsChange = (columnName: string, newOptions: string[]) => {
+    setDropdownFields((prev) =>
+      prev.map((field) =>
+        field.columnName === columnName ? { ...field, options: newOptions } : field
+      )
+    );
+  };
+
 
   const getSampleValues = (csvField: string): string[] => {
     return data
@@ -223,16 +264,21 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
     email: mappings.filter((m) => m.section === 'email'),
   };
 
+  // Calculate field mapping counts for summary
+  // Count all fields by entity type, including auto-created fields
+  const leadFieldsCount = mappings.filter(m =>
+    m.entityType === 'lead' && (m.leadField !== 'skip' || m.autoCreate === true)
+  ).length;
+
+  const companyFieldsCount = mappings.filter(m =>
+    m.entityType === 'company' && (m.leadField !== 'skip' || m.autoCreate === true)
+  ).length;
+
   const validateMappings = (): boolean => {
-    const hasName = mappings.some((m) => m.leadField === 'name');
     const hasCompany = mappings.some((m) => m.leadField === 'company');
 
-    if (!hasName) {
-      setError('Please map the "Name" field (required)');
-      return false;
-    }
     if (!hasCompany) {
-      setError('Please map the "Company" field (required)');
+      setError('Please map the "Company" field (required). Name is optional - rows without names will create company-only records.');
       return false;
     }
 
@@ -266,6 +312,8 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
         defaultStatus,
         autoCreateFields,
         user.uid,
+        dropdownFields.length > 0 ? dropdownFields : undefined,
+        undefined, // dateFields - will be added in next iteration
         (current, total) => {
           setImportProgress({ current, total });
         }
@@ -294,10 +342,33 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
     : 0;
 
   // Render a single field mapping row
-  const renderFieldMappingRow = (mapping: FieldMapping, availableFields: Array<{ value: string; label: string; entityType?: EntityType }>) => {
+  const renderFieldMappingRow = (mapping: FieldMapping, sectionName: 'general' | 'linkedin' | 'email') => {
     const samples = getSampleValues(mapping.csvField);
     const isSkipped = mapping.leadField === 'skip' || mapping.leadField === null;
     const showEntityType = isSkipped || ['website', 'industry', 'description'].includes(mapping.leadField || '');
+    const isDropdown = isDropdownColumn(mapping.csvField);
+    const dropdownField = dropdownFields.find(d => d.columnName === mapping.csvField);
+
+    // Build available fields based on section AND current mapping
+    // If already mapped to a linkedin/email field, include those options even in general section
+    let availableFields: Array<{ value: string; label: string; entityType?: EntityType }> = [...STANDARD_FIELDS];
+
+    // Add section-specific fields
+    if (sectionName === 'linkedin') {
+      availableFields = [...availableFields, ...LINKEDIN_FIELDS];
+    } else if (sectionName === 'email') {
+      availableFields = [...availableFields, ...EMAIL_FIELDS];
+    }
+
+    // If current mapping is to a linkedin field but we're in general section, add linkedin fields
+    if (sectionName === 'general' && mapping.leadField?.includes('linkedIn')) {
+      availableFields = [...availableFields, ...LINKEDIN_FIELDS];
+    }
+
+    // If current mapping is to an email field but we're in general section, add email fields
+    if (sectionName === 'general' && mapping.leadField?.includes('email')) {
+      availableFields = [...availableFields, ...EMAIL_FIELDS];
+    }
 
     return (
       <Box
@@ -314,9 +385,20 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
         <Box sx={{ mb: 1.5 }}>
           <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
             CSV Column: <Chip label={mapping.csvField} size="small" sx={{ ml: 1 }} />
+            {isDropdown && (
+              <Chip
+                label="Dropdown Field"
+                size="small"
+                sx={{
+                  ml: 1,
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white'
+                }}
+              />
+            )}
           </Typography>
 
-          {samples.length > 0 && (
+          {samples.length > 0 && !isDropdown && (
             <Typography variant="caption" sx={{ color: '#64748b', display: 'block' }}>
               Sample values: {samples.join(', ')}
             </Typography>
@@ -389,6 +471,18 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
             )}
           </Box>
         </Box>
+
+        {/* Dropdown Options Editor */}
+        {isDropdown && dropdownField && (
+          <Box sx={{ mt: 2 }}>
+            <DropdownOptionsEditor
+              options={dropdownField.options}
+              onChange={(newOptions) => handleDropdownOptionsChange(mapping.csvField, newOptions)}
+              label={`Dropdown options detected from "${mapping.csvField}"`}
+              disabled={importing}
+            />
+          </Box>
+        )}
       </Box>
     );
   };
@@ -398,7 +492,7 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
     title: string,
     icon: React.ReactNode,
     mappings: FieldMapping[],
-    availableFields: Array<{ value: string; label: string }>
+    sectionName: 'general' | 'linkedin' | 'email'
   ) => {
     if (mappings.length === 0) return null;
 
@@ -428,7 +522,7 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
             border: '1px solid #e2e8f0',
           }}
         >
-          {mappings.map((mapping) => renderFieldMappingRow(mapping, availableFields))}
+          {mappings.map((mapping) => renderFieldMappingRow(mapping, sectionName))}
         </Box>
       </Box>
     );
@@ -477,7 +571,7 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
 
             <Box sx={{ mb: 3 }}>
               <Typography variant="body2" sx={{ color: '#64748b', mb: 3 }}>
-                Map your CSV columns to CRM fields. Required fields: Name, Company.
+                Map your CSV columns to CRM fields. Required: Company. Optional: Name (rows without names will create company-only records).
               </Typography>
 
               {/* General Fields Section */}
@@ -485,7 +579,7 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
                 'General Information',
                 <InfoIcon sx={{ color: '#667eea', fontSize: 24 }} />,
                 groupedMappings.general,
-                STANDARD_FIELDS
+                'general'
               )}
 
               {/* LinkedIn Fields Section */}
@@ -493,7 +587,7 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
                 'LinkedIn Outreach',
                 <LinkedInIcon sx={{ color: '#0077b5', fontSize: 24 }} />,
                 groupedMappings.linkedin,
-                [...STANDARD_FIELDS, ...LINKEDIN_FIELDS]
+                'linkedin'
               )}
 
               {/* Email Fields Section */}
@@ -501,7 +595,7 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
                 'Email Outreach',
                 <EmailIcon sx={{ color: '#ea4335', fontSize: 24 }} />,
                 groupedMappings.email,
-                [...STANDARD_FIELDS, ...EMAIL_FIELDS]
+                'email'
               )}
             </Box>
 
@@ -533,6 +627,39 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
               }
               label="Auto-create custom fields for unmapped columns"
             />
+
+            {/* Field Mapping Summary */}
+            <Box
+              sx={{
+                mt: 3,
+                p: 2,
+                bgcolor: '#f8fafc',
+                borderRadius: '8px',
+                border: '1px solid #e2e8f0',
+              }}
+            >
+              <Typography variant="body2" sx={{ fontWeight: 600, mb: 1.5 }}>
+                Field Mapping Summary
+              </Typography>
+              <Box sx={{ display: 'flex', gap: 3, flexWrap: 'wrap' }}>
+                <Box>
+                  <Typography variant="caption" sx={{ color: '#64748b', display: 'block' }}>
+                    Lead Fields
+                  </Typography>
+                  <Typography variant="h6" sx={{ color: '#667eea', fontWeight: 700 }}>
+                    {leadFieldsCount}
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography variant="caption" sx={{ color: '#64748b', display: 'block' }}>
+                    Company Fields
+                  </Typography>
+                  <Typography variant="h6" sx={{ color: '#764ba2', fontWeight: 700 }}>
+                    {companyFieldsCount}
+                  </Typography>
+                </Box>
+              </Box>
+            </Box>
           </>
         )}
 
@@ -575,6 +702,14 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
                     {importResult.successful} leads imported successfully
                   </Typography>
                 </Box>
+                {importResult.companiesOnly > 0 && (
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <BusinessIcon sx={{ fontSize: 18, color: '#764ba2' }} />
+                    <Typography variant="body2">
+                      {importResult.companiesOnly} companies imported (without leads)
+                    </Typography>
+                  </Box>
+                )}
                 {importResult.duplicates > 0 && (
                   <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                     <WarningIcon sx={{ fontSize: 18, color: '#f59e0b' }} />
@@ -597,7 +732,7 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
             {importResult.errors.length > 0 && (
               <Box
                 sx={{
-                  maxHeight: 200,
+                  maxHeight: 400,
                   overflow: 'auto',
                   p: 2,
                   bgcolor: '#f8fafc',
@@ -608,16 +743,11 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
                 <Typography variant="body2" sx={{ fontWeight: 600, mb: 1 }}>
                   Error Details:
                 </Typography>
-                {importResult.errors.slice(0, 10).map((error, index) => (
-                  <Typography key={index} variant="caption" sx={{ display: 'block', color: '#64748b' }}>
+                {importResult.errors.map((error, index) => (
+                  <Typography key={index} variant="caption" sx={{ display: 'block', color: '#64748b', mb: 0.5 }}>
                     • {error}
                   </Typography>
                 ))}
-                {importResult.errors.length > 10 && (
-                  <Typography variant="caption" sx={{ color: '#64748b', fontStyle: 'italic' }}>
-                    ... and {importResult.errors.length - 10} more errors
-                  </Typography>
-                )}
               </Box>
             )}
           </Box>

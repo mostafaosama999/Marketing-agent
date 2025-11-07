@@ -116,3 +116,7 @@ agency-app/emulator-data/
 .env.development.local
 .env.test.local
 .env.production.local
+
+# Local scripts and data files
+reinstall-claude
+Total marketing - Copy of 2025.csv

@@ -280,3 +280,49 @@ export interface WritingProgramAnalysisResult {
   aiReasoning: string;
   costInfo?: ApiCostInfo;
 }
+
+// GenAI Blog Ideas Generator Types
+export interface GenAIIdeaRequest {
+  leadId: string;
+  companyUrl: string;
+  companyName: string;
+  blogContent: string;
+}
+
+export interface GenAIIdea {
+  id?: string;
+  type?: string;
+  sessionId?: string;
+  title: string;
+  platform: string;
+  specificUse: string;
+  tool: string;
+  description: string;
+  whyItFits: string;
+  status?: "pending" | "approved" | "attached";
+  createdAt?: Date;
+  updatedAt?: Date;
+  attachedAt?: Date;
+}
+
+export interface GenAIIdeaResponse {
+  companyContext: {
+    companyName: string;
+    companyWebsite: string;
+    companyDescription: string;
+    isDeveloperB2BSaaS: boolean;
+    isGenAIRelated: boolean;
+    category: "ML" | "Data Science" | "Not AI-related";
+    toolType: string;
+  };
+  blogAnalysis: {
+    previousArticleTitles: string[];
+    topicsTheyDiscuss: string[];
+    keywords: string[];
+    technicalDepth: "beginner" | "intermediate" | "advanced";
+    writerTypes: "employees" | "freelancers" | "mixed" | "unknown";
+  };
+  ideas: GenAIIdea[];
+  linkedInMessage: string;
+  costInfo?: ApiCostInfo;
+}

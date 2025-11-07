@@ -485,6 +485,72 @@ export async function updateLeadStatus(
 }
 
 /**
+ * Update a single custom field for a lead
+ * Used for inline editing of custom fields in table view
+ * @param leadId - The ID of the lead to update
+ * @param fieldName - The name of the custom field to update
+ * @param value - The new value for the custom field
+ */
+export async function updateLeadCustomField(
+  leadId: string,
+  fieldName: string,
+  value: any
+): Promise<void> {
+  try {
+    const leadRef = doc(db, LEADS_COLLECTION, leadId);
+    await updateDoc(leadRef, {
+      [`customFields.${fieldName}`]: value,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    console.error('Error updating lead custom field:', error);
+    throw error;
+  }
+}
+
+/**
+ * Update LinkedIn outreach status for a lead
+ * @param leadId - The ID of the lead to update
+ * @param status - The new LinkedIn outreach status
+ */
+export async function updateLeadLinkedInStatus(
+  leadId: string,
+  status: string
+): Promise<void> {
+  try {
+    const leadRef = doc(db, LEADS_COLLECTION, leadId);
+    await updateDoc(leadRef, {
+      'outreach.linkedIn.status': status,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    console.error('Error updating lead LinkedIn status:', error);
+    throw error;
+  }
+}
+
+/**
+ * Update email outreach status for a lead
+ * @param leadId - The ID of the lead to update
+ * @param status - The new email outreach status
+ */
+export async function updateLeadEmailStatus(
+  leadId: string,
+  status: string
+): Promise<void> {
+  try {
+    const leadRef = doc(db, LEADS_COLLECTION, leadId);
+    await updateDoc(leadRef, {
+      'outreach.email.status': status,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    console.error('Error updating lead email status:', error);
+    throw error;
+  }
+}
+
+/**
  * Helper function to delete all documents in a lead's timeline subcollection
  * @param leadId - The ID of the lead whose timeline should be deleted
  */

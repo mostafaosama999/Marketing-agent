@@ -7,6 +7,7 @@ import {
   Menu,
   MenuItem,
   Chip,
+  CircularProgress,
 } from '@mui/material';
 import {
   Edit as EditIcon,
@@ -25,6 +26,7 @@ interface BulkActionsToolbarProps {
   onExportCSV: () => void;
   onDelete: () => void;
   onClear: () => void;
+  isDeleting?: boolean;
 }
 
 export const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
@@ -34,6 +36,7 @@ export const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
   onExportCSV,
   onDelete,
   onClear,
+  isDeleting = false,
 }) => {
   const { stages } = usePipelineConfigContext();
   const [statusMenuAnchor, setStatusMenuAnchor] = useState<null | HTMLElement>(null);
@@ -89,6 +92,7 @@ export const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
           variant="outlined"
           startIcon={<ChangeCircleIcon />}
           onClick={handleStatusMenuOpen}
+          disabled={isDeleting}
           sx={{
             color: 'white',
             borderColor: 'white',
@@ -108,6 +112,7 @@ export const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
           variant="outlined"
           startIcon={<EditIcon />}
           onClick={onEditFields}
+          disabled={isDeleting}
           sx={{
             color: 'white',
             borderColor: 'white',
@@ -127,6 +132,7 @@ export const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
           variant="outlined"
           startIcon={<DownloadIcon />}
           onClick={onExportCSV}
+          disabled={isDeleting}
           sx={{
             color: 'white',
             borderColor: 'white',
@@ -144,8 +150,9 @@ export const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
         {/* Delete */}
         <Button
           variant="outlined"
-          startIcon={<DeleteIcon />}
+          startIcon={isDeleting ? <CircularProgress size={16} sx={{ color: 'white' }} /> : <DeleteIcon />}
           onClick={onDelete}
+          disabled={isDeleting}
           sx={{
             color: 'white',
             borderColor: '#ef4444',
@@ -156,9 +163,14 @@ export const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
               borderColor: '#dc2626',
               bgcolor: '#dc2626',
             },
+            '&:disabled': {
+              borderColor: '#ef4444',
+              bgcolor: '#ef4444',
+              opacity: 0.7,
+            },
           }}
         >
-          Delete
+          {isDeleting ? 'Deleting...' : 'Delete'}
         </Button>
       </Box>
 
@@ -167,6 +179,7 @@ export const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
         variant="text"
         endIcon={<CloseIcon />}
         onClick={onClear}
+        disabled={isDeleting}
         sx={{
           color: 'white',
           textTransform: 'none',

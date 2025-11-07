@@ -22,6 +22,7 @@ const APP_SETTINGS_DOC = 'app-settings';
 function convertToSettings(data: any): AppSettings {
   return {
     offerTemplate: data.offerTemplate || DEFAULT_OFFER_TEMPLATE,
+    offerHeadline: data.offerHeadline || '',
     aiPrompts: data.aiPrompts,
     updatedAt: data.updatedAt?.toDate() || new Date(),
     updatedBy: data.updatedBy || '',
@@ -53,6 +54,7 @@ export async function getSettings(): Promise<AppSettings> {
 
       return {
         offerTemplate: DEFAULT_OFFER_TEMPLATE,
+        offerHeadline: '',
         updatedAt: new Date(),
         updatedBy: 'system',
         createdAt: new Date(),
@@ -66,6 +68,7 @@ export async function getSettings(): Promise<AppSettings> {
     // Return default settings on error
     return {
       offerTemplate: DEFAULT_OFFER_TEMPLATE,
+      offerHeadline: '',
       updatedAt: new Date(),
       updatedBy: 'system',
     };
@@ -140,6 +143,7 @@ export function subscribeToSettings(
       // Return default settings on error
       callback({
         offerTemplate: DEFAULT_OFFER_TEMPLATE,
+        offerHeadline: '',
         updatedAt: new Date(),
         updatedBy: 'system',
       });

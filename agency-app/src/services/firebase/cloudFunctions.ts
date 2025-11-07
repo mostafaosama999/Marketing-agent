@@ -293,3 +293,52 @@ export function extractProgramStatus(
 
   return { isOpen, openDates };
 }
+
+/**
+ * Generate AI-powered blog ideas for a company
+ */
+export interface GenerateCompanyIdeasRequest {
+  companyId: string;
+  prompt: string;
+  context?: {
+    companyName?: string;
+    website?: string;
+    industry?: string;
+    blogUrl?: string;
+  };
+}
+
+export interface GenerateCompanyIdeasResponse {
+  ideas: Array<{
+    id: string;
+    title: string;
+    content: string;
+  }>;
+  totalGenerated: number;
+  sessionId: string;
+  costInfo?: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    inputCost: number;
+    outputCost: number;
+    totalCost: number;
+  };
+}
+
+export async function generateCompanyIdeas(
+  request: GenerateCompanyIdeasRequest
+): Promise<GenerateCompanyIdeasResponse> {
+  try {
+    const generateIdeas = httpsCallable<
+      GenerateCompanyIdeasRequest,
+      GenerateCompanyIdeasResponse
+    >(functions, 'generateCustomIdeasCloud');
+
+    const result = await generateIdeas(request);
+    return result.data;
+  } catch (error: any) {
+    console.error('Error generating company ideas:', error);
+    throw new Error(error.message || 'Failed to generate ideas');
+  }
+}

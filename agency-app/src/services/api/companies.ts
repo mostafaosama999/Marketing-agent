@@ -360,6 +360,30 @@ export async function updateCompany(
 }
 
 /**
+ * Update a single custom field for a company
+ * Used for inline editing of custom fields in table view
+ * @param companyId - The ID of the company to update
+ * @param fieldName - The name of the custom field to update
+ * @param value - The new value for the custom field
+ */
+export async function updateCompanyCustomField(
+  companyId: string,
+  fieldName: string,
+  value: any
+): Promise<void> {
+  try {
+    const companyRef = doc(db, COMPANIES_COLLECTION, companyId);
+    await updateDoc(companyRef, {
+      [`customFields.${fieldName}`]: value,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    console.error('Error updating company custom field:', error);
+    throw error;
+  }
+}
+
+/**
  * Count leads for a company (to determine if company can be deleted)
  */
 export async function countLeadsForCompany(companyId: string): Promise<number> {

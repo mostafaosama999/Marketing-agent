@@ -29,6 +29,23 @@ export interface Company {
     updatedAt: Date;
   };
 
+  // AI-Generated Blog Ideas (new system)
+  offerIdeas?: {
+    ideas: Array<{
+      id: string;
+      title: string;
+      content: string;
+      approved: boolean;
+      rejected: boolean;
+      feedback?: string;
+      createdAt: Date;
+    }>;
+    sessionId?: string; // Track generation session
+    generationPrompt?: string; // User's input prompt
+    lastGeneratedAt?: Date;
+    generalFeedback?: string; // Overall notes/feedback
+  };
+
   // Writing Program Analysis
   writingProgramAnalysis?: {
     hasProgram: boolean;
@@ -180,6 +197,7 @@ export interface FieldMapping {
   section?: FieldSection; // Section grouping for UI
   autoCreate?: boolean; // Whether to auto-create this field as custom field if unmapped
   entityType?: EntityType; // Whether this field applies to lead or company entity
+  fieldType?: 'text' | 'number' | 'date' | 'dropdown'; // Type of field for validation and UI
 }
 
 // Status to internal LeadStatus mapping

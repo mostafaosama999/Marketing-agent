@@ -1101,7 +1101,7 @@ export async function qualifyCompany(
     result.blogPostCount = blogActivity.postCount;
     result.lastBlogCreatedAt = blogActivity.lastPostDate || "";
     result.blogLinkUsed = blogActivity.rssUrl || "";
-    result.rssFeedUrl = blogActivity.rssUrl || null;  // Use null instead of undefined for Firebase serialization
+    result.rssFeedUrl = blogActivity.rssUrl || undefined;
     result.rssFeedFound = blogActivity.recentPosts.length > 0;
     result.analysisMethod = "RSS";
 

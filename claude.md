@@ -74,8 +74,42 @@ Stored in `pipelineConfig/default`, customizable via `PipelineConfigContext`. Ea
 - Uses `papaparse` library
 - Auto-maps columns to lead/company fields
 - Custom fields auto-created for unmapped columns
+- **Dropdown Field Detection**: Columns with "dropdown" in the name (case-insensitive) are automatically detected as dropdown fields
+- Auto-extracts unique values from CSV as dropdown options
+- User can add/edit/remove options before importing via `DropdownOptionsEditor`
+- Field definitions saved to `fieldDefinitions` collection
 - Dedup strategies: Skip, Update, Create New
 - Dedup criteria: Email (primary), Name+Company, Phone
+
+### Custom Fields & Dropdown Fields (NEW)
+**Field Definitions System**: Schema-based custom fields with type enforcement
+
+**Field Types**: text, number, date, dropdown
+- Stored in Firestore collection: `fieldDefinitions/{fieldId}`
+- Each definition includes: name, label, entityType, fieldType, section, options (for dropdowns)
+
+**Dropdown Fields**:
+- Detected during CSV import if column name contains "dropdown" (case-insensitive)
+- Examples: "Project Status Dropdown", "Lead Type_Dropdown", "status dropdown"
+- Unique values extracted from CSV data as initial options
+- User can modify options in `DropdownOptionsEditor` component
+
+**Inline Editing**:
+- Dropdown custom fields render as purple gradient chips in table view
+- Click chip → dropdown menu with all options
+- Select new value → updates immediately in Firebase
+- Works for both Lead and Company custom fields
+- Only dropdown fields support inline editing (text/number/date fields require dialog)
+
+**Services**:
+- `fieldDefinitionsService.ts`: CRUD operations for field definitions
+- `fieldValidation.ts`: Validates dropdown values against options
+- `updateLeadCustomField()`, `updateCompanyCustomField()`: Update individual fields
+
+**Components**:
+- `DropdownOptionsEditor.tsx`: Chip-based UI for editing dropdown options
+- Integrated into `CSVFieldMappingDialog` for CSV import
+- Inline editing in `CRMLeadsTable` for quick updates
 
 ### Bulk Operations
 **Actions**: Delete, Edit, Archive, Unarchive
@@ -197,6 +231,7 @@ Auto-creates companies when leads added. Lead has `companyId` reference.
 - `userPreferences/{userId}`
 - `userCostTracking/{userId}`
 - `users/{userId}`
+- `fieldDefinitions/{fieldId}` (NEW - schema for custom fields)
 
 ### Lead Document
 **Core**: id, name, email, phone, company, companyId, status, customFields
@@ -215,6 +250,7 @@ Auto-creates companies when leads added. Lead has `companyId` reference.
 **userPreferences**: defaultView, defaultFilterPresetId, tableColumns{}, notifications{}, theme
 **userCostTracking**: totalCosts{apollo, openai, total}, costsByMonth{}, costsByEntity{}
 **users**: uid, email, displayName, role, photoURL
+**fieldDefinitions** (NEW): id, name, label, entityType (lead|company), fieldType (text|number|date|dropdown), section (general|linkedin|email), options[] (for dropdowns), required, createdAt, createdBy, updatedAt, updatedBy
 
 ### Firestore Indexes (Required)
 **leads**: archived+status+updatedAt, archived+company+updatedAt, status+updatedAt
@@ -251,6 +287,8 @@ Auto-creates companies when leads added. Lead has `companyId` reference.
 2. **Apollo fails**: Verify API key, credit balance, domain valid, CORS
 3. **CSV errors**: UTF-8, required fields, email format, dedup strategy
 4. **Drag-drop broken**: Board view active, lead has id, refresh if sync lost
+5. **Dropdown fields not detected**: Ensure column name contains "dropdown" (case-insensitive), check CSV encoding
+6. **Inline edit not working**: Verify field definition exists in Firestore `fieldDefinitions` collection, check fieldType is "dropdown"
 
 **Debug**: `localStorage.setItem('crm_debug', 'true')`
 

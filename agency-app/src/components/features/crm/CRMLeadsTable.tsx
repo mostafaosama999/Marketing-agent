@@ -18,13 +18,22 @@ import {
   Checkbox,
   Link,
   TablePagination,
+  Popover,
 } from '@mui/material';
 import {
   KeyboardArrowDown as ExpandMoreIcon,
+  LinkedIn as LinkedInIcon,
+  Email as EmailIcon,
 } from '@mui/icons-material';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { Lead, LeadStatus } from '../../../types/lead';
 import { usePipelineConfigContext } from '../../../contexts/PipelineConfigContext';
 import { TableColumnConfig } from '../../../types/table';
+import { FieldDefinition } from '../../../types/fieldDefinitions';
+import { getDropdownFieldDefinitions } from '../../../services/api/fieldDefinitionsService';
+import { updateLeadCustomField } from '../../../services/api/leads';
 
 interface CRMLeadsTableProps {
   leads: Lead[];
@@ -94,6 +103,17 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
   const [selectedLeadForEmail, setSelectedLeadForEmail] = useState<Lead | null>(null);
   const [collapsedCompanies, setCollapsedCompanies] = useState<Set<string>>(new Set());
 
+  // Dropdown field definitions
+  const [fieldDefinitions, setFieldDefinitions] = useState<FieldDefinition[]>([]);
+  const [customFieldMenuAnchor, setCustomFieldMenuAnchor] = useState<null | HTMLElement>(null);
+  const [selectedLeadForCustomField, setSelectedLeadForCustomField] = useState<Lead | null>(null);
+  const [selectedCustomFieldName, setSelectedCustomFieldName] = useState<string | null>(null);
+
+  // Date picker state
+  const [datePickerAnchor, setDatePickerAnchor] = useState<null | HTMLElement>(null);
+  const [selectedLeadForDate, setSelectedLeadForDate] = useState<Lead | null>(null);
+  const [selectedDateFieldName, setSelectedDateFieldName] = useState<string | null>(null);
+
   // Pagination state
   const [page, setPage] = useState(() => {
     const saved = localStorage.getItem('crm_table_page');
@@ -103,6 +123,20 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
     const saved = localStorage.getItem('crm_table_rows_per_page');
     return saved ? parseInt(saved, 10) : 25;
   });
+
+  // Fetch dropdown field definitions on mount
+  useEffect(() => {
+    const fetchFieldDefinitions = async () => {
+      try {
+        const definitions = await getDropdownFieldDefinitions('lead');
+        setFieldDefinitions(definitions);
+      } catch (error) {
+        console.error('Error fetching field definitions:', error);
+      }
+    };
+
+    fetchFieldDefinitions();
+  }, []);
 
   // Toggle company collapse/expand
   const toggleCompanyCollapse = (companyName: string) => {
@@ -179,6 +213,101 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
       onUpdateEmailStatus(selectedLeadForEmail.id, newStatus);
     }
     handleEmailMenuClose();
+  };
+
+  // Custom field dropdown menu handlers
+  const handleCustomFieldClick = (
+    event: React.MouseEvent<HTMLElement>,
+    lead: Lead,
+    fieldName: string
+  ) => {
+    event.stopPropagation();
+    setCustomFieldMenuAnchor(event.currentTarget);
+    setSelectedLeadForCustomField(lead);
+    setSelectedCustomFieldName(fieldName);
+  };
+
+  const handleCustomFieldMenuClose = () => {
+    setCustomFieldMenuAnchor(null);
+    setSelectedLeadForCustomField(null);
+    setSelectedCustomFieldName(null);
+  };
+
+  const handleCustomFieldChange = async (newValue: string) => {
+    if (selectedLeadForCustomField && selectedCustomFieldName) {
+      try {
+        await updateLeadCustomField(
+          selectedLeadForCustomField.id,
+          selectedCustomFieldName,
+          newValue
+        );
+      } catch (error) {
+        console.error('Error updating custom field:', error);
+      }
+    }
+    handleCustomFieldMenuClose();
+  };
+
+  // Helper function to get dropdown options for a field
+  const getDropdownOptions = (fieldName: string): string[] => {
+    const fieldDef = fieldDefinitions.find(def => def.name === fieldName);
+    return fieldDef?.options || [];
+  };
+
+  // Helper function to check if a custom field is a dropdown
+  const isDropdownField = (fieldName: string): boolean => {
+    return fieldDefinitions.some(def => def.name === fieldName);
+  };
+
+  // Date picker handlers
+  const handleDateFieldClick = (
+    event: React.MouseEvent<HTMLElement>,
+    lead: Lead,
+    fieldName: string
+  ) => {
+    event.stopPropagation();
+    setDatePickerAnchor(event.currentTarget);
+    setSelectedLeadForDate(lead);
+    setSelectedDateFieldName(fieldName);
+  };
+
+  const handleDatePickerClose = () => {
+    setDatePickerAnchor(null);
+    setSelectedLeadForDate(null);
+    setSelectedDateFieldName(null);
+  };
+
+  const handleDateChange = async (newDate: Date | null) => {
+    if (selectedLeadForDate && selectedDateFieldName && newDate) {
+      try {
+        // Convert to ISO string for storage
+        const isoDate = newDate.toISOString();
+        await updateLeadCustomField(
+          selectedLeadForDate.id,
+          selectedDateFieldName,
+          isoDate
+        );
+      } catch (error) {
+        console.error('Error updating date field:', error);
+      }
+    }
+    handleDatePickerClose();
+  };
+
+  // Helper function to check if a custom field is a date
+  const isDateField = (fieldName: string): boolean => {
+    return fieldDefinitions.some(def => def.name === fieldName && def.fieldType === 'date');
+  };
+
+  // Helper function to parse date string to Date object
+  const parseDateValue = (value: any): Date | null => {
+    if (!value) return null;
+    try {
+      const date = new Date(value);
+      return isNaN(date.getTime()) ? null : date;
+    } catch {
+      return null;
+    }
   };
 
   // Sort leads
@@ -323,7 +452,11 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
 
       case 'email':
         return (
-          <TableCell key={columnId}>
+          <TableCell
+            key={columnId}
+            onClick={(e) => e.stopPropagation()}
+            sx={{ cursor: 'text' }}
+          >
             <Typography variant="body2" sx={{ fontSize: '11px', lineHeight: 1.2 }}>
               {lead.email || '-'}
             </Typography>
@@ -499,6 +632,65 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
             );
           }
 
+          // Check if this is a dropdown field (check column.fieldType first, then fallback to fieldDefinitions)
+          const isDropdown = column.fieldType === 'dropdown' || isDropdownField(column.fieldName);
+
+          if (isDropdown) {
+            return (
+              <TableCell key={columnId}>
+                <Chip
+                  label={String(value)}
+                  size="small"
+                  onClick={(e) => handleCustomFieldClick(e, lead, column.fieldName!)}
+                  sx={{
+                    fontSize: '10px',
+                    height: '20px',
+                    cursor: 'pointer',
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    color: 'white',
+                    '&:hover': {
+                      background: 'linear-gradient(135deg, #5568d3 0%, #6b408e 100%)',
+                    },
+                  }}
+                />
+              </TableCell>
+            );
+          }
+
+          // Check if this is a date field (check column.fieldType first, then fallback to fieldDefinitions)
+          const isDate = column.fieldType === 'date' || isDateField(column.fieldName);
+
+          if (isDate) {
+            const dateValue = parseDateValue(value);
+            const displayDate = dateValue
+              ? dateValue.toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                })
+              : String(value);
+
+            return (
+              <TableCell key={columnId}>
+                <Chip
+                  label={displayDate}
+                  size="small"
+                  onClick={(e) => handleDateFieldClick(e, lead, column.fieldName!)}
+                  sx={{
+                    fontSize: '10px',
+                    height: '20px',
+                    cursor: 'pointer',
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    color: 'white',
+                    '&:hover': {
+                      background: 'linear-gradient(135deg, #5568d3 0%, #6b408e 100%)',
+                    },
+                  }}
+                />
+              </TableCell>
+            );
+          }
+
           // Check if value is a URL
           const isUrl = typeof value === 'string' &&
                         (value.startsWith('http://') || value.startsWith('https://'));
@@ -589,46 +781,85 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
               </TableCell>
 
               {/* Table columns */}
-              {displayColumns.map((column, index) => (
-                <TableCell
-                  key={column.id}
-                  sx={{
-                    py: 0,
-                    px: 1,
-                    ...(index === 0 && column.id === 'name' ? { pl: 3 } : {}),
-                    fontSize: '10px',
-                    fontWeight: 600,
-                    color: '#64748b',
-                    textTransform: 'uppercase',
-                    letterSpacing: '0.5px',
-                    height: '36px',
-                  }}
-                >
-                  <TableSortLabel
-                    active={orderBy === column.id}
-                    direction={orderBy === column.id ? order : 'asc'}
-                    onClick={() => handleRequestSort(column.id)}
-                    disabled={!column.sortable}
+              {displayColumns.map((column, index) => {
+                // Get section-based colors
+                const getSectionColor = (section?: 'general' | 'linkedin' | 'email') => {
+                  switch (section) {
+                    case 'linkedin':
+                      return '#0077b5'; // LinkedIn blue
+                    case 'email':
+                      return '#10b981'; // Green/teal
+                    case 'general':
+                    default:
+                      return '#64748b'; // Gray (default)
+                  }
+                };
+
+                const getSectionHoverColor = (section?: 'general' | 'linkedin' | 'email') => {
+                  switch (section) {
+                    case 'linkedin':
+                      return '#005a8c'; // Darker LinkedIn blue
+                    case 'email':
+                      return '#059669'; // Darker green
+                    case 'general':
+                    default:
+                      return '#475569'; // Darker gray
+                  }
+                };
+
+                const sectionColor = getSectionColor(column.section);
+                const hoverColor = getSectionHoverColor(column.section);
+
+                return (
+                  <TableCell
+                    key={column.id}
                     sx={{
-                      fontSize: '12px',
-                      color: '#64748b',
-                      '&:hover': {
-                        color: '#475569',
-                      },
-                      '&.Mui-active': {
-                        color: '#667eea',
-                      },
-                      '& .MuiTableSortLabel-icon': {
-                        fontSize: '16px',
-                        opacity: 1,
-                        color: 'inherit',
-                      },
+                      py: 0,
+                      px: 1,
+                      ...(index === 0 && column.id === 'name' ? { pl: 3 } : {}),
+                      fontSize: '10px',
+                      fontWeight: 600,
+                      color: sectionColor,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px',
+                      height: '36px',
                     }}
                   >
-                    {column.label}
-                  </TableSortLabel>
-                </TableCell>
-              ))}
+                    <TableSortLabel
+                      active={orderBy === column.id}
+                      direction={orderBy === column.id ? order : 'asc'}
+                      onClick={() => handleRequestSort(column.id)}
+                      disabled={!column.sortable}
+                      sx={{
+                        fontSize: '12px',
+                        color: sectionColor,
+                        '&:hover': {
+                          color: hoverColor,
+                        },
+                        '&.Mui-active': {
+                          color: sectionColor,
+                          fontWeight: 700,
+                        },
+                        '& .MuiTableSortLabel-icon': {
+                          fontSize: '16px',
+                          opacity: 1,
+                          color: 'inherit',
+                        },
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                        {column.section === 'linkedin' && (
+                          <LinkedInIcon sx={{ fontSize: '14px' }} />
+                        )}
+                        {column.section === 'email' && (
+                          <EmailIcon sx={{ fontSize: '14px' }} />
+                        )}
+                        {column.label}
+                      </Box>
+                    </TableSortLabel>
+                  </TableCell>
+                );
+              })}
             </TableRow>
           </TableHead>
           <TableBody>
@@ -901,6 +1132,71 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
           );
         })}
       </Menu>
+
+      {/* Custom Field Dropdown Menu */}
+      <Menu
+        anchorEl={customFieldMenuAnchor}
+        open={Boolean(customFieldMenuAnchor)}
+        onClose={handleCustomFieldMenuClose}
+      >
+        {selectedCustomFieldName &&
+          getDropdownOptions(selectedCustomFieldName).map((option) => (
+            <MenuItem
+              key={option}
+              onClick={() => handleCustomFieldChange(option)}
+              selected={
+                selectedLeadForCustomField?.customFields?.[selectedCustomFieldName] === option
+              }
+            >
+              <Typography
+                variant="body2"
+                sx={{
+                  fontWeight:
+                    selectedLeadForCustomField?.customFields?.[selectedCustomFieldName] === option
+                      ? 700
+                      : 400,
+                }}
+              >
+                {option}
+              </Typography>
+            </MenuItem>
+          ))}
+      </Menu>
+
+      {/* Date Picker Popover */}
+      <Popover
+        open={Boolean(datePickerAnchor)}
+        anchorEl={datePickerAnchor}
+        onClose={handleDatePickerClose}
+        anchorOrigin={{
+          vertical: 'bottom',
+          horizontal: 'left',
+        }}
+        transformOrigin={{
+          vertical: 'top',
+          horizontal: 'left',
+        }}
+      >
+        <Box sx={{ p: 2 }}>
+          <LocalizationProvider dateAdapter={AdapterDateFns}>
+            <DatePicker
+              label="Select Date"
+              value={
+                selectedLeadForDate && selectedDateFieldName
+                  ? parseDateValue(selectedLeadForDate.customFields?.[selectedDateFieldName])
+                  : null
+              }
+              onChange={handleDateChange}
+              slotProps={{
+                textField: {
+                  size: 'small',
+                  sx: { width: 250 },
+                },
+              }}
+            />
+          </LocalizationProvider>
+        </Box>
+      </Popover>
     </Box>
   );
 };

@@ -39,7 +39,7 @@ export interface CostInfo {
 export interface ApiCostRecord {
   userId: string;
   leadId?: string;
-  service: "blog-qualification" | "writing-program-finder" | "writing-program-analyzer" | "idea-generation";
+  service: "blog-qualification" | "writing-program-finder" | "writing-program-analyzer" | "genai-blog-idea";
   model: string;
   timestamp: FieldValue;
   inputTokens: number;
@@ -83,7 +83,7 @@ const SERVICE_TO_CATEGORY: Record<string, string> = {
   "blog-qualification": "blogAnalysis",
   "writing-program-finder": "writingProgram",
   "writing-program-analyzer": "writingProgram",
-  "idea-generation": "other",
+  "genai-blog-idea": "ideaGeneration",
 };
 
 /**
@@ -92,7 +92,7 @@ const SERVICE_TO_CATEGORY: Record<string, string> = {
  */
 export async function logApiCost(
   userId: string,
-  service: "blog-qualification" | "writing-program-finder" | "writing-program-analyzer" | "idea-generation",
+  service: "blog-qualification" | "writing-program-finder" | "writing-program-analyzer" | "genai-blog-idea",
   costInfo: CostInfo,
   metadata: {
     leadId?: string;

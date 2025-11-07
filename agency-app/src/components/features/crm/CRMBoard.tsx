@@ -1,7 +1,25 @@
 // src/components/features/crm/CRMBoard.tsx
 import React, { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { Box, Typography, Fab, Button, ThemeProvider, createTheme, Alert, Snackbar, IconButton, Badge, Tooltip } from '@mui/material';
+import {
+  Box,
+  Typography,
+  Fab,
+  Button,
+  ThemeProvider,
+  createTheme,
+  Alert,
+  Snackbar,
+  IconButton,
+  Badge,
+  Tooltip,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  DialogContentText,
+  CircularProgress,
+} from '@mui/material';
 import { Add as AddIcon, UploadFile as UploadFileIcon, Archive as ArchiveIcon } from '@mui/icons-material';
 import { useAuth } from '../../../contexts/AuthContext';
 import { Lead, LeadStatus } from '../../../types/lead';
@@ -104,6 +122,10 @@ function CRMBoard() {
 
   // Bulk edit dialog state
   const [showBulkEditDialog, setShowBulkEditDialog] = useState(false);
+
+  // Bulk delete dialog and loading state
+  const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
+  const [bulkDeleting, setBulkDeleting] = useState(false);
 
   // Table column visibility state
   const [tableColumns, setTableColumns] = useState<TableColumnConfig[]>(DEFAULT_TABLE_COLUMNS);
@@ -553,22 +575,26 @@ function CRMBoard() {
     if (!lead) return;
 
     try {
-      const updateData: any = {
-        outreach: {
-          ...lead.outreach,
-          linkedIn: {
-            ...lead.outreach?.linkedIn,
-            status,
-          },
-        },
+      // Build the complete outreach object preserving both channels
+      const outreachData: any = {};
+
+      // Update LinkedIn
+      outreachData.linkedIn = {
+        ...lead.outreach?.linkedIn,
+        status,
       };
 
       // Auto-set sentAt timestamp if status is sent or opened
       if ((status === 'sent' || status === 'opened') && !lead.outreach?.linkedIn?.sentAt) {
-        updateData.outreach.linkedIn.sentAt = new Date();
+        outreachData.linkedIn.sentAt = new Date();
       }
 
-      await updateLead(leadId, updateData);
+      // Preserve existing email data
+      if (lead.outreach?.email) {
+        outreachData.email = lead.outreach.email;
+      }
+
+      await updateLead(leadId, { outreach: outreachData });
     } catch (error) {
       console.error('Error updating LinkedIn status:', error);
       showAlert('Failed to update LinkedIn status. Please try again.');
@@ -581,22 +607,26 @@ function CRMBoard() {
     if (!lead) return;
 
     try {
-      const updateData: any = {
-        outreach: {
-          ...lead.outreach,
-          email: {
-            ...lead.outreach?.email,
-            status,
-          },
-        },
+      // Build the complete outreach object preserving both channels
+      const outreachData: any = {};
+
+      // Preserve existing LinkedIn data
+      if (lead.outreach?.linkedIn) {
+        outreachData.linkedIn = lead.outreach.linkedIn;
+      }
+
+      // Update Email
+      outreachData.email = {
+        ...lead.outreach?.email,
+        status,
       };
 
       // Auto-set sentAt timestamp if status is sent or opened
       if ((status === 'sent' || status === 'opened') && !lead.outreach?.email?.sentAt) {
-        updateData.outreach.email.sentAt = new Date();
+        outreachData.email.sentAt = new Date();
       }
 
-      await updateLead(leadId, updateData);
+      await updateLead(leadId, { outreach: outreachData });
     } catch (error) {
       console.error('Error updating email status:', error);
       showAlert('Failed to update email status. Please try again.');
@@ -711,12 +741,17 @@ function CRMBoard() {
     }
   };
 
-  const handleBulkDelete = async () => {
+  // Open bulk delete confirmation dialog
+  const handleBulkDelete = () => {
+    if (selectedLeadIds.length === 0) return;
+    setBulkDeleteDialogOpen(true);
+  };
+
+  // Confirm and execute bulk delete
+  const confirmBulkDelete = async () => {
     if (selectedLeadIds.length === 0) return;
 
-    const confirmMessage = `Are you sure you want to delete ${selectedLeadIds.length} lead${selectedLeadIds.length > 1 ? 's' : ''}? This action cannot be undone.`;
-
-    if (!window.confirm(confirmMessage)) return;
+    setBulkDeleting(true);
 
     try {
       // Use bulkDeleteLeads to properly handle company cleanup
@@ -724,9 +759,12 @@ function CRMBoard() {
 
       showAlert(`Successfully deleted ${selectedLeadIds.length} lead${selectedLeadIds.length > 1 ? 's' : ''}`);
       setSelectedLeadIds([]);
+      setBulkDeleteDialogOpen(false);
     } catch (error) {
       console.error('Error deleting leads:', error);
       showAlert('Failed to delete some leads. Please try again.');
+    } finally {
+      setBulkDeleting(false);
     }
   };
 
@@ -1052,6 +1090,7 @@ function CRMBoard() {
                 onExportCSV={handleBulkExportCSV}
                 onDelete={handleBulkDelete}
                 onClear={handleClearSelection}
+                isDeleting={bulkDeleting}
               />
 
               {/* Table */}
@@ -1161,6 +1200,40 @@ function CRMBoard() {
           onSave={handleBulkEditSave}
           selectedCount={selectedLeadIds.length}
         />
+
+        {/* Bulk Delete Confirmation Dialog */}
+        <Dialog
+          open={bulkDeleteDialogOpen}
+          onClose={() => !bulkDeleting && setBulkDeleteDialogOpen(false)}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle sx={{ fontWeight: 700 }}>Delete Multiple Leads?</DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              Are you sure you want to delete <strong>{selectedLeadIds.length} lead{selectedLeadIds.length > 1 ? 's' : ''}</strong>?
+              This action cannot be undone.
+            </DialogContentText>
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3 }}>
+            <Button
+              onClick={() => setBulkDeleteDialogOpen(false)}
+              disabled={bulkDeleting}
+              sx={{ textTransform: 'none', fontWeight: 600 }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmBulkDelete}
+              disabled={bulkDeleting}
+              variant="contained"
+              color="error"
+              sx={{ textTransform: 'none', fontWeight: 600 }}
+            >
+              {bulkDeleting ? <CircularProgress size={24} sx={{ color: 'white' }} /> : 'Delete'}
+            </Button>
+          </DialogActions>
+        </Dialog>
       </Box>
     </ThemeProvider>
   );

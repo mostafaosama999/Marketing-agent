@@ -10,17 +10,24 @@ import {
   Collapse,
   Divider,
   Paper,
+  TextField,
+  Button,
 } from '@mui/material';
 import {
   ExpandMore as ExpandMoreIcon,
   Code as CodeIcon,
   Person as PersonIcon,
   LocalOffer as TagIcon,
+  Edit as EditIcon,
+  Save as SaveIcon,
+  Cancel as CancelIcon,
 } from '@mui/icons-material';
 import { PromptMetadata } from '../../data/prompts';
 
 interface PromptCardProps {
   prompt: PromptMetadata;
+  editable?: boolean;
+  onSave?: (updatedPrompt: PromptMetadata) => void;
 }
 
 const categoryColors: Record<string, { bg: string; border: string; tag: string }> = {
@@ -51,12 +58,31 @@ const categoryColors: Record<string, { bg: string; border: string; tag: string }
   },
 };
 
-export const PromptCard: React.FC<PromptCardProps> = ({ prompt }) => {
+export const PromptCard: React.FC<PromptCardProps> = ({ prompt, editable = false, onSave }) => {
   const [expanded, setExpanded] = useState(false);
+  const [isEditing, setIsEditing] = useState(false);
+  const [editedPrompt, setEditedPrompt] = useState<PromptMetadata>(prompt);
   const categoryStyle = categoryColors[prompt.category] || categoryColors['LinkedIn Posts'];
 
   const handleExpandClick = () => {
     setExpanded(!expanded);
+  };
+
+  const handleEditClick = () => {
+    setIsEditing(true);
+    setExpanded(true);
+  };
+
+  const handleSaveClick = () => {
+    if (onSave) {
+      onSave(editedPrompt);
+    }
+    setIsEditing(false);
+  };
+
+  const handleCancelClick = () => {
+    setEditedPrompt(prompt); // Reset to original
+    setIsEditing(false);
   };
 
   return (
@@ -93,18 +119,33 @@ export const PromptCard: React.FC<PromptCardProps> = ({ prompt }) => {
             </Typography>
           </Box>
 
-          <IconButton
-            onClick={handleExpandClick}
-            sx={{
-              transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
-              transition: 'transform 0.3s',
-              ml: 2,
-            }}
-            aria-expanded={expanded}
-            aria-label="show more"
-          >
-            <ExpandMoreIcon />
-          </IconButton>
+          <Box sx={{ display: 'flex', gap: 1, ml: 2 }}>
+            {editable && !isEditing && (
+              <IconButton
+                onClick={handleEditClick}
+                sx={{
+                  color: categoryStyle.border,
+                  '&:hover': {
+                    bgcolor: categoryStyle.tag,
+                  },
+                }}
+                aria-label="edit prompt"
+              >
+                <EditIcon />
+              </IconButton>
+            )}
+            <IconButton
+              onClick={handleExpandClick}
+              sx={{
+                transform: expanded ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: 'transform 0.3s',
+              }}
+              aria-expanded={expanded}
+              aria-label="show more"
+            >
+              <ExpandMoreIcon />
+            </IconButton>
+          </Box>
         </Box>
 
         {/* Metadata Row */}
@@ -213,7 +254,7 @@ export const PromptCard: React.FC<PromptCardProps> = ({ prompt }) => {
           )}
 
           {/* System Prompt Section */}
-          {prompt.systemPrompt && (
+          {(prompt.systemPrompt || isEditing) && (
             <Box sx={{ mb: 2.5 }}>
               <Typography
                 variant="subtitle2"
@@ -223,31 +264,55 @@ export const PromptCard: React.FC<PromptCardProps> = ({ prompt }) => {
                   mb: 1,
                 }}
               >
-                System Prompt
+                System Prompt {isEditing && <Chip label="Optional" size="small" sx={{ ml: 1, height: 18, fontSize: '10px' }} />}
               </Typography>
-              <Paper
-                sx={{
-                  p: 2,
-                  bgcolor: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                  borderRadius: 1.5,
-                  maxHeight: 200,
-                  overflow: 'auto',
-                }}
-              >
-                <Typography
-                  variant="body2"
+              {isEditing ? (
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={8}
+                  value={editedPrompt.systemPrompt || ''}
+                  onChange={(e) => setEditedPrompt({ ...editedPrompt, systemPrompt: e.target.value })}
+                  placeholder="Enter system prompt (optional)..."
                   sx={{
-                    fontFamily: 'monospace',
-                    fontSize: '13px',
-                    color: '#334155',
-                    whiteSpace: 'pre-wrap',
-                    lineHeight: 1.6,
+                    '& .MuiOutlinedInput-root': {
+                      fontFamily: 'monospace',
+                      fontSize: '13px',
+                      bgcolor: '#f8fafc',
+                      '&:hover fieldset': {
+                        borderColor: categoryStyle.border,
+                      },
+                      '&.Mui-focused fieldset': {
+                        borderColor: categoryStyle.border,
+                      },
+                    },
+                  }}
+                />
+              ) : (
+                <Paper
+                  sx={{
+                    p: 2,
+                    bgcolor: '#f8fafc',
+                    border: '1px solid #e2e8f0',
+                    borderRadius: 1.5,
+                    maxHeight: 200,
+                    overflow: 'auto',
                   }}
                 >
-                  {prompt.systemPrompt}
-                </Typography>
-              </Paper>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      fontFamily: 'monospace',
+                      fontSize: '13px',
+                      color: '#334155',
+                      whiteSpace: 'pre-wrap',
+                      lineHeight: 1.6,
+                    }}
+                  >
+                    {prompt.systemPrompt}
+                  </Typography>
+                </Paper>
+              )}
             </Box>
           )}
 
@@ -261,32 +326,167 @@ export const PromptCard: React.FC<PromptCardProps> = ({ prompt }) => {
                 mb: 1,
               }}
             >
-              User Prompt Template
+              Full Prompt
             </Typography>
-            <Paper
-              sx={{
-                p: 2,
-                bgcolor: '#f8fafc',
-                border: '1px solid #e2e8f0',
-                borderRadius: 1.5,
-                maxHeight: 300,
-                overflow: 'auto',
-              }}
-            >
-              <Typography
-                variant="body2"
+            {isEditing ? (
+              <TextField
+                fullWidth
+                multiline
+                rows={16}
+                value={editedPrompt.userPrompt}
+                onChange={(e) => setEditedPrompt({ ...editedPrompt, userPrompt: e.target.value })}
+                placeholder="Enter user prompt template..."
+                required
                 sx={{
-                  fontFamily: 'monospace',
-                  fontSize: '13px',
-                  color: '#334155',
-                  whiteSpace: 'pre-wrap',
-                  lineHeight: 1.6,
+                  '& .MuiOutlinedInput-root': {
+                    fontFamily: 'monospace',
+                    fontSize: '13px',
+                    bgcolor: '#f8fafc',
+                    '&:hover fieldset': {
+                      borderColor: categoryStyle.border,
+                    },
+                    '&.Mui-focused fieldset': {
+                      borderColor: categoryStyle.border,
+                    },
+                  },
+                }}
+              />
+            ) : (
+              <Paper
+                sx={{
+                  p: 2,
+                  bgcolor: '#f8fafc',
+                  border: '1px solid #e2e8f0',
+                  borderRadius: 1.5,
+                  maxHeight: 300,
+                  overflow: 'auto',
                 }}
               >
-                {prompt.userPrompt}
-              </Typography>
-            </Paper>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    fontFamily: 'monospace',
+                    fontSize: '13px',
+                    color: '#334155',
+                    whiteSpace: 'pre-wrap',
+                    lineHeight: 1.6,
+                  }}
+                >
+                  {prompt.userPrompt}
+                </Typography>
+              </Paper>
+            )}
           </Box>
+
+          {/* Output Schema Section */}
+          {(editedPrompt.outputSchema || isEditing) && (
+            <>
+              <Divider sx={{ my: 3 }} />
+              <Box>
+                <Typography
+                  variant="subtitle2"
+                  sx={{
+                    fontWeight: 600,
+                    color: '#475569',
+                    mb: 1,
+                  }}
+                >
+                  Output Structure (JSON Schema)
+                </Typography>
+                {isEditing ? (
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={12}
+                    value={editedPrompt.outputSchema || ''}
+                    onChange={(e) => setEditedPrompt({ ...editedPrompt, outputSchema: e.target.value })}
+                    placeholder="Enter JSON output schema (optional)..."
+                    sx={{
+                      '& .MuiOutlinedInput-root': {
+                        fontFamily: 'monospace',
+                        fontSize: '13px',
+                        bgcolor: '#f8fafc',
+                        '&:hover fieldset': {
+                          borderColor: categoryStyle.border,
+                        },
+                        '&.Mui-focused fieldset': {
+                          borderColor: categoryStyle.border,
+                        },
+                      },
+                    }}
+                  />
+                ) : (
+                  <Paper
+                    sx={{
+                      p: 2,
+                      bgcolor: '#f8fafc',
+                      border: '1px solid #e2e8f0',
+                      borderRadius: 1.5,
+                      maxHeight: 300,
+                      overflow: 'auto',
+                    }}
+                  >
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        fontFamily: 'monospace',
+                        fontSize: '13px',
+                        color: '#334155',
+                        whiteSpace: 'pre-wrap',
+                        lineHeight: 1.6,
+                      }}
+                    >
+                      {prompt.outputSchema}
+                    </Typography>
+                  </Paper>
+                )}
+              </Box>
+            </>
+          )}
+
+          {/* Edit Actions */}
+          {isEditing && (
+            <Box sx={{ display: 'flex', gap: 2, mt: 3, justifyContent: 'flex-end' }}>
+              <Button
+                variant="outlined"
+                onClick={handleCancelClick}
+                startIcon={<CancelIcon />}
+                sx={{
+                  borderColor: '#cbd5e1',
+                  color: '#64748b',
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  '&:hover': {
+                    borderColor: '#94a3b8',
+                    bgcolor: '#f8fafc',
+                  },
+                }}
+              >
+                Cancel
+              </Button>
+              <Button
+                variant="contained"
+                onClick={handleSaveClick}
+                startIcon={<SaveIcon />}
+                disabled={!editedPrompt.userPrompt.trim()}
+                sx={{
+                  background: categoryStyle.bg,
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  px: 3,
+                  '&:hover': {
+                    opacity: 0.9,
+                  },
+                  '&:disabled': {
+                    background: '#e2e8f0',
+                    color: '#94a3b8',
+                  },
+                }}
+              >
+                Save Changes
+              </Button>
+            </Box>
+          )}
         </Collapse>
       </CardContent>
     </Card>

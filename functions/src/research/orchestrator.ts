@@ -3,7 +3,7 @@ import {createResearchSession, updateResearchSession, updateResearchStep} from "
 import {ResearchStep} from "../types";
 import {analyzeCompany} from "../utils/companyAnalysisUtils";
 import {analyzeBlogFromCompany} from "../utils/blogDiscoveryUtils";
-import {generateIdeasForCompany} from "../utils/ideaGenerationUtils";
+// import {generateIdeasForCompany} from "../utils/ideaGenerationUtils"; // DEPRECATED: Use generateGenAIBlogIdeas instead
 import {updateResearchDocument} from "../utils/docGenerationUtils";
 
 const initialSteps: ResearchStep[] = [
@@ -204,33 +204,30 @@ async function processResearchFlow(sessionId: string, companyUrl: string) {
       result: `Extracted ${aiTrends.length} current AI trends`,
     });
 
-    // Step 4: Generate Ideas
+    // Step 4: Generate Ideas (DEPRECATED - Use generateGenAIBlogIdeas cloud function instead)
     const step4StartTime = new Date();
     await updateResearchStep(sessionId, 3, {
       status: "in_progress",
       startedAt: step4StartTime,
     });
     try {
-      const ideaRequest = {
-        companyAnalysis,
-        blogThemes: blogAnalysis?.themes || [],
-        aiTrends,
-        existingTitles: blogAnalysis?.recentPosts?.map((post: any) => post.title) || []
-      };
-      const ideaResult = await generateIdeasForCompany(ideaRequest);
-      uniqueIdeas = ideaResult.ideas;
+      // DEPRECATED: This step is disabled. Use the new generateGenAIBlogIdeas cloud function instead.
+      // const ideaRequest = {
+      //   companyAnalysis,
+      //   blogThemes: blogAnalysis?.themes || [],
+      //   aiTrends,
+      //   existingTitles: blogAnalysis?.recentPosts?.map((post: any) => post.title) || []
+      // };
+      // const ideaResult = await generateIdeasForCompany(ideaRequest);
+      // uniqueIdeas = ideaResult.ideas;
+      uniqueIdeas = []; // Placeholder
       const step4EndTime = new Date();
       const step4Duration = step4EndTime.getTime() - step4StartTime.getTime();
-      const filteredIdeas = uniqueIdeas.filter((idea: any) => !idea.isDuplicate);
       await updateResearchStep(sessionId, 3, {
         status: "completed",
         completedAt: step4EndTime,
         duration: step4Duration,
-        result: `**Generated ${ideaResult.totalGenerated} ideas** (${filteredIdeas.length} unique)\n` +
-                `All Ideas:\n` +
-                filteredIdeas.map((idea: any) =>
-                  `• ${idea.title} (${idea.format}, ${idea.difficulty})`
-                ).join("\n"),
+        result: "Idea generation step deprecated. Use generateGenAIBlogIdeas cloud function instead.",
       });
     } catch (error) {
       console.error("Idea generation error:", error);

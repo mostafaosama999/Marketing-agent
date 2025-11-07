@@ -7,6 +7,7 @@
 export interface AppSettings {
   // Offer Template Configuration
   offerTemplate: string;
+  offerHeadline?: string;
 
   // AI Prompts Configuration (Future)
   aiPrompts?: {
@@ -27,6 +28,7 @@ export interface AppSettings {
  */
 export interface UpdateSettingsRequest {
   offerTemplate?: string;
+  offerHeadline?: string;
   aiPrompts?: AppSettings['aiPrompts'];
 }
 

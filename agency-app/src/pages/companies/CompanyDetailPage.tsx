@@ -57,6 +57,7 @@ import {
 import { enrichOrganization } from '../../services/api/apolloService';
 import { WritingProgramSection } from '../../components/features/companies/WritingProgramSection';
 import { BlogAnalysisSection } from '../../components/features/companies/BlogAnalysisSection';
+import { OfferIdeasSection } from '../../components/features/companies/OfferIdeasSection';
 import { WebsiteFieldMappingDialog } from '../../components/features/companies/WebsiteFieldMappingDialog';
 import { WritingProgramUrlSelectionDialog } from '../../components/features/companies/WritingProgramUrlSelectionDialog';
 import { LeadDiscoveryDialog } from '../../components/features/companies/LeadDiscoveryDialog';
@@ -1681,75 +1682,10 @@ export const CompanyDetailPage: React.FC = () => {
             </Box>
           )}
 
-          {/* Offer Tab */}
-          {tabValue === 5 && (
+          {/* Offer Tab - AI-Generated Blog Ideas */}
+          {tabValue === 5 && company && (
             <Box>
-              {offerError && (
-                <Alert severity="error" sx={{ mb: 3 }}>
-                  {offerError}
-                </Alert>
-              )}
-
-              <Paper sx={{ p: 4 }}>
-                <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
-                  Blog Idea Offer
-                </Typography>
-                <Typography variant="body2" sx={{ color: '#64748b', mb: 3 }}>
-                  Create a compelling blog idea to offer this company for lead outreach. This offer will be used in personalized messages to prospects.
-                </Typography>
-
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={6}
-                  value={offerText}
-                  onChange={(e) => setOfferText(e.target.value)}
-                  placeholder="Enter a blog idea or topic to pitch to this company... (e.g., 'How to Scale Your SaaS Platform with Serverless Architecture')"
-                  variant="outlined"
-                  sx={{
-                    mb: 2,
-                    '& .MuiOutlinedInput-root': {
-                      fontSize: '14px',
-                      '&:hover fieldset': {
-                        borderColor: '#667eea',
-                      },
-                      '&.Mui-focused fieldset': {
-                        borderColor: '#667eea',
-                      },
-                    },
-                  }}
-                />
-
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
-                  <Typography variant="caption" sx={{ color: '#94a3b8' }}>
-                    {offerText.length} characters
-                  </Typography>
-                  {company?.offer?.updatedAt && (
-                    <Typography variant="caption" sx={{ color: '#94a3b8' }}>
-                      Last updated: {new Date(company.offer.updatedAt).toLocaleString()}
-                    </Typography>
-                  )}
-                </Box>
-
-                <Button
-                  variant="contained"
-                  onClick={handleOfferSave}
-                  disabled={offerSaving || !offerText.trim()}
-                  startIcon={offerSaving ? <CircularProgress size={20} /> : null}
-                  sx={{
-                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                    textTransform: 'none',
-                    px: 4,
-                    fontWeight: 500,
-                    '&:disabled': {
-                      background: '#e2e8f0',
-                      color: '#94a3b8',
-                    },
-                  }}
-                >
-                  {offerSaving ? 'Saving...' : 'Save Offer'}
-                </Button>
-              </Paper>
+              <OfferIdeasSection company={company} companyId={companyId!} />
             </Box>
           )}
         </Box>

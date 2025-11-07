@@ -36,7 +36,7 @@
     },
     "ui": {
       "enabled": true,
-      "port": 4001
+      "port": 4444
     },
     "hosting": {
       "port": 5003
@@ -47,6 +47,14 @@
     "logging": {
       "port": 4502
     },
-    "singleProjectMode": true
+    "singleProjectMode": true,
+    "export": {
+      "on_exit": {
+        "path": "./emulator-data"
+      }
+    },
+    "import": {
+      "path": "./emulator-data"
+    }
   }
 }
