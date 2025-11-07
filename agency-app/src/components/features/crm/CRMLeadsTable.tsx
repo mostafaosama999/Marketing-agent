@@ -129,6 +129,7 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
     const fetchFieldDefinitions = async () => {
       try {
         const definitions = await getDropdownFieldDefinitions('lead');
+        console.log('Loaded dropdown field definitions:', definitions);
         setFieldDefinitions(definitions);
       } catch (error) {
         console.error('Error fetching field definitions:', error);
@@ -222,6 +223,14 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
     fieldName: string
   ) => {
     event.stopPropagation();
+
+    // Check if we have options for this field
+    const options = getDropdownOptions(fieldName);
+    if (options.length === 0) {
+      console.warn(`No dropdown options found for field: ${fieldName}`);
+      console.warn('Available field definitions:', fieldDefinitions);
+    }
+
     setCustomFieldMenuAnchor(event.currentTarget);
     setSelectedLeadForCustomField(lead);
     setSelectedCustomFieldName(fieldName);
@@ -1139,28 +1148,70 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
         open={Boolean(customFieldMenuAnchor)}
         onClose={handleCustomFieldMenuClose}
       >
-        {selectedCustomFieldName &&
-          getDropdownOptions(selectedCustomFieldName).map((option) => (
-            <MenuItem
-              key={option}
-              onClick={() => handleCustomFieldChange(option)}
-              selected={
-                selectedLeadForCustomField?.customFields?.[selectedCustomFieldName] === option
-              }
-            >
-              <Typography
-                variant="body2"
-                sx={{
-                  fontWeight:
-                    selectedLeadForCustomField?.customFields?.[selectedCustomFieldName] === option
-                      ? 700
-                      : 400,
-                }}
+        {selectedCustomFieldName && (() => {
+          const options = getDropdownOptions(selectedCustomFieldName);
+
+          if (options.length === 0) {
+            return (
+              <MenuItem disabled>
+                <Box sx={{ py: 1, px: 1 }}>
+                  <Typography
+                    variant="body2"
+                    sx={{
+                      color: 'error.main',
+                      fontWeight: 600,
+                      mb: 0.5,
+                    }}
+                  >
+                    No options configured
+                  </Typography>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: 'text.secondary',
+                      display: 'block',
+                    }}
+                  >
+                    Field: {selectedCustomFieldName}
+                  </Typography>
+                  <Typography
+                    variant="caption"
+                    sx={{
+                      color: 'text.secondary',
+                      fontStyle: 'italic',
+                      display: 'block',
+                      mt: 0.5,
+                    }}
+                  >
+                    Check console for details
+                  </Typography>
+                </Box>
+              </MenuItem>
+            );
+          }
+
+          return options.map((option) => {
+            const isSelected = selectedLeadForCustomField?.customFields?.[selectedCustomFieldName] === option;
+
+            return (
+              <MenuItem
+                key={option}
+                onClick={() => handleCustomFieldChange(option)}
+                selected={isSelected}
               >
-                {option}
-              </Typography>
-            </MenuItem>
-          ))}
+                <Chip
+                  label={option}
+                  size="small"
+                  sx={{
+                    bgcolor: isSelected ? '#e0e7ff' : '#f3f4f6',
+                    color: isSelected ? '#4f46e5' : '#6b7280',
+                    fontWeight: 500,
+                  }}
+                />
+              </MenuItem>
+            );
+          });
+        })()}
       </Menu>
 
       {/* Date Picker Popover */}

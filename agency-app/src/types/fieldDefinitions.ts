@@ -179,3 +179,24 @@ export const formatDropdownValue = (value: string): string => {
     .map(word => word.charAt(0).toUpperCase() + word.slice(1))
     .join(' ');
 };
+
+/**
+ * Helper function to infer section from field name
+ * Checks field name to determine if it belongs to LinkedIn, Email, or General section
+ * Looks for both prefix patterns (linkedin_) and contains patterns (contains "linkedin")
+ */
+export const getSectionFromFieldName = (fieldName: string): FieldSection => {
+  const lowerFieldName = fieldName.toLowerCase();
+
+  // Check if field name contains "linkedin" anywhere
+  if (lowerFieldName.includes('linkedin')) {
+    return 'linkedin';
+  }
+
+  // Check if field name contains "email" anywhere
+  if (lowerFieldName.includes('email')) {
+    return 'email';
+  }
+
+  return 'general';
+};

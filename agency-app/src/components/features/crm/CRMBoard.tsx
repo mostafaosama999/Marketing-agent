@@ -837,6 +837,25 @@ function CRMBoard() {
     }
   };
 
+  // Reset column order to default (auto-grouped by section)
+  const handleResetColumnOrder = async () => {
+    try {
+      // Clear saved preferences
+      localStorage.removeItem(TABLE_COLUMNS_STORAGE_KEY);
+
+      // Rebuild columns with auto-grouping (no saved preferences)
+      const allColumns = await buildTableColumns(leads);
+
+      // Update state with auto-grouped columns
+      setTableColumns(allColumns);
+
+      showAlert('Column order reset to default grouping');
+    } catch (error) {
+      console.error('Error resetting column order:', error);
+      showAlert('Failed to reset column order. Please try again.');
+    }
+  };
+
   // Preset handlers
   const handleLoadPreset = async (presetId: string) => {
     if (!user) return;
@@ -997,6 +1016,7 @@ function CRMBoard() {
                       onToggleVisibility={handleToggleTableColumnVisibility}
                       onReorderColumns={handleReorderColumns}
                       onDeleteColumn={handleDeleteColumn}
+                      onResetToDefault={handleResetColumnOrder}
                     />
                     <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
                   </>

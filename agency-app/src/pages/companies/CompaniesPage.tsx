@@ -9,6 +9,8 @@ import {
   IconButton,
   Badge,
   Tooltip,
+  Snackbar,
+  Alert,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -77,6 +79,17 @@ export const CompaniesPage: React.FC = () => {
 
   // Table column visibility state
   const [tableColumns, setTableColumns] = useState<TableColumnConfig[]>(DEFAULT_COMPANIES_TABLE_COLUMNS);
+
+  // Snackbar state
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean;
+    message: string;
+    severity: 'success' | 'error' | 'info' | 'warning';
+  }>({
+    open: false,
+    message: '',
+    severity: 'info',
+  });
 
   // Subscribe to companies with real-time updates
   useEffect(() => {
@@ -253,6 +266,25 @@ export const CompaniesPage: React.FC = () => {
     // Save preferences (visibility + order) to localStorage
     const preferences = columnsToPreferences(reorderedColumns);
     localStorage.setItem(COMPANIES_TABLE_COLUMNS_STORAGE_KEY, JSON.stringify(preferences));
+  };
+
+  // Reset column order to default (auto-grouped by section)
+  const handleResetColumnOrder = async () => {
+    try {
+      // Clear saved preferences
+      localStorage.removeItem(COMPANIES_TABLE_COLUMNS_STORAGE_KEY);
+
+      // Rebuild columns with auto-grouping (no saved preferences)
+      const allColumns = await buildCompaniesTableColumns(companies);
+
+      // Update state with auto-grouped columns
+      setTableColumns(allColumns);
+
+      setSnackbar({ open: true, message: 'Column order reset to default grouping', severity: 'success' });
+    } catch (error) {
+      console.error('Error resetting column order:', error);
+      setSnackbar({ open: true, message: 'Failed to reset column order', severity: 'error' });
+    }
   };
 
   // Filter handlers
@@ -484,6 +516,7 @@ export const CompaniesPage: React.FC = () => {
             columns={tableColumns}
             onToggleVisibility={handleColumnVisibilityChange}
             onReorderColumns={handleReorderColumns}
+            onResetToDefault={handleResetColumnOrder}
           />
           <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
 
@@ -645,6 +678,22 @@ export const CompaniesPage: React.FC = () => {
           />
         </>
       )}
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

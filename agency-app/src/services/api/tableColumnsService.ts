@@ -10,6 +10,7 @@ import { Company } from '../../types/crm';
 import { Lead } from '../../types/lead';
 import { getFieldDefinitions } from './fieldDefinitionsService';
 import { FieldSection } from '../../types/crm';
+import { getSectionFromFieldName } from '../../types/fieldDefinitions';
 
 /**
  * Get all unique custom field names from leads
@@ -124,7 +125,8 @@ export async function buildLeadsTableColumns(leads: Lead[]): Promise<TableColumn
 
         // Get field type and section from field definition, or use defaults
         const fieldType: 'dropdown' | 'text' = fieldDef?.fieldType === 'dropdown' ? 'dropdown' : 'text';
-        const section: FieldSection | undefined = fieldDef?.section;
+        // Auto-detect section from field name if not set in field definition
+        const section: FieldSection | undefined = fieldDef?.section || getSectionFromFieldName(fieldName);
 
         return {
           id: `custom_${fieldName}`,
@@ -170,15 +172,16 @@ export async function buildCompaniesTableColumns(companies: Company[]): Promise<
       }
     });
 
-    // Query field definitions to determine field types
+    // Query field definitions to determine field types and sections
     const fieldDefinitions = await getFieldDefinitions('company');
-    const dropdownFieldNames = new Set(fieldDefinitions.map(def => def.name));
+    const fieldDefMap = new Map(fieldDefinitions.map(def => [def.name, def]));
 
     // Create column configs for each custom field
     const customFieldColumns: TableColumnConfig[] = Array.from(customFieldNames)
       .sort()
       .map((fieldName, index) => {
         const totalIndex = columns.length + index;
+        const fieldDef = fieldDefMap.get(fieldName);
 
         // Clean up label by removing section prefixes (linkedin_, email_)
         const cleanFieldName = fieldName
@@ -190,8 +193,10 @@ export async function buildCompaniesTableColumns(companies: Company[]): Promise<
           .map(word => word.charAt(0).toUpperCase() + word.slice(1))
           .join(' ');
 
-        // Determine field type based on field definitions
-        const fieldType: 'dropdown' | 'text' = dropdownFieldNames.has(fieldName) ? 'dropdown' : 'text';
+        // Get field type and section from field definition, or use defaults
+        const fieldType: 'dropdown' | 'text' = fieldDef?.fieldType === 'dropdown' ? 'dropdown' : 'text';
+        // Auto-detect section from field name if not set in field definition
+        const section: FieldSection | undefined = fieldDef?.section || getSectionFromFieldName(fieldName);
 
         return {
           id: `custom_${fieldName}`,
@@ -200,12 +205,17 @@ export async function buildCompaniesTableColumns(companies: Company[]): Promise<
           visible: totalIndex < 10, // Show first 10 total columns by default
           type: 'custom' as const,
           order: totalIndex,
+          section: section, // Include section for visual grouping
           fieldType: fieldType,
           fieldName: fieldName,
         };
       });
 
-    return [...columns, ...customFieldColumns];
+    // Combine default and custom columns
+    const allColumns = [...columns, ...customFieldColumns];
+
+    // Auto-group by section (General → LinkedIn → Email)
+    return autoGroupColumnsBySection(allColumns);
   } catch (error) {
     console.error('Error building companies table columns:', error);
     // Return just default columns on error
@@ -239,6 +249,7 @@ export function columnsToPreferences(columns: TableColumnConfig[]): Record<strin
 /**
  * Apply saved preferences (visibility + order) to column list
  * Handles both old format (visibility only) and new format (visibility + order)
+ * Intelligently inserts new columns (without saved preferences) next to their section siblings
  */
 export function applyColumnPreferences(
   columns: TableColumnConfig[],
@@ -246,27 +257,63 @@ export function applyColumnPreferences(
 ): TableColumnConfig[] {
   if (!savedPreferences) return columns;
 
-  // Apply preferences to columns
-  const columnsWithPrefs = columns.map(col => {
+  // Separate columns into two groups: with and without saved preferences
+  const columnsWithSavedOrder: TableColumnConfig[] = [];
+  const newColumnsWithoutSavedOrder: TableColumnConfig[] = [];
+
+  columns.forEach(col => {
     const pref = savedPreferences[col.id];
 
     if (pref === undefined) {
-      return col;
+      // New column without saved preference
+      newColumnsWithoutSavedOrder.push(col);
+    } else if (typeof pref === 'boolean') {
+      // Old format: boolean (visibility only)
+      columnsWithSavedOrder.push({ ...col, visible: pref });
+    } else {
+      // New format: object with visibility and order
+      columnsWithSavedOrder.push({
+        ...col,
+        visible: pref.visible,
+        order: pref.order,
+      });
     }
-
-    // Old format: boolean (visibility only)
-    if (typeof pref === 'boolean') {
-      return { ...col, visible: pref };
-    }
-
-    // New format: object with visibility and order
-    return {
-      ...col,
-      visible: pref.visible,
-      order: pref.order,
-    };
   });
 
-  // Sort by order property
-  return columnsWithPrefs.sort((a, b) => a.order - b.order);
+  // If no new columns, just return the saved columns sorted
+  if (newColumnsWithoutSavedOrder.length === 0) {
+    return columnsWithSavedOrder.sort((a, b) => a.order - b.order);
+  }
+
+  // Sort columns with saved preferences by order
+  const sortedSavedColumns = columnsWithSavedOrder.sort((a, b) => a.order - b.order);
+
+  // For each new column, find the best insertion position based on its section
+  // Insert it right after the last column with the same section
+  const result = [...sortedSavedColumns];
+
+  newColumnsWithoutSavedOrder.forEach(newCol => {
+    // Find the index of the last column with the same section
+    let insertIndex = -1;
+    for (let i = result.length - 1; i >= 0; i--) {
+      if (result[i].section === newCol.section) {
+        insertIndex = i + 1;
+        break;
+      }
+    }
+
+    // If no column with same section found, append to end
+    if (insertIndex === -1) {
+      insertIndex = result.length;
+    }
+
+    // Insert the new column at the calculated position
+    result.splice(insertIndex, 0, newCol);
+  });
+
+  // Reassign order indices to match final positions
+  return result.map((col, index) => ({
+    ...col,
+    order: index,
+  }));
 }

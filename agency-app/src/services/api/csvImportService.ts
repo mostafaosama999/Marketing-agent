@@ -15,6 +15,7 @@ import {
   normalizeFieldName,
   extractUniqueValues,
   getDisplayLabel,
+  getSectionFromFieldName,
 } from '../../types/fieldDefinitions';
 import { batchCreateFieldDefinitions } from './fieldDefinitionsService';
 
@@ -354,9 +355,11 @@ export function detectDropdownFields(
     // Normalize field name (remove "dropdown" keyword)
     const fieldName = normalizeFieldName(header);
 
-    // Determine entity type and section from mapping
+    // Determine entity type from mapping
     const entityType = mapping.entityType || 'lead';
-    const section = mapping.section || 'general';
+
+    // Infer section from field name (e.g., linkedin_*, email_*)
+    const section = getSectionFromFieldName(fieldName);
 
     detectedDropdowns.push({
       columnName: header,
@@ -408,9 +411,11 @@ export function detectDateFields(
     // Normalize field name
     const fieldName = normalizeFieldName(header);
 
-    // Determine entity type and section from mapping
+    // Determine entity type from mapping
     const entityType = mapping.entityType || 'lead';
-    const section = mapping.section || 'general';
+
+    // Infer section from field name (e.g., linkedin_*, email_*)
+    const section = getSectionFromFieldName(fieldName);
 
     detectedDates.push({
       columnName: header,

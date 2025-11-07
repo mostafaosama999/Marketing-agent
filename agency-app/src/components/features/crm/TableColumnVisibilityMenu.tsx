@@ -30,6 +30,7 @@ interface TableColumnVisibilityMenuProps {
   onToggleVisibility: (columnId: string, visible: boolean) => void;
   onReorderColumns: (reorderedColumns: TableColumnConfig[]) => void;
   onDeleteColumn?: (columnId: string, fieldName: string) => Promise<void>;
+  onResetToDefault?: () => void;
 }
 
 export function TableColumnVisibilityMenu({
@@ -37,6 +38,7 @@ export function TableColumnVisibilityMenu({
   onToggleVisibility,
   onReorderColumns,
   onDeleteColumn,
+  onResetToDefault,
 }: TableColumnVisibilityMenuProps) {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
   const open = Boolean(anchorEl);
@@ -181,16 +183,42 @@ export function TableColumnVisibilityMenu({
         }}
       >
         <Box sx={{ px: 2, py: 1.5 }}>
-          <Typography
-            variant="subtitle2"
-            sx={{
-              fontWeight: 600,
-              color: '#1e293b',
-              fontSize: '13px',
-            }}
-          >
-            Show/Hide Columns
-          </Typography>
+          <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 0.5 }}>
+            <Typography
+              variant="subtitle2"
+              sx={{
+                fontWeight: 600,
+                color: '#1e293b',
+                fontSize: '13px',
+              }}
+            >
+              Show/Hide Columns
+            </Typography>
+            {onResetToDefault && (
+              <Button
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onResetToDefault();
+                  handleClose();
+                }}
+                sx={{
+                  textTransform: 'none',
+                  fontSize: '11px',
+                  fontWeight: 500,
+                  color: '#667eea',
+                  minWidth: 'auto',
+                  px: 1,
+                  py: 0.5,
+                  '&:hover': {
+                    bgcolor: 'rgba(102, 126, 234, 0.1)',
+                  },
+                }}
+              >
+                Reset Order
+              </Button>
+            )}
+          </Box>
           <Typography
             variant="caption"
             sx={{
