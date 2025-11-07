@@ -21,6 +21,7 @@ import {
   CircularProgress,
 } from '@mui/material';
 import { Add as AddIcon, UploadFile as UploadFileIcon, Archive as ArchiveIcon } from '@mui/icons-material';
+import { serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '../../../contexts/AuthContext';
 import { Lead, LeadStatus } from '../../../types/lead';
 import { CSVRow } from '../../../types/crm';
@@ -75,6 +76,9 @@ const modernTheme = createTheme({
     caption: { fontWeight: 400, fontSize: '12px' },
   },
 });
+
+// SessionStorage key for persisting active filters
+const ACTIVE_FILTERS_SESSION_KEY = 'crm_active_filters';
 
 function CRMBoard() {
   const navigate = useNavigate();
@@ -208,23 +212,63 @@ function CRMBoard() {
     }
   }, [leads]);
 
+  // Load filters from sessionStorage on mount (for persistence across navigation)
+  useEffect(() => {
+    try {
+      const savedFilters = sessionStorage.getItem(ACTIVE_FILTERS_SESSION_KEY);
+      if (savedFilters) {
+        const parsed = JSON.parse(savedFilters);
+        if (parsed.filters) {
+          setFilters(parsed.filters);
+        }
+        if (parsed.advancedFilterRules) {
+          setAdvancedFilterRules(parsed.advancedFilterRules);
+        }
+        if (parsed.currentView) {
+          setCurrentView(parsed.currentView);
+        }
+      }
+    } catch (error) {
+      console.error('Error loading filters from sessionStorage:', error);
+    }
+  }, []); // Only run once on mount
+
+  // Save filters to sessionStorage whenever they change
+  useEffect(() => {
+    try {
+      const filterState = {
+        filters,
+        advancedFilterRules,
+        currentView,
+      };
+      sessionStorage.setItem(ACTIVE_FILTERS_SESSION_KEY, JSON.stringify(filterState));
+    } catch (error) {
+      console.error('Error saving filters to sessionStorage:', error);
+    }
+  }, [filters, advancedFilterRules, currentView]);
+
   // Migrate localStorage data and load default preset on mount
   useEffect(() => {
     async function initializePresets() {
       if (!user) return;
 
       try {
+        // Check if we have active session filters
+        const savedFilters = sessionStorage.getItem(ACTIVE_FILTERS_SESSION_KEY);
+
         // First, migrate any existing localStorage data
         await migrateLocalStorageToFirestore(user.uid);
 
-        // Then, load the default preset if one exists
-        const defaultPreset = await getDefaultPreset(user.uid);
-        if (defaultPreset) {
-          // Apply the default preset
-          setAdvancedFilterRules(defaultPreset.advancedRules);
-          setFilters(defaultPreset.basicFilters);
-          setCurrentView(defaultPreset.viewMode);
-          // Note: Column visibility is now managed by the field configuration system
+        // Only load default preset if no active session filters exist
+        if (!savedFilters) {
+          const defaultPreset = await getDefaultPreset(user.uid);
+          if (defaultPreset) {
+            // Apply the default preset
+            setAdvancedFilterRules(defaultPreset.advancedRules);
+            setFilters(defaultPreset.basicFilters);
+            setCurrentView(defaultPreset.viewMode);
+            // Note: Column visibility is now managed by the field configuration system
+          }
         }
       } catch (error) {
         console.error('Error initializing presets:', error);
@@ -569,6 +613,24 @@ function CRMBoard() {
     }
   };
 
+  // Helper function to remove undefined values from an object
+  const removeUndefined = (obj: any): any => {
+    if (obj === null || obj === undefined) return obj;
+    if (typeof obj !== 'object') return obj;
+
+    const cleaned: any = Array.isArray(obj) ? [] : {};
+    for (const key in obj) {
+      if (obj[key] !== undefined) {
+        if (typeof obj[key] === 'object' && obj[key] !== null && !(obj[key] instanceof Date)) {
+          cleaned[key] = removeUndefined(obj[key]);
+        } else {
+          cleaned[key] = obj[key];
+        }
+      }
+    }
+    return cleaned;
+  };
+
   // LinkedIn status update handler
   const handleUpdateLinkedInStatus = async (leadId: string, status: string) => {
     const lead = leads.find(l => l.id === leadId);
@@ -586,18 +648,22 @@ function CRMBoard() {
 
       // Auto-set sentAt timestamp if status is sent or opened
       if ((status === 'sent' || status === 'opened') && !lead.outreach?.linkedIn?.sentAt) {
-        outreachData.linkedIn.sentAt = new Date();
+        outreachData.linkedIn.sentAt = serverTimestamp();
       }
 
-      // Preserve existing email data
+      // Preserve existing email data (clean undefined values)
       if (lead.outreach?.email) {
-        outreachData.email = lead.outreach.email;
+        outreachData.email = removeUndefined(lead.outreach.email);
       }
 
-      await updateLead(leadId, { outreach: outreachData });
+      // Remove any undefined values before sending to Firestore
+      const cleanedOutreachData = removeUndefined(outreachData);
+
+      await updateLead(leadId, { outreach: cleanedOutreachData });
     } catch (error) {
       console.error('Error updating LinkedIn status:', error);
-      showAlert('Failed to update LinkedIn status. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      showAlert(`Failed to update LinkedIn status: ${errorMessage}`);
     }
   };
 
@@ -610,9 +676,9 @@ function CRMBoard() {
       // Build the complete outreach object preserving both channels
       const outreachData: any = {};
 
-      // Preserve existing LinkedIn data
+      // Preserve existing LinkedIn data (clean undefined values)
       if (lead.outreach?.linkedIn) {
-        outreachData.linkedIn = lead.outreach.linkedIn;
+        outreachData.linkedIn = removeUndefined(lead.outreach.linkedIn);
       }
 
       // Update Email
@@ -623,13 +689,17 @@ function CRMBoard() {
 
       // Auto-set sentAt timestamp if status is sent or opened
       if ((status === 'sent' || status === 'opened') && !lead.outreach?.email?.sentAt) {
-        outreachData.email.sentAt = new Date();
+        outreachData.email.sentAt = serverTimestamp();
       }
 
-      await updateLead(leadId, { outreach: outreachData });
+      // Remove any undefined values before sending to Firestore
+      const cleanedOutreachData = removeUndefined(outreachData);
+
+      await updateLead(leadId, { outreach: cleanedOutreachData });
     } catch (error) {
       console.error('Error updating email status:', error);
-      showAlert('Failed to update email status. Please try again.');
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      showAlert(`Failed to update email status: ${errorMessage}`);
     }
   };
 
@@ -781,6 +851,12 @@ function CRMBoard() {
       month: '',
     });
     setAdvancedFilterRules([]);
+    // Clear session storage when filters are explicitly cleared
+    try {
+      sessionStorage.removeItem(ACTIVE_FILTERS_SESSION_KEY);
+    } catch (error) {
+      console.error('Error clearing filters from sessionStorage:', error);
+    }
   };
 
   const handleApplyAdvancedFilters = (rules: FilterRule[]) => {

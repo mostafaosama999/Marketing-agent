@@ -24,6 +24,31 @@ import { leadTimelineService } from './leadSubcollections';
 const LEADS_COLLECTION = 'leads';
 
 /**
+ * Safely convert a Firestore Timestamp to Date
+ * Handles various data types that might be stored in the database
+ */
+function safeToDate(value: any): Date | undefined {
+  if (!value) return undefined;
+
+  // If it's already a Date object, return it
+  if (value instanceof Date) return value;
+
+  // If it has a toDate method (Firestore Timestamp), call it
+  if (typeof value.toDate === 'function') {
+    return value.toDate();
+  }
+
+  // If it's a string or number, try to parse it as a date
+  if (typeof value === 'string' || typeof value === 'number') {
+    const date = new Date(value);
+    return isNaN(date.getTime()) ? undefined : date;
+  }
+
+  // Otherwise, return undefined
+  return undefined;
+}
+
+/**
  * Convert Firestore document to Lead object
  */
 function convertToLead(id: string, data: any): Lead {
@@ -37,30 +62,30 @@ function convertToLead(id: string, data: any): Lead {
     phone: data.phone || '',
     status: data.status || 'new_lead',
     customFields: data.customFields || {},
-    createdAt: data.createdAt?.toDate() || new Date(),
-    updatedAt: data.updatedAt?.toDate() || new Date(),
+    createdAt: safeToDate(data.createdAt) || new Date(),
+    updatedAt: safeToDate(data.updatedAt) || new Date(),
     stateHistory: data.stateHistory,
     stateDurations: data.stateDurations,
     apolloEnriched: data.apolloEnriched,
-    lastEnrichedAt: data.lastEnrichedAt?.toDate(),
+    lastEnrichedAt: safeToDate(data.lastEnrichedAt),
     totalApiCosts: data.totalApiCosts,
-    lastApiCostUpdate: data.lastApiCostUpdate?.toDate(),
+    lastApiCostUpdate: safeToDate(data.lastApiCostUpdate),
     archived: data.archived || false,
-    archivedAt: data.archivedAt?.toDate(),
+    archivedAt: safeToDate(data.archivedAt),
     archivedBy: data.archivedBy,
     outreach: data.outreach
       ? {
           linkedIn: data.outreach.linkedIn
             ? {
                 status: data.outreach.linkedIn.status,
-                sentAt: data.outreach.linkedIn.sentAt?.toDate(),
+                sentAt: safeToDate(data.outreach.linkedIn.sentAt),
                 profileUrl: data.outreach.linkedIn.profileUrl,
               }
             : undefined,
           email: data.outreach.email
             ? {
                 status: data.outreach.email.status,
-                sentAt: data.outreach.email.sentAt?.toDate(),
+                sentAt: safeToDate(data.outreach.email.sentAt),
               }
             : undefined,
         }

@@ -13,12 +13,10 @@ import {
   CircularProgress,
   Divider,
   IconButton,
-  InputAdornment,
 } from '@mui/material';
 import {
   Save as SaveIcon,
   ContentCopy as CopyIcon,
-  Check as CheckIcon,
   Person as PersonIcon,
   Business as BusinessIcon,
   Article as ArticleIcon,
@@ -76,10 +74,6 @@ export const SettingsPage: React.FC = () => {
   const [settings, setSettings] = useState<AppSettings | null>(null);
   const [offerTemplate, setOfferTemplate] = useState('');
   const [offerHeadline, setOfferHeadline] = useState('');
-
-  // Copy button states
-  const [headlineCopied, setHeadlineCopied] = useState(false);
-  const [messageCopied, setMessageCopied] = useState(false);
 
   // Custom prompts state (loaded from localStorage)
   const [customPrompts, setCustomPrompts] = useState<Record<string, PromptMetadata>>({});
@@ -201,26 +195,6 @@ export const SettingsPage: React.FC = () => {
   };
 
   // Handle copy to clipboard with feedback
-  const handleCopyHeadline = async () => {
-    try {
-      await navigator.clipboard.writeText(offerHeadline);
-      setHeadlineCopied(true);
-      setTimeout(() => setHeadlineCopied(false), 3000);
-    } catch (err) {
-      console.error('Failed to copy headline:', err);
-    }
-  };
-
-  const handleCopyMessage = async () => {
-    try {
-      await navigator.clipboard.writeText(offerTemplate);
-      setMessageCopied(true);
-      setTimeout(() => setMessageCopied(false), 3000);
-    } catch (err) {
-      console.error('Failed to copy message:', err);
-    }
-  };
-
   const handleInsertVariable = (variable: string) => {
     setOfferTemplate((prev) => prev + variable);
   };
@@ -550,25 +524,6 @@ export const SettingsPage: React.FC = () => {
                   onChange={(e) => setOfferHeadline(e.target.value)}
                   placeholder="Enter your offer headline... (e.g., New Blog Idea: {{company_chosen_idea}})"
                   variant="outlined"
-                  InputProps={{
-                    endAdornment: (
-                      <InputAdornment position="end">
-                        <IconButton
-                          onClick={handleCopyHeadline}
-                          edge="end"
-                          size="small"
-                          sx={{
-                            color: headlineCopied ? '#10b981' : '#94a3b8',
-                            '&:hover': {
-                              color: headlineCopied ? '#10b981' : '#667eea',
-                            },
-                          }}
-                        >
-                          {headlineCopied ? <CheckIcon /> : <CopyIcon />}
-                        </IconButton>
-                      </InputAdornment>
-                    ),
-                  }}
                   sx={{
                     '& .MuiOutlinedInput-root': {
                       fontSize: '14px',
@@ -585,23 +540,9 @@ export const SettingsPage: React.FC = () => {
 
               {/* Template Editor (Message Body) */}
               <Box sx={{ mb: 2, position: 'relative' }}>
-                <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
-                  <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#1e293b' }}>
-                    Message Body
-                  </Typography>
-                  <IconButton
-                    onClick={handleCopyMessage}
-                    size="small"
-                    sx={{
-                      color: messageCopied ? '#10b981' : '#94a3b8',
-                      '&:hover': {
-                        color: messageCopied ? '#10b981' : '#667eea',
-                      },
-                    }}
-                  >
-                    {messageCopied ? <CheckIcon /> : <CopyIcon />}
-                  </IconButton>
-                </Box>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, color: '#1e293b' }}>
+                  Message Body
+                </Typography>
                 <TextField
                   fullWidth
                   multiline

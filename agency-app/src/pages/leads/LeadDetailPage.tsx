@@ -38,6 +38,8 @@ import {
   LinkedIn as LinkedInIcon,
   Archive as ArchiveIcon,
   Unarchive as UnarchiveIcon,
+  ContentCopy as CopyIcon,
+  Check as CheckIcon,
 } from '@mui/icons-material';
 import { Lead, LeadFormData, LeadStatusChange } from '../../types/lead';
 import { getLead, updateLead, deleteLead, archiveLead, unarchiveLead } from '../../services/api/leads';
@@ -118,6 +120,10 @@ export const LeadDetailPage: React.FC = () => {
   // Offer template state (fetched from global settings)
   const [offerTemplate, setOfferTemplate] = useState<string>('');
   const [offerHeadline, setOfferHeadline] = useState<string>('');
+
+  // Copy state for offer preview
+  const [headlineCopied, setHeadlineCopied] = useState(false);
+  const [messageCopied, setMessageCopied] = useState(false);
 
   // Delete dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -532,6 +538,65 @@ export const LeadDetailPage: React.FC = () => {
     });
   };
 
+  // Copy handlers for offer preview
+  const handleCopyHeadline = async () => {
+    const leadData = {
+      name: formData.name,
+      email: formData.email,
+      phone: formData.phone,
+      company: formData.company,
+      companyName: formData.company,
+      status: formData.status,
+      customFields: formData.customFields,
+      createdAt: lead?.createdAt,
+      updatedAt: lead?.updatedAt,
+      outreach: lead?.outreach,
+    };
+
+    const headlineText = offerHeadline
+      ? replaceTemplateVariables(offerHeadline, leadData, company)
+      : '';
+
+    if (headlineText) {
+      try {
+        await navigator.clipboard.writeText(headlineText);
+        setHeadlineCopied(true);
+        setTimeout(() => setHeadlineCopied(false), 2000);
+      } catch (err) {
+        console.error('Failed to copy headline:', err);
+      }
+    }
+  };
+
+  const handleCopyMessage = async () => {
+    const leadData = {
+      name: formData.name,
+      email: formData.email,
+      phone: formData.phone,
+      company: formData.company,
+      companyName: formData.company,
+      status: formData.status,
+      customFields: formData.customFields,
+      createdAt: lead?.createdAt,
+      updatedAt: lead?.updatedAt,
+      outreach: lead?.outreach,
+    };
+
+    const messageText = offerTemplate
+      ? replaceTemplateVariables(offerTemplate, leadData, company)
+      : '';
+
+    if (messageText) {
+      try {
+        await navigator.clipboard.writeText(messageText);
+        setMessageCopied(true);
+        setTimeout(() => setMessageCopied(false), 2000);
+      } catch (err) {
+        console.error('Failed to copy message:', err);
+      }
+    }
+  };
+
   // Render offer preview with variables replaced
   const renderPreview = () => {
     const leadData = {
@@ -562,14 +627,79 @@ export const LeadDetailPage: React.FC = () => {
     }
 
     return (
-      <>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        {/* Headline Section */}
         {headlineText && (
-          <div style={{ fontWeight: 600, marginBottom: '12px', color: '#1e293b' }}>
-            Headline: {headlineText}
-          </div>
+          <Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#1e293b' }}>
+                Offer Headline
+              </Typography>
+              <IconButton
+                onClick={handleCopyHeadline}
+                size="small"
+                sx={{
+                  color: headlineCopied ? '#10b981' : '#94a3b8',
+                  '&:hover': {
+                    color: headlineCopied ? '#10b981' : '#667eea',
+                  },
+                }}
+              >
+                {headlineCopied ? <CheckIcon /> : <CopyIcon />}
+              </IconButton>
+            </Box>
+            <Box
+              sx={{
+                p: 2,
+                bgcolor: 'white',
+                borderRadius: '8px',
+                border: '1px solid #e2e8f0',
+                fontSize: '14px',
+                color: '#1e293b',
+              }}
+            >
+              {headlineText}
+            </Box>
+          </Box>
         )}
-        {messageText && <div>{messageText}</div>}
-      </>
+
+        {/* Message Body Section */}
+        {messageText && (
+          <Box>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#1e293b' }}>
+                Message Body
+              </Typography>
+              <IconButton
+                onClick={handleCopyMessage}
+                size="small"
+                sx={{
+                  color: messageCopied ? '#10b981' : '#94a3b8',
+                  '&:hover': {
+                    color: messageCopied ? '#10b981' : '#667eea',
+                  },
+                }}
+              >
+                {messageCopied ? <CheckIcon /> : <CopyIcon />}
+              </IconButton>
+            </Box>
+            <Box
+              sx={{
+                p: 2,
+                bgcolor: 'white',
+                borderRadius: '8px',
+                border: '1px solid #e2e8f0',
+                fontSize: '14px',
+                lineHeight: 1.6,
+                color: '#1e293b',
+                whiteSpace: 'pre-wrap',
+              }}
+            >
+              {messageText}
+            </Box>
+          </Box>
+        )}
+      </Box>
     );
   };
 
@@ -1183,25 +1313,10 @@ export const LeadDetailPage: React.FC = () => {
 
               {/* Preview Section */}
               <Box>
-                <Typography variant="h6" sx={{ mb: 2, color: '#1e293b', fontWeight: 600 }}>
-                  Preview (with current lead data)
+                <Typography variant="h6" sx={{ mb: 3, color: '#1e293b', fontWeight: 600 }}>
+                  LinkedIn Message Preview
                 </Typography>
-                <Box
-                  sx={{
-                    p: 3,
-                    bgcolor: '#f8fafc',
-                    borderRadius: '8px',
-                    border: '1px solid #e2e8f0',
-                    fontFamily: 'system-ui',
-                    fontSize: '14px',
-                    lineHeight: 1.6,
-                    color: '#1e293b',
-                    whiteSpace: 'pre-wrap',
-                    minHeight: '100px',
-                  }}
-                >
-                  {renderPreview()}
-                </Box>
+                {renderPreview()}
               </Box>
             </Box>
           </TabPanel>
