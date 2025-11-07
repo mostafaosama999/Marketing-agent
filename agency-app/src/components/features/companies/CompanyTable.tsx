@@ -30,8 +30,8 @@ import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { Company } from '../../../types/crm';
 import { TableColumnConfig } from '../../../types/table';
 import { FieldDefinition } from '../../../types/fieldDefinitions';
-import { getDropdownFieldDefinitions } from '../../../services/api/fieldDefinitionsService';
-import { updateCompanyCustomField } from '../../../services/api/companies';
+import { getFieldDefinitions } from '../../../services/api/fieldDefinitionsService';
+import { updateCompanyCustomField, updateCompanyField } from '../../../services/api/companies';
 
 interface CompanyTableProps {
   companies: Array<Company & { leadCount: number }>;
@@ -79,11 +79,11 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
     return saved ? parseInt(saved, 10) : 25;
   });
 
-  // Fetch dropdown field definitions on mount
+  // Fetch all field definitions on mount (dropdowns, dates, etc.)
   useEffect(() => {
     const fetchFieldDefinitions = async () => {
       try {
-        const definitions = await getDropdownFieldDefinitions('company');
+        const definitions = await getFieldDefinitions('company');
         setFieldDefinitions(definitions);
       } catch (error) {
         console.error('Error fetching field definitions:', error);
@@ -141,7 +141,7 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
 
   // Helper function to check if a custom field is a dropdown
   const isDropdownField = (fieldName: string): boolean => {
-    return fieldDefinitions.some(def => def.name === fieldName);
+    return fieldDefinitions.some(def => def.name === fieldName && def.fieldType === 'dropdown');
   };
 
   // Date picker handlers
@@ -167,11 +167,26 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
       try {
         // Convert to ISO string for storage
         const isoDate = newDate.toISOString();
-        await updateCompanyCustomField(
-          selectedCompanyForDate.id,
-          selectedDateFieldName,
-          isoDate
-        );
+
+        // Check if this is a built-in field or a custom field
+        const builtInDateFields = ['createdAt', 'updatedAt', 'lastApiCostUpdate', 'archivedAt'];
+        const isBuiltInField = builtInDateFields.includes(selectedDateFieldName);
+
+        if (isBuiltInField) {
+          // Update built-in field directly
+          await updateCompanyField(
+            selectedCompanyForDate.id,
+            selectedDateFieldName,
+            isoDate
+          );
+        } else {
+          // Update custom field
+          await updateCompanyCustomField(
+            selectedCompanyForDate.id,
+            selectedDateFieldName,
+            isoDate
+          );
+        }
       } catch (error) {
         console.error('Error updating date field:', error);
       }
@@ -180,8 +195,16 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
   };
 
   // Helper function to check if a custom field is a date
-  const isDateField = (fieldName: string): boolean => {
-    return fieldDefinitions.some(def => def.name === fieldName && def.fieldType === 'date');
+  const isDateField = (fieldName: string, columnLabel?: string): boolean => {
+    // First check field definitions
+    const hasDateFieldDef = fieldDefinitions.some(def => def.name === fieldName && def.fieldType === 'date');
+    if (hasDateFieldDef) return true;
+
+    // Fallback: check if field name or label contains "date" (case-insensitive)
+    const nameHasDate = /date/i.test(fieldName || '');
+    const labelHasDate = /date/i.test(columnLabel || '');
+
+    return nameHasDate || labelHasDate;
   };
 
   // Helper function to parse date string to Date object
@@ -449,15 +472,28 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
 
       case 'createdAt': {
         const date = company.createdAt instanceof Date ? company.createdAt : new Date(company.createdAt);
+        const displayDate = date.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        });
         return (
           <TableCell key={columnId}>
-            <Typography variant="body2" sx={{ fontSize: '11px', lineHeight: 1.2 }}>
-              {date.toLocaleDateString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                year: 'numeric',
-              })}
-            </Typography>
+            <Chip
+              label={displayDate}
+              size="small"
+              onClick={(e) => handleDateFieldClick(e, company, 'createdAt')}
+              sx={{
+                fontSize: '10px',
+                height: '20px',
+                cursor: 'pointer',
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                color: 'white',
+                '&:hover': {
+                  background: 'linear-gradient(135deg, #5568d3 0%, #6b408e 100%)',
+                },
+              }}
+            />
           </TableCell>
         );
       }
@@ -468,18 +504,19 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
         if (column && column.type === 'custom' && column.fieldName) {
           const value = company.customFields?.[column.fieldName];
 
-          if (!value || value === '') {
-            return (
-              <TableCell key={columnId}>
-                <Typography variant="body2" sx={{ fontSize: '11px', lineHeight: 1.2, color: 'text.secondary' }}>-</Typography>
-              </TableCell>
-            );
-          }
-
           // Check if this is a dropdown field (check column.fieldType first, then fallback to fieldDefinitions)
           const isDropdown = column.fieldType === 'dropdown' || isDropdownField(column.fieldName);
 
           if (isDropdown) {
+            // Empty dropdown - show placeholder
+            if (!value || value === '') {
+              return (
+                <TableCell key={columnId}>
+                  <Typography variant="body2" sx={{ fontSize: '11px', lineHeight: 1.2, color: 'text.secondary' }}>-</Typography>
+                </TableCell>
+              );
+            }
+
             return (
               <TableCell key={columnId}>
                 <Chip
@@ -501,8 +538,8 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
             );
           }
 
-          // Check if this is a date field (check column.fieldType first, then fallback to fieldDefinitions)
-          const isDate = column.fieldType === 'date' || isDateField(column.fieldName);
+          // Check if this is a date field (check column.fieldType first, then fallback to fieldDefinitions and column name/label)
+          const isDate = column.fieldType === 'date' || isDateField(column.fieldName, column.label);
 
           if (isDate) {
             const dateValue = parseDateValue(value);
@@ -512,7 +549,7 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
                   day: 'numeric',
                   year: 'numeric',
                 })
-              : String(value);
+              : 'Set Date'; // Show "Set Date" when empty
 
             return (
               <TableCell key={columnId}>
@@ -531,6 +568,15 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
                     },
                   }}
                 />
+              </TableCell>
+            );
+          }
+
+          // For all other field types, check if empty
+          if (!value || value === '') {
+            return (
+              <TableCell key={columnId}>
+                <Typography variant="body2" sx={{ fontSize: '11px', lineHeight: 1.2, color: 'text.secondary' }}>-</Typography>
               </TableCell>
             );
           }
@@ -842,7 +888,15 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
               label="Select Date"
               value={
                 selectedCompanyForDate && selectedDateFieldName
-                  ? parseDateValue(selectedCompanyForDate.customFields?.[selectedDateFieldName])
+                  ? (() => {
+                      // Check if built-in field or custom field
+                      const builtInDateFields = ['createdAt', 'updatedAt', 'lastApiCostUpdate', 'archivedAt'];
+                      const isBuiltIn = builtInDateFields.includes(selectedDateFieldName);
+                      const fieldValue = isBuiltIn
+                        ? (selectedCompanyForDate as any)[selectedDateFieldName]
+                        : selectedCompanyForDate.customFields?.[selectedDateFieldName];
+                      return parseDateValue(fieldValue);
+                    })()
                   : null
               }
               onChange={handleDateChange}

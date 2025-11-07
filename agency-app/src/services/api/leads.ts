@@ -534,6 +534,29 @@ export async function updateLeadCustomField(
 }
 
 /**
+ * Update a built-in field on a lead (e.g., createdAt, name, email)
+ * @param leadId - The ID of the lead to update
+ * @param fieldName - The name of the built-in field to update
+ * @param value - The new value for the field
+ */
+export async function updateLeadField(
+  leadId: string,
+  fieldName: string,
+  value: any
+): Promise<void> {
+  try {
+    const leadRef = doc(db, LEADS_COLLECTION, leadId);
+    await updateDoc(leadRef, {
+      [fieldName]: value,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    console.error('Error updating lead field:', error);
+    throw error;
+  }
+}
+
+/**
  * Update LinkedIn outreach status for a lead
  * @param leadId - The ID of the lead to update
  * @param status - The new LinkedIn outreach status

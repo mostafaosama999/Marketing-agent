@@ -19,11 +19,14 @@ import {
   Link,
   TablePagination,
   Popover,
+  Snackbar,
+  Alert,
 } from '@mui/material';
 import {
   KeyboardArrowDown as ExpandMoreIcon,
   LinkedIn as LinkedInIcon,
   Email as EmailIcon,
+  AutoAwesome as ApolloIcon,
 } from '@mui/icons-material';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -32,8 +35,10 @@ import { Lead, LeadStatus } from '../../../types/lead';
 import { usePipelineConfigContext } from '../../../contexts/PipelineConfigContext';
 import { TableColumnConfig } from '../../../types/table';
 import { FieldDefinition } from '../../../types/fieldDefinitions';
-import { getDropdownFieldDefinitions } from '../../../services/api/fieldDefinitionsService';
-import { updateLeadCustomField } from '../../../services/api/leads';
+import { getFieldDefinitions } from '../../../services/api/fieldDefinitionsService';
+import { updateLeadCustomField, updateLeadField } from '../../../services/api/leads';
+import { fetchEmail } from '../../../services/api/apolloService';
+import { useAuth } from '../../../contexts/AuthContext';
 
 interface CRMLeadsTableProps {
   leads: Lead[];
@@ -124,12 +129,19 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
     return saved ? parseInt(saved, 10) : 25;
   });
 
-  // Fetch dropdown field definitions on mount
+  // Apollo enrichment state
+  const { user } = useAuth();
+  const [enrichingLeadIds, setEnrichingLeadIds] = useState<Set<string>>(new Set());
+  const [snackbarOpen, setSnackbarOpen] = useState(false);
+  const [snackbarMessage, setSnackbarMessage] = useState('');
+  const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error' | 'warning' | 'info'>('info');
+
+  // Fetch all field definitions on mount (dropdowns, dates, etc.)
   useEffect(() => {
     const fetchFieldDefinitions = async () => {
       try {
-        const definitions = await getDropdownFieldDefinitions('lead');
-        console.log('Loaded dropdown field definitions:', definitions);
+        const definitions = await getFieldDefinitions('lead');
+        console.log('Loaded all field definitions:', definitions);
         setFieldDefinitions(definitions);
       } catch (error) {
         console.error('Error fetching field definitions:', error);
@@ -150,6 +162,17 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
       }
       return newSet;
     });
+  };
+
+  // Snackbar handlers
+  const handleSnackbarClose = () => {
+    setSnackbarOpen(false);
+  };
+
+  const showSnackbar = (message: string, severity: 'success' | 'error' | 'warning' | 'info') => {
+    setSnackbarMessage(message);
+    setSnackbarSeverity(severity);
+    setSnackbarOpen(true);
   };
 
   // Sorting handler
@@ -265,7 +288,7 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
 
   // Helper function to check if a custom field is a dropdown
   const isDropdownField = (fieldName: string): boolean => {
-    return fieldDefinitions.some(def => def.name === fieldName);
+    return fieldDefinitions.some(def => def.name === fieldName && def.fieldType === 'dropdown');
   };
 
   // Date picker handlers
@@ -291,11 +314,26 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
       try {
         // Convert to ISO string for storage
         const isoDate = newDate.toISOString();
-        await updateLeadCustomField(
-          selectedLeadForDate.id,
-          selectedDateFieldName,
-          isoDate
-        );
+
+        // Check if this is a built-in field or a custom field
+        const builtInDateFields = ['createdAt', 'updatedAt', 'lastEnrichedAt', 'lastApiCostUpdate', 'archivedAt'];
+        const isBuiltInField = builtInDateFields.includes(selectedDateFieldName);
+
+        if (isBuiltInField) {
+          // Update built-in field directly
+          await updateLeadField(
+            selectedLeadForDate.id,
+            selectedDateFieldName,
+            isoDate
+          );
+        } else {
+          // Update custom field
+          await updateLeadCustomField(
+            selectedLeadForDate.id,
+            selectedDateFieldName,
+            isoDate
+          );
+        }
       } catch (error) {
         console.error('Error updating date field:', error);
       }
@@ -303,9 +341,78 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
     handleDatePickerClose();
   };
 
+  // Apollo enrichment handler
+  const handleApolloEnrichment = async (lead: Lead) => {
+    if (!user) {
+      showSnackbar('Please log in to use Apollo enrichment', 'error');
+      return;
+    }
+
+    // Check if already enriching this lead
+    if (enrichingLeadIds.has(lead.id)) {
+      return;
+    }
+
+    // Mark lead as being enriched
+    setEnrichingLeadIds(prev => new Set(prev).add(lead.id));
+
+    try {
+      // Parse first name and last name from lead.name
+      const nameParts = lead.name.trim().split(' ');
+      const firstName = nameParts[0] || '';
+      const lastName = nameParts.slice(1).join(' ') || '';
+
+      if (!firstName) {
+        showSnackbar('Lead must have a valid name for Apollo enrichment', 'error');
+        return;
+      }
+
+      if (!lastName) {
+        showSnackbar('Lead must have both first and last name for Apollo enrichment', 'warning');
+        return;
+      }
+
+      // Call Apollo API
+      const result = await fetchEmail({
+        firstName,
+        lastName,
+        companyName: lead.company || lead.companyName || '',
+        linkedinUrl: lead.customFields?.linkedinUrl || lead.outreach?.linkedIn?.profileUrl,
+      }, user.uid);
+
+      if (result.matched && result.email) {
+        // Update lead with enriched email
+        await updateLeadField(lead.id, 'email', result.email);
+        showSnackbar(`Email found: ${result.email}`, 'success');
+      } else {
+        const errorMsg = result.error || 'No email found for this lead';
+        showSnackbar(errorMsg, 'warning');
+      }
+    } catch (error) {
+      console.error('❌ Error during Apollo enrichment:', error);
+      const errorMsg = error instanceof Error ? error.message : 'Failed to enrich lead';
+      showSnackbar(errorMsg, 'error');
+    } finally {
+      // Remove lead from enriching set
+      setEnrichingLeadIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(lead.id);
+        return newSet;
+      });
+    }
+  };
+
   // Helper function to check if a custom field is a date
-  const isDateField = (fieldName: string): boolean => {
-    return fieldDefinitions.some(def => def.name === fieldName && def.fieldType === 'date');
+  const isDateField = (fieldName: string, columnLabel?: string): boolean => {
+    // First check field definitions
+    const hasDateFieldDef = fieldDefinitions.some(def => def.name === fieldName && def.fieldType === 'date');
+    if (hasDateFieldDef) return true;
+
+    // Fallback: check if field name or label contains "date" (case-insensitive)
+    const nameHasDate = /date/i.test(fieldName || '');
+    const labelHasDate = /date/i.test(columnLabel || '');
+
+    return nameHasDate || labelHasDate;
   };
 
   // Helper function to parse date string to Date object
@@ -459,18 +566,72 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
           </TableCell>
         );
 
-      case 'email':
+      case 'email': {
+        const hasEmail = lead.email && lead.email.trim() !== '';
+        const isEnriching = enrichingLeadIds.has(lead.id);
+
         return (
           <TableCell
             key={columnId}
             onClick={(e) => e.stopPropagation()}
-            sx={{ cursor: 'text' }}
+            sx={{ cursor: hasEmail ? 'text' : 'default' }}
           >
-            <Typography variant="body2" sx={{ fontSize: '11px', lineHeight: 1.2 }}>
-              {lead.email || '-'}
-            </Typography>
+            {hasEmail ? (
+              <Typography variant="body2" sx={{ fontSize: '11px', lineHeight: 1.2 }}>
+                {lead.email}
+              </Typography>
+            ) : (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <IconButton
+                  size="small"
+                  onClick={() => handleApolloEnrichment(lead)}
+                  disabled={isEnriching}
+                  sx={{
+                    background: isEnriching
+                      ? 'linear-gradient(135deg, #ccc 0%, #999 100%)'
+                      : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    color: 'white',
+                    width: 24,
+                    height: 24,
+                    '&:hover': {
+                      background: 'linear-gradient(135deg, #5568d3 0%, #6b408e 100%)',
+                    },
+                    '&.Mui-disabled': {
+                      background: 'linear-gradient(135deg, #ccc 0%, #999 100%)',
+                      color: 'white',
+                    },
+                  }}
+                  title="Enrich with Apollo.io"
+                >
+                  {isEnriching ? (
+                    <Box
+                      sx={{
+                        width: 14,
+                        height: 14,
+                        border: '2px solid white',
+                        borderTop: '2px solid transparent',
+                        borderRadius: '50%',
+                        animation: 'spin 0.8s linear infinite',
+                        '@keyframes spin': {
+                          '0%': { transform: 'rotate(0deg)' },
+                          '100%': { transform: 'rotate(360deg)' },
+                        },
+                      }}
+                    />
+                  ) : (
+                    <ApolloIcon sx={{ fontSize: '14px' }} />
+                  )}
+                </IconButton>
+                {isEnriching && (
+                  <Typography variant="caption" sx={{ fontSize: '10px', color: 'text.secondary' }}>
+                    Enriching...
+                  </Typography>
+                )}
+              </Box>
+            )}
           </TableCell>
         );
+      }
 
       case 'company':
         return (
@@ -614,15 +775,28 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
 
       case 'createdAt': {
         const date = lead.createdAt instanceof Date ? lead.createdAt : new Date(lead.createdAt);
+        const displayDate = date.toLocaleDateString('en-US', {
+          month: 'short',
+          day: 'numeric',
+          year: 'numeric',
+        });
         return (
           <TableCell key={columnId}>
-            <Typography variant="body2" sx={{ fontSize: '11px', lineHeight: 1.2 }}>
-              {date.toLocaleDateString('en-US', {
-                month: 'short',
-                day: 'numeric',
-                year: 'numeric',
-              })}
-            </Typography>
+            <Chip
+              label={displayDate}
+              size="small"
+              onClick={(e) => handleDateFieldClick(e, lead, 'createdAt')}
+              sx={{
+                fontSize: '10px',
+                height: '20px',
+                cursor: 'pointer',
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                color: 'white',
+                '&:hover': {
+                  background: 'linear-gradient(135deg, #5568d3 0%, #6b408e 100%)',
+                },
+              }}
+            />
           </TableCell>
         );
       }
@@ -633,18 +807,19 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
         if (column && column.type === 'custom' && column.fieldName) {
           const value = lead.customFields?.[column.fieldName];
 
-          if (!value || value === '') {
-            return (
-              <TableCell key={columnId}>
-                <Typography variant="body2" sx={{ fontSize: '11px', lineHeight: 1.2, color: 'text.secondary' }}>-</Typography>
-              </TableCell>
-            );
-          }
-
           // Check if this is a dropdown field (check column.fieldType first, then fallback to fieldDefinitions)
           const isDropdown = column.fieldType === 'dropdown' || isDropdownField(column.fieldName);
 
           if (isDropdown) {
+            // Empty dropdown - show placeholder
+            if (!value || value === '') {
+              return (
+                <TableCell key={columnId}>
+                  <Typography variant="body2" sx={{ fontSize: '11px', lineHeight: 1.2, color: 'text.secondary' }}>-</Typography>
+                </TableCell>
+              );
+            }
+
             return (
               <TableCell key={columnId}>
                 <Chip
@@ -666,8 +841,8 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
             );
           }
 
-          // Check if this is a date field (check column.fieldType first, then fallback to fieldDefinitions)
-          const isDate = column.fieldType === 'date' || isDateField(column.fieldName);
+          // Check if this is a date field (check column.fieldType first, then fallback to fieldDefinitions and column name/label)
+          const isDate = column.fieldType === 'date' || isDateField(column.fieldName, column.label);
 
           if (isDate) {
             const dateValue = parseDateValue(value);
@@ -677,7 +852,7 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
                   day: 'numeric',
                   year: 'numeric',
                 })
-              : String(value);
+              : 'Set Date'; // Show "Set Date" when empty
 
             return (
               <TableCell key={columnId}>
@@ -696,6 +871,15 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
                     },
                   }}
                 />
+              </TableCell>
+            );
+          }
+
+          // For all other field types, check if empty
+          if (!value || value === '') {
+            return (
+              <TableCell key={columnId}>
+                <Typography variant="body2" sx={{ fontSize: '11px', lineHeight: 1.2, color: 'text.secondary' }}>-</Typography>
               </TableCell>
             );
           }
@@ -1234,7 +1418,15 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
               label="Select Date"
               value={
                 selectedLeadForDate && selectedDateFieldName
-                  ? parseDateValue(selectedLeadForDate.customFields?.[selectedDateFieldName])
+                  ? (() => {
+                      // Check if built-in field or custom field
+                      const builtInDateFields = ['createdAt', 'updatedAt', 'lastEnrichedAt', 'lastApiCostUpdate', 'archivedAt'];
+                      const isBuiltIn = builtInDateFields.includes(selectedDateFieldName);
+                      const fieldValue = isBuiltIn
+                        ? (selectedLeadForDate as any)[selectedDateFieldName]
+                        : selectedLeadForDate.customFields?.[selectedDateFieldName];
+                      return parseDateValue(fieldValue);
+                    })()
                   : null
               }
               onChange={handleDateChange}
@@ -1248,6 +1440,23 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
           </LocalizationProvider>
         </Box>
       </Popover>
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbarOpen}
+        autoHideDuration={6000}
+        onClose={handleSnackbarClose}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
+      >
+        <Alert
+          onClose={handleSnackbarClose}
+          severity={snackbarSeverity}
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {snackbarMessage}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };

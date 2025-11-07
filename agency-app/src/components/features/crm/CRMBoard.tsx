@@ -96,6 +96,9 @@ function CRMBoard() {
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertMessage, setAlertMessage] = useState('');
 
+  // Track if component has mounted to prevent saving on initial render
+  const isInitialMount = React.useRef(true);
+
   // Unified filter state
   const [filters, setFilters] = useState<FilterState>({
     search: '',
@@ -233,8 +236,14 @@ function CRMBoard() {
     }
   }, []); // Only run once on mount
 
-  // Save filters to sessionStorage whenever they change
+  // Save filters to sessionStorage whenever they change (skip initial mount)
   useEffect(() => {
+    // Skip saving on the very first render to allow loading to complete
+    if (isInitialMount.current) {
+      isInitialMount.current = false;
+      return;
+    }
+
     try {
       const filterState = {
         filters,

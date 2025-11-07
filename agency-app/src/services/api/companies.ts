@@ -384,6 +384,29 @@ export async function updateCompanyCustomField(
 }
 
 /**
+ * Update a built-in field on a company (e.g., createdAt, name, website)
+ * @param companyId - The ID of the company to update
+ * @param fieldName - The name of the built-in field to update
+ * @param value - The new value for the field
+ */
+export async function updateCompanyField(
+  companyId: string,
+  fieldName: string,
+  value: any
+): Promise<void> {
+  try {
+    const companyRef = doc(db, COMPANIES_COLLECTION, companyId);
+    await updateDoc(companyRef, {
+      [fieldName]: value,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    console.error('Error updating company field:', error);
+    throw error;
+  }
+}
+
+/**
  * Count leads for a company (to determine if company can be deleted)
  */
 export async function countLeadsForCompany(companyId: string): Promise<number> {

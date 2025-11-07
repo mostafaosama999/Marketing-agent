@@ -285,7 +285,6 @@ export async function migrateLocalStorageToFirestore(userId: string): Promise<vo
       };
 
       await saveFilterPreset(userId, migrationPreset);
-      console.log('Successfully migrated localStorage filters to Firestore');
     }
 
     // Mark migration as complete
