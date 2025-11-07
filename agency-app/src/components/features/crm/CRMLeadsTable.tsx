@@ -36,7 +36,7 @@ import { usePipelineConfigContext } from '../../../contexts/PipelineConfigContex
 import { TableColumnConfig } from '../../../types/table';
 import { FieldDefinition } from '../../../types/fieldDefinitions';
 import { getFieldDefinitions } from '../../../services/api/fieldDefinitionsService';
-import { updateLeadCustomField, updateLeadField } from '../../../services/api/leads';
+import { updateLeadCustomField, updateLeadField, updateLeadLinkedInStatus, updateLeadEmailStatus } from '../../../services/api/leads';
 import { fetchEmail } from '../../../services/api/apolloService';
 import { useAuth } from '../../../contexts/AuthContext';
 
@@ -173,6 +173,25 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
     setSnackbarMessage(message);
     setSnackbarSeverity(severity);
     setSnackbarOpen(true);
+  };
+
+  // Helper function to detect if a custom field is a contact date field (linkedin/email)
+  const isContactDateField = (fieldName: string): 'linkedin' | 'email' | null => {
+    const lowerName = fieldName.toLowerCase();
+
+    // LinkedIn contact date fields (e.g., linkedin_sent_date, linkedin_sending_date, linkedin_contact_date)
+    if (lowerName.startsWith('linkedin_') && lowerName.includes('date') &&
+        (lowerName.includes('contact') || lowerName.includes('send'))) {
+      return 'linkedin';
+    }
+
+    // Email contact date fields (e.g., email_sent_date, email_sending_date, email_contact_date)
+    if (lowerName.startsWith('email_') && lowerName.includes('date') &&
+        (lowerName.includes('contact') || lowerName.includes('send'))) {
+      return 'email';
+    }
+
+    return null;
   };
 
   // Sorting handler
@@ -333,9 +352,38 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
             selectedDateFieldName,
             isoDate
           );
+
+          // Auto-set outreach status to 'sent' if this is a contact date field
+          const contactType = isContactDateField(selectedDateFieldName);
+          console.log('🔍 Date field changed:', {
+            fieldName: selectedDateFieldName,
+            detectedType: contactType,
+            lead: selectedLeadForDate.name,
+            linkedInStatus: selectedLeadForDate.outreach?.linkedIn?.status,
+            emailStatus: selectedLeadForDate.outreach?.email?.status,
+          });
+
+          if (contactType === 'linkedin') {
+            const currentStatus = selectedLeadForDate.outreach?.linkedIn?.status || 'not_sent';
+            if (currentStatus === 'not_sent') {
+              await updateLeadLinkedInStatus(selectedLeadForDate.id, 'sent');
+              showSnackbar('LinkedIn status automatically set to "Sent"', 'success');
+            }
+          } else if (contactType === 'email') {
+            const currentStatus = selectedLeadForDate.outreach?.email?.status || 'not_sent';
+            console.log('📧 Attempting to update email status:', {
+              currentStatus,
+              willUpdate: currentStatus === 'not_sent',
+            });
+            if (currentStatus === 'not_sent') {
+              await updateLeadEmailStatus(selectedLeadForDate.id, 'sent');
+              showSnackbar('Email status automatically set to "Sent"', 'success');
+            }
+          }
         }
       } catch (error) {
         console.error('Error updating date field:', error);
+        showSnackbar('Failed to update date field', 'error');
       }
     }
     handleDatePickerClose();
@@ -441,6 +489,10 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
         case 'email':
           aValue = a.email;
           bValue = b.email;
+          break;
+        case 'phone':
+          aValue = a.phone;
+          bValue = b.phone;
           break;
         case 'company':
           aValue = a.company || a.companyName;
@@ -632,6 +684,15 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
           </TableCell>
         );
       }
+
+      case 'phone':
+        return (
+          <TableCell key={columnId}>
+            <Typography variant="body2" sx={{ fontSize: '11px', lineHeight: 1.2 }}>
+              {lead.phone || '-'}
+            </Typography>
+          </TableCell>
+        );
 
       case 'company':
         return (
@@ -1217,15 +1278,24 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
           boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
           flexShrink: 0,
           '.MuiTablePagination-toolbar': {
+            minHeight: '80px',
             px: 2,
             pr: 20, // Large right padding to avoid FAB (160px)
           },
           '.MuiTablePagination-actions': {
             mr: 4, // Extra margin on action buttons
           },
+          '.MuiTablePagination-actions button': {
+            padding: '12px',
+          },
           '.MuiTablePagination-selectLabel, .MuiTablePagination-displayedRows': {
-            fontSize: '13px',
+            fontSize: '14px',
+            fontWeight: 500,
             color: '#64748b',
+          },
+          '.MuiTablePagination-select': {
+            fontSize: '14px',
+            fontWeight: 500,
           },
         }}
       />

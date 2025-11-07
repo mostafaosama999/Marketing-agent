@@ -15,6 +15,8 @@ export function getFilterableFields(leads: Lead[]): FilterableField[] {
     { name: 'phone', label: 'Phone', type: 'text', isCustomField: false },
     { name: 'company', label: 'Company', type: 'text', isCustomField: false },
     { name: 'status', label: 'Status', type: 'select', options: ['new_lead', 'qualified', 'contacted', 'follow_up', 'won', 'lost'], isCustomField: false },
+    { name: 'linkedin_status', label: 'LinkedIn Status', type: 'select', options: ['not_sent', 'sent', 'opened', 'replied', 'refused', 'no_response'], isCustomField: false },
+    { name: 'email_outreach_status', label: 'Email Outreach Status', type: 'select', options: ['not_sent', 'sent', 'opened', 'replied', 'bounced', 'refused', 'no_response'], isCustomField: false },
     { name: 'createdAt', label: 'Created Date', type: 'date', isCustomField: false },
     { name: 'updatedAt', label: 'Updated Date', type: 'date', isCustomField: false },
   ];
@@ -103,6 +105,14 @@ export function getOperatorsForFieldType(fieldType: 'text' | 'number' | 'date' |
  * Handles both standard fields and custom fields
  */
 function getFieldValue(lead: Lead, fieldName: string): any {
+  // Handle nested outreach fields
+  if (fieldName === 'linkedin_status') {
+    return lead.outreach?.linkedIn?.status;
+  }
+  if (fieldName === 'email_outreach_status') {
+    return lead.outreach?.email?.status;
+  }
+
   // Standard fields
   if (fieldName in lead) {
     return (lead as any)[fieldName];
