@@ -51,6 +51,7 @@ import { getCompany } from '../../services/api/companies';
 import { Company } from '../../types/crm';
 import { getSettings } from '../../services/api/settings';
 import { replaceTemplateVariables } from '../../services/api/templateVariablesService';
+import { SafeHtmlRenderer, copyHtmlToClipboard } from '../../utils/htmlHelpers';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -553,17 +554,19 @@ export const LeadDetailPage: React.FC = () => {
       outreach: lead?.outreach,
     };
 
-    const headlineText = offerHeadline
+    const headlineHtml = offerHeadline
       ? replaceTemplateVariables(offerHeadline, leadData, company)
       : '';
 
-    if (headlineText) {
+    if (headlineHtml) {
       try {
-        await navigator.clipboard.writeText(headlineText);
+        // Copy HTML with formatting preserved (bold, italic, etc.)
+        await copyHtmlToClipboard(headlineHtml);
         setHeadlineCopied(true);
         setTimeout(() => setHeadlineCopied(false), 2000);
       } catch (err) {
         console.error('Failed to copy headline:', err);
+        alert('Failed to copy headline. Please try again.');
       }
     }
   };
@@ -582,17 +585,19 @@ export const LeadDetailPage: React.FC = () => {
       outreach: lead?.outreach,
     };
 
-    const messageText = offerTemplate
+    const messageHtml = offerTemplate
       ? replaceTemplateVariables(offerTemplate, leadData, company)
       : '';
 
-    if (messageText) {
+    if (messageHtml) {
       try {
-        await navigator.clipboard.writeText(messageText);
+        // Copy HTML with formatting preserved (bold, italic, lists, etc.)
+        await copyHtmlToClipboard(messageHtml);
         setMessageCopied(true);
         setTimeout(() => setMessageCopied(false), 2000);
       } catch (err) {
         console.error('Failed to copy message:', err);
+        alert('Failed to copy message. Please try again.');
       }
     }
   };
@@ -654,11 +659,15 @@ export const LeadDetailPage: React.FC = () => {
                 bgcolor: 'white',
                 borderRadius: '8px',
                 border: '1px solid #e2e8f0',
-                fontSize: '14px',
-                color: '#1e293b',
               }}
             >
-              {headlineText}
+              <SafeHtmlRenderer
+                html={headlineText}
+                sx={{
+                  fontSize: '14px',
+                  color: '#1e293b',
+                }}
+              />
             </Box>
           </Box>
         )}
@@ -689,13 +698,16 @@ export const LeadDetailPage: React.FC = () => {
                 bgcolor: 'white',
                 borderRadius: '8px',
                 border: '1px solid #e2e8f0',
-                fontSize: '14px',
-                lineHeight: 1.6,
-                color: '#1e293b',
-                whiteSpace: 'pre-wrap',
               }}
             >
-              {messageText}
+              <SafeHtmlRenderer
+                html={messageText}
+                sx={{
+                  fontSize: '14px',
+                  lineHeight: 1.6,
+                  color: '#1e293b',
+                }}
+              />
             </Box>
           </Box>
         )}

@@ -23,6 +23,8 @@ import {
   Cancel as CancelIcon,
 } from '@mui/icons-material';
 import { PromptMetadata } from '../../data/prompts';
+import TiptapRichTextEditor from '../common/TiptapRichTextEditor';
+import { SafeHtmlRenderer } from '../../utils/htmlHelpers';
 
 interface PromptCardProps {
   prompt: PromptMetadata;
@@ -267,26 +269,11 @@ export const PromptCard: React.FC<PromptCardProps> = ({ prompt, editable = false
                 System Prompt {isEditing && <Chip label="Optional" size="small" sx={{ ml: 1, height: 18, fontSize: '10px' }} />}
               </Typography>
               {isEditing ? (
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={8}
+                <TiptapRichTextEditor
                   value={editedPrompt.systemPrompt || ''}
-                  onChange={(e) => setEditedPrompt({ ...editedPrompt, systemPrompt: e.target.value })}
-                  placeholder="Enter system prompt (optional)..."
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      fontFamily: 'monospace',
-                      fontSize: '13px',
-                      bgcolor: '#f8fafc',
-                      '&:hover fieldset': {
-                        borderColor: categoryStyle.border,
-                      },
-                      '&.Mui-focused fieldset': {
-                        borderColor: categoryStyle.border,
-                      },
-                    },
-                  }}
+                  onChange={(value) => setEditedPrompt({ ...editedPrompt, systemPrompt: value })}
+                  placeholder="Enter system prompt (optional)... You can format text with bold, italic, lists, etc."
+                  height={250}
                 />
               ) : (
                 <Paper
@@ -299,18 +286,14 @@ export const PromptCard: React.FC<PromptCardProps> = ({ prompt, editable = false
                     overflow: 'auto',
                   }}
                 >
-                  <Typography
-                    variant="body2"
+                  <SafeHtmlRenderer
+                    html={prompt.systemPrompt || ''}
                     sx={{
-                      fontFamily: 'monospace',
                       fontSize: '13px',
                       color: '#334155',
-                      whiteSpace: 'pre-wrap',
                       lineHeight: 1.6,
                     }}
-                  >
-                    {prompt.systemPrompt}
-                  </Typography>
+                  />
                 </Paper>
               )}
             </Box>
@@ -329,27 +312,11 @@ export const PromptCard: React.FC<PromptCardProps> = ({ prompt, editable = false
               Full Prompt
             </Typography>
             {isEditing ? (
-              <TextField
-                fullWidth
-                multiline
-                rows={16}
+              <TiptapRichTextEditor
                 value={editedPrompt.userPrompt}
-                onChange={(e) => setEditedPrompt({ ...editedPrompt, userPrompt: e.target.value })}
-                placeholder="Enter user prompt template..."
-                required
-                sx={{
-                  '& .MuiOutlinedInput-root': {
-                    fontFamily: 'monospace',
-                    fontSize: '13px',
-                    bgcolor: '#f8fafc',
-                    '&:hover fieldset': {
-                      borderColor: categoryStyle.border,
-                    },
-                    '&.Mui-focused fieldset': {
-                      borderColor: categoryStyle.border,
-                    },
-                  },
-                }}
+                onChange={(value) => setEditedPrompt({ ...editedPrompt, userPrompt: value })}
+                placeholder="Enter user prompt template... You can format text with bold, italic, lists, etc."
+                height={400}
               />
             ) : (
               <Paper
@@ -362,18 +329,14 @@ export const PromptCard: React.FC<PromptCardProps> = ({ prompt, editable = false
                   overflow: 'auto',
                 }}
               >
-                <Typography
-                  variant="body2"
+                <SafeHtmlRenderer
+                  html={prompt.userPrompt}
                   sx={{
-                    fontFamily: 'monospace',
                     fontSize: '13px',
                     color: '#334155',
-                    whiteSpace: 'pre-wrap',
                     lineHeight: 1.6,
                   }}
-                >
-                  {prompt.userPrompt}
-                </Typography>
+                />
               </Paper>
             )}
           </Box>

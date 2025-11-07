@@ -40,6 +40,8 @@ import {
   getCategoryLabel,
   replaceTemplateVariables,
 } from '../../services/api/templateVariablesService';
+import TiptapRichTextEditor from '../../components/common/TiptapRichTextEditor';
+import { SafeHtmlRenderer, getHtmlCharCount, isHtmlEmpty } from '../../utils/htmlHelpers';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -518,23 +520,11 @@ export const SettingsPage: React.FC = () => {
                 <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, color: '#1e293b' }}>
                   Offer Headline
                 </Typography>
-                <TextField
-                  fullWidth
+                <TiptapRichTextEditor
                   value={offerHeadline}
-                  onChange={(e) => setOfferHeadline(e.target.value)}
+                  onChange={setOfferHeadline}
                   placeholder="Enter your offer headline... (e.g., New Blog Idea: {{company_chosen_idea}})"
-                  variant="outlined"
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      fontSize: '14px',
-                      '&:hover fieldset': {
-                        borderColor: '#667eea',
-                      },
-                      '&.Mui-focused fieldset': {
-                        borderColor: '#667eea',
-                      },
-                    },
-                  }}
+                  height={100}
                 />
               </Box>
 
@@ -543,33 +533,18 @@ export const SettingsPage: React.FC = () => {
                 <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, color: '#1e293b' }}>
                   Message Body
                 </Typography>
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={12}
+                <TiptapRichTextEditor
                   value={offerTemplate}
-                  onChange={(e) => setOfferTemplate(e.target.value)}
-                  placeholder="Enter your offer message here... Use double curly braces for variables (e.g., {{name}}, {{company}})."
-                  variant="outlined"
-                  sx={{
-                    '& .MuiOutlinedInput-root': {
-                      fontFamily: 'monospace',
-                      fontSize: '14px',
-                      '&:hover fieldset': {
-                        borderColor: '#667eea',
-                      },
-                      '&.Mui-focused fieldset': {
-                        borderColor: '#667eea',
-                      },
-                    },
-                  }}
+                  onChange={setOfferTemplate}
+                  placeholder="Enter your offer message here... Use double curly braces for variables (e.g., {{name}}, {{company}}). You can format text with bold, italic, lists, etc."
+                  height={350}
                 />
               </Box>
 
               {/* Character Count */}
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
                 <Typography variant="caption" sx={{ color: '#94a3b8' }}>
-                  {offerTemplate.length} characters
+                  {getHtmlCharCount(offerTemplate)} characters
                 </Typography>
                 {settings?.updatedAt && (
                   <Typography variant="caption" sx={{ color: '#94a3b8' }}>
@@ -596,31 +571,52 @@ export const SettingsPage: React.FC = () => {
               >
                 {/* Headline Preview */}
                 {headlinePreview && (
-                  <Typography
-                    variant="subtitle1"
-                    sx={{
-                      fontWeight: 600,
-                      mb: 2,
-                      color: '#1e293b',
-                      fontFamily: '"Inter", sans-serif',
-                    }}
-                  >
-                    Headline: {headlinePreview}
-                  </Typography>
+                  <Box sx={{ mb: 2 }}>
+                    <Typography
+                      variant="subtitle2"
+                      sx={{
+                        fontWeight: 600,
+                        color: '#64748b',
+                        fontSize: '12px',
+                        mb: 0.5,
+                      }}
+                    >
+                      Headline:
+                    </Typography>
+                    <SafeHtmlRenderer
+                      html={headlinePreview}
+                      sx={{
+                        fontWeight: 600,
+                        color: '#1e293b',
+                        fontFamily: '"Inter", sans-serif',
+                      }}
+                    />
+                  </Box>
                 )}
 
                 {/* Message Preview */}
-                <Typography
-                  variant="body2"
-                  sx={{
-                    whiteSpace: 'pre-wrap',
-                    fontFamily: '"Inter", sans-serif',
-                    lineHeight: 1.6,
-                    color: '#1e293b',
-                  }}
-                >
-                  {templatePreview}
-                </Typography>
+                <Box>
+                  <Typography
+                    variant="subtitle2"
+                    sx={{
+                      fontWeight: 600,
+                      color: '#64748b',
+                      fontSize: '12px',
+                      mb: 0.5,
+                    }}
+                  >
+                    Message:
+                  </Typography>
+                  <SafeHtmlRenderer
+                    html={templatePreview}
+                    sx={{
+                      fontFamily: '"Inter", sans-serif',
+                      lineHeight: 1.6,
+                      color: '#1e293b',
+                      fontSize: '14px',
+                    }}
+                  />
+                </Box>
               </Paper>
 
               {/* Action Buttons */}
@@ -628,7 +624,7 @@ export const SettingsPage: React.FC = () => {
                 <Button
                   variant="contained"
                   onClick={handleSaveOfferTemplate}
-                  disabled={saving || !offerTemplate.trim()}
+                  disabled={saving || isHtmlEmpty(offerTemplate)}
                   startIcon={saving ? <CircularProgress size={20} /> : <SaveIcon />}
                   sx={{
                     background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
