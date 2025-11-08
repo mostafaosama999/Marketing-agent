@@ -70,6 +70,10 @@ import {
   getCompanyWebsite,
   getWebsiteFieldMapping,
 } from '../../services/api/websiteFieldMappingService';
+import {
+  getCompanyProgramUrl,
+} from '../../services/api/programUrlFieldMappingService';
+import { ProgramUrlFieldMappingSelector } from '../../components/features/companies/ProgramUrlFieldMappingSelector';
 
 /**
  * Helper function to extract domain from URL
@@ -120,6 +124,7 @@ export const CompaniesPage: React.FC = () => {
   }>>([]);
   const [currentAnalyzingCompany, setCurrentAnalyzingCompany] = useState<Company | null>(null);
   const [analyzingLoading, setAnalyzingLoading] = useState(false);
+  const [existingProgramUrl, setExistingProgramUrl] = useState<string | undefined>(undefined);
 
   // Website mapping dialog state
   const [websiteMappingDialogOpen, setWebsiteMappingDialogOpen] = useState(false);
@@ -543,6 +548,10 @@ export const CompaniesPage: React.FC = () => {
   };
 
   const handleAnalyzeSingleCompany = async (company: Company) => {
+    // Check if there's an existing URL in the mapped field
+    const mappedProgramUrl = getCompanyProgramUrl(company);
+    setExistingProgramUrl(mappedProgramUrl);
+
     // Phase 1: Find writing program URLs
     setCurrentAnalyzingCompany(company);
     setAnalyzingLoading(true);
@@ -686,6 +695,7 @@ export const CompaniesPage: React.FC = () => {
     setFoundUrls([]);
     setCurrentAnalyzingCompany(null);
     setAnalyzingLoading(false);
+    setExistingProgramUrl(undefined);
   };
 
   const handleWebsiteMappingSave = () => {
@@ -828,6 +838,15 @@ export const CompaniesPage: React.FC = () => {
             Showing {filteredCompanies.length} {filteredCompanies.length === 1 ? 'company' : 'companies'}
           </Typography>
           <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
+
+          {/* Program URL Field Mapping Selector - Only in Writing Programs view */}
+          {currentView === 'writing-program' && (
+            <>
+              <ProgramUrlFieldMappingSelector companies={companies} />
+              <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
+            </>
+          )}
+
           <TableColumnVisibilityMenu
             columns={tableColumns}
             onToggleVisibility={handleColumnVisibilityChange}
@@ -1027,6 +1046,7 @@ export const CompaniesPage: React.FC = () => {
             onSelect={handleUrlSelect}
             urls={foundUrls}
             loading={analyzingLoading}
+            existingUrl={existingProgramUrl}
           />
 
           {/* Website Field Mapping Dialog */}

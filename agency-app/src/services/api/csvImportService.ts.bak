@@ -429,126 +429,6 @@ export function detectDateFields(
 }
 
 /**
- * Parse a date string from CSV into a Date object
- * Handles multiple common date formats from CSV files
- * @param dateStr Date string from CSV
- * @returns Date object if valid, null otherwise
- */
-export function parseCSVDate(dateStr: string): Date | null {
-  if (!dateStr || dateStr.trim() === '') {
-    return null;
-  }
-
-  const trimmed = dateStr.trim();
-
-  // Early rejection: If the value contains letters (except month names), it's not a date
-  // This filters out values like "Idea", "Youssef", email addresses, etc.
-  if (/[a-zA-Z]/.test(trimmed)) {
-    // Allow month names (Jan, February, etc.) but reject other text
-    const hasMonthName = /\b(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec|january|february|march|april|june|july|august|september|october|november|december)\b/i.test(trimmed);
-    if (!hasMonthName) {
-      return null; // Reject text values silently
-    }
-  }
-
-  // Try ISO 8601 format ONLY (YYYY-MM-DD with dashes)
-  // This is strict to avoid false positives from Date constructor
-  const isoMatch = trimmed.match(/^(\d{4})-(\d{1,2})-(\d{1,2})$/);
-  if (isoMatch) {
-    const year = parseInt(isoMatch[1], 10);
-    const month = parseInt(isoMatch[2], 10);
-    const day = parseInt(isoMatch[3], 10);
-
-    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-      const date = new Date(year, month - 1, day);
-      if (!isNaN(date.getTime())) {
-        return date;
-      }
-    }
-  }
-
-  // Try slash-separated dates with smart DD/MM vs MM/DD detection
-  const slashMatch = trimmed.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-  if (slashMatch) {
-    const first = parseInt(slashMatch[1], 10);
-    const second = parseInt(slashMatch[2], 10);
-    const year = parseInt(slashMatch[3], 10);
-
-    let month: number, day: number;
-
-    // Smart detection: if first value > 12, it MUST be DD/MM/YYYY
-    if (first > 12) {
-      day = first;
-      month = second;
-    }
-    // If second value > 12, it MUST be MM/DD/YYYY
-    else if (second > 12) {
-      month = first;
-      day = second;
-    }
-    // Ambiguous case (both <= 12): Default to DD/MM/YYYY (European format)
-    // This matches the CSV data which uses DD/MM/YYYY format
-    else {
-      day = first;
-      month = second;
-    }
-
-    // Validate ranges
-    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-      const date = new Date(year, month - 1, day);
-      if (!isNaN(date.getTime())) {
-        return date;
-      }
-    }
-  }
-
-  // Try dash-separated dates (DD-MM-YYYY format, common in EU)
-  const dashMatch = trimmed.match(/^(\d{1,2})-(\d{1,2})-(\d{4})$/);
-  if (dashMatch) {
-    const day = parseInt(dashMatch[1], 10);
-    const month = parseInt(dashMatch[2], 10);
-    const year = parseInt(dashMatch[3], 10);
-
-    if (month >= 1 && month <= 12 && day >= 1 && day <= 31) {
-      const date = new Date(year, month - 1, day);
-      if (!isNaN(date.getTime())) {
-        return date;
-      }
-    }
-  }
-
-  // Try parsing Excel serial date number
-  // Only parse as Excel serial if:
-  // 1. Value is a valid number
-  // 2. Value is >= 1 (Excel dates start at 1)
-  // 3. Value is <= 50000 (roughly year 2036, avoids treating large numbers as dates)
-  // 4. Value is an integer or close to one (dates shouldn't have significant decimals)
-  const excelSerial = parseFloat(trimmed);
-  if (!isNaN(excelSerial) && excelSerial >= 1 && excelSerial <= 50000) {
-    // Check if it's roughly an integer (allow small floating point errors)
-    const isInteger = Math.abs(excelSerial - Math.round(excelSerial)) < 0.0001;
-
-    if (isInteger) {
-      // CORRECT Excel epoch: December 30, 1899 (NOT January 1, 1900)
-      // Excel serial 1 = December 31, 1899
-      // Excel serial 2 = January 1, 1900
-      const excelEpoch = new Date(1899, 11, 30); // December 30, 1899
-      const daysOffset = excelSerial; // No adjustment needed with correct epoch
-      const date = new Date(excelEpoch.getTime() + daysOffset * 24 * 60 * 60 * 1000);
-
-      // Validate the result is in a reasonable range
-      if (!isNaN(date.getTime()) && date.getFullYear() >= 1900 && date.getFullYear() <= 2100) {
-        return date;
-      }
-    }
-  }
-
-  // If all parsing attempts fail, return null
-  console.warn(`[CSV Import] Failed to parse date: "${dateStr}"`);
-  return null;
-}
-
-/**
  * Get dropdown field name from mapping (handles both standard and custom fields)
  * @param mapping Field mapping
  * @returns Field name for dropdown or null if not applicable
@@ -594,7 +474,7 @@ export function applyForwardFill(data: CSVRow[], mappings: FieldMapping[]): CSVR
   const columnsToFill: string[] = [];
 
   // NEVER forward-fill these sensitive fields across companies
-  const SENSITIVE_FIELDS = ['website', 'url', 'domain', 'site', 'link', 'rating', 'score', 'tier', 'quality'];
+  const SENSITIVE_FIELDS = ['website', 'url', 'domain', 'site', 'link'];
 
   for (const header of headers) {
     // Find mapping for this CSV column
@@ -676,15 +556,15 @@ export function applyForwardFill(data: CSVRow[], mappings: FieldMapping[]): CSVR
  * @returns Validation result with any errors found
  */
 export function validateCompanyData(
-  companyDataByName: Map<string, { originalName: string; data: Record<string, any> }>
+  companyDataByName: Map<string, any>
 ): { valid: boolean; errors: string[]; warnings: string[] } {
   const errors: string[] = [];
   const warnings: string[] = [];
   const websiteToCompanies = new Map<string, string[]>();
 
   // Check for duplicate websites across companies
-  companyDataByName.forEach((companyEntry, companyName) => {
-    const website = companyEntry.data.website?.toLowerCase().trim();
+  companyDataByName.forEach((data, companyName) => {
+    const website = data.website?.toLowerCase().trim();
 
     if (website && website !== '') {
       const existing = websiteToCompanies.get(website) || [];
@@ -705,8 +585,8 @@ export function validateCompanyData(
 
   // Additional validation: check for companies without websites
   let companiesWithoutWebsite = 0;
-  companyDataByName.forEach((companyEntry, companyName) => {
-    if (!companyEntry.data.website || companyEntry.data.website.trim() === '') {
+  companyDataByName.forEach((data, companyName) => {
+    if (!data.website || data.website.trim() === '') {
       companiesWithoutWebsite++;
     }
   });
@@ -846,31 +726,13 @@ function transformRowToLead(
     }
     // Custom field - could be for lead or company
     else {
-      // Determine the value to store based on field type
-      let fieldValue: any = value.trim();
-
-      // Parse date fields to ISO string format
-      if (mapping.fieldType === 'date') {
-        const parsedDate = parseCSVDate(value);
-        if (parsedDate) {
-          // Store as ISO string for Firebase
-          fieldValue = parsedDate.toISOString();
-        } else {
-          // If parsing fails, skip this field (don't store invalid dates)
-          console.warn(
-            `[CSV Import] Skipping invalid date value "${value}" for field "${mapping.leadField}"`
-          );
-          continue;
-        }
-      }
-
       if (entityType === 'company') {
         if (!companyData.customFields) {
           companyData.customFields = {};
         }
-        companyData.customFields[mapping.leadField] = fieldValue;
+        companyData.customFields[mapping.leadField] = value.trim();
       } else {
-        leadData.customFields![mapping.leadField] = fieldValue;
+        leadData.customFields![mapping.leadField] = value.trim();
       }
     }
   }
@@ -1141,11 +1003,11 @@ export async function importLeadsFromCSV(
   if (companyDataByName.size > 0) {
     const companyUpdatePromises: Promise<void>[] = [];
 
-    companyDataByName.forEach((companyEntry, companyKey) => {
+    companyDataByName.forEach((companyData, companyKey) => {
       const companyId = companyIdMap.get(companyKey);
       if (companyId) {
         companyUpdatePromises.push(
-          updateCompany(companyId, companyEntry.data).catch((error) => {
+          updateCompany(companyId, companyData).catch((error) => {
             console.error(`Failed to update company ${companyKey}:`, error);
             // Non-blocking: continue with import even if company update fails
           })

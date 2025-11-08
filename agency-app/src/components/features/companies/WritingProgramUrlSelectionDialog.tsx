@@ -36,6 +36,7 @@ interface WritingProgramUrlSelectionDialogProps {
   onSelect: (selectedUrl: string) => void;
   urls: URLOption[];
   loading?: boolean;
+  existingUrl?: string; // URL from mapped custom field
 }
 
 export const WritingProgramUrlSelectionDialog: React.FC<WritingProgramUrlSelectionDialogProps> = ({
@@ -44,13 +45,29 @@ export const WritingProgramUrlSelectionDialog: React.FC<WritingProgramUrlSelecti
   onSelect,
   urls,
   loading = false,
+  existingUrl,
 }) => {
   const [selectedUrl, setSelectedUrl] = useState<string>('');
   const [customUrl, setCustomUrl] = useState<string>('');
   const [useCustom, setUseCustom] = useState<boolean>(false);
+  const [mode, setMode] = useState<'existing' | 'search'>('existing'); // Track which option user chose
 
   const handleSelect = () => {
-    const urlToUse = useCustom ? customUrl.trim() : selectedUrl;
+    let urlToUse = '';
+
+    // If using existing URL from mapped field
+    if (existingUrl && mode === 'existing') {
+      urlToUse = existingUrl;
+    }
+    // If using custom URL
+    else if (useCustom) {
+      urlToUse = customUrl.trim();
+    }
+    // If using searched/found URL
+    else {
+      urlToUse = selectedUrl;
+    }
+
     if (urlToUse) {
       onSelect(urlToUse);
     }
@@ -60,6 +77,7 @@ export const WritingProgramUrlSelectionDialog: React.FC<WritingProgramUrlSelecti
     setSelectedUrl('');
     setCustomUrl('');
     setUseCustom(false);
+    setMode('existing');
     onClose();
   };
 
@@ -112,64 +130,169 @@ export const WritingProgramUrlSelectionDialog: React.FC<WritingProgramUrlSelecti
       </DialogTitle>
 
       <DialogContent sx={{ pt: 2 }}>
-        {/* Loading State - Show spinner and custom URL input */}
-        {loading && urls.length === 0 ? (
-          <>
-            <Box
-              sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                gap: 2,
-                py: 6,
-              }}
-            >
-              <CircularProgress size={48} sx={{ color: '#667eea' }} />
-              <Typography variant="body1" sx={{ fontWeight: 500, color: '#1e293b' }}>
-                Searching for writing programs...
-              </Typography>
-              <Typography variant="body2" color="text.secondary">
-                This may take a few moments
-              </Typography>
-            </Box>
+        {/* Existing URL Options - Show when existingUrl is provided and not loading */}
+        {existingUrl && !loading && (
+          <Box sx={{ mb: 3 }}>
+            <Alert severity="success" sx={{ mb: 2 }}>
+              A program URL was found in your mapped field. Choose an option below:
+            </Alert>
 
-            {/* Custom URL Input - Show during loading as skip option */}
-            <Box
-              sx={{
-                mt: 3,
-                p: 2,
-                border: '1px solid',
-                borderColor: useCustom ? '#667eea' : '#e2e8f0',
-                borderRadius: 2,
-                backgroundColor: useCustom ? 'rgba(102, 126, 234, 0.04)' : 'transparent',
-                transition: 'all 0.2s',
-              }}
+            <RadioGroup
+              value={mode}
+              onChange={(e) => setMode(e.target.value as 'existing' | 'search')}
             >
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-                <EditIcon sx={{ color: '#667eea', fontSize: 20 }} />
-                <Typography variant="body2" sx={{ fontWeight: 600, color: '#1e293b' }}>
-                  Or Enter Custom URL
-                </Typography>
-              </Box>
-              <TextField
-                fullWidth
-                placeholder="https://example.com/write-for-us"
-                value={customUrl}
-                onChange={(e) => handleCustomUrlChange(e.target.value)}
-                size="small"
+              {/* Option 1: Use existing URL */}
+              <Box
                 sx={{
-                  '& .MuiOutlinedInput-root': {
-                    '&.Mui-focused fieldset': {
-                      borderColor: '#667eea',
-                    },
+                  mb: 2,
+                  p: 2,
+                  border: '2px solid',
+                  borderColor: mode === 'existing' ? '#667eea' : '#e2e8f0',
+                  borderRadius: 2,
+                  backgroundColor: mode === 'existing' ? 'rgba(102, 126, 234, 0.04)' : 'transparent',
+                  transition: 'all 0.2s',
+                  '&:hover': {
+                    borderColor: '#667eea',
+                    backgroundColor: 'rgba(102, 126, 234, 0.02)',
                   },
                 }}
-              />
-              <Typography variant="caption" sx={{ color: '#64748b', display: 'block', mt: 1 }}>
-                Skip the search and enter the URL directly
-              </Typography>
-            </Box>
-          </>
+              >
+                <FormControlLabel
+                  value="existing"
+                  control={
+                    <Radio
+                      sx={{
+                        color: '#667eea',
+                        '&.Mui-checked': {
+                          color: '#667eea',
+                        },
+                      }}
+                    />
+                  }
+                  label={
+                    <Box sx={{ width: '100%', ml: 1 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5, color: '#1e293b' }}>
+                        Use Existing URL from Mapped Field
+                      </Typography>
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                        <Link
+                          href={existingUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          sx={{
+                            color: '#667eea',
+                            textDecoration: 'none',
+                            fontWeight: 500,
+                            fontSize: '13px',
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 0.5,
+                            '&:hover': {
+                              textDecoration: 'underline',
+                            },
+                          }}
+                          onClick={(e) => e.stopPropagation()}
+                        >
+                          {existingUrl}
+                          <OpenIcon sx={{ fontSize: 14 }} />
+                        </Link>
+                      </Box>
+                      <Chip
+                        size="small"
+                        label="From Mapped Field"
+                        icon={<CheckIcon />}
+                        sx={{
+                          bgcolor: '#dcfce7',
+                          color: '#16a34a',
+                          fontSize: '11px',
+                          height: '22px',
+                          mt: 1,
+                          '& .MuiChip-icon': {
+                            fontSize: 14,
+                            color: '#16a34a',
+                          },
+                        }}
+                      />
+                    </Box>
+                  }
+                  sx={{
+                    width: '100%',
+                    alignItems: 'flex-start',
+                    m: 0,
+                  }}
+                />
+              </Box>
+
+              {/* Option 2: Search for new URL */}
+              <Box
+                sx={{
+                  p: 2,
+                  border: '2px solid',
+                  borderColor: mode === 'search' ? '#667eea' : '#e2e8f0',
+                  borderRadius: 2,
+                  backgroundColor: mode === 'search' ? 'rgba(102, 126, 234, 0.04)' : 'transparent',
+                  transition: 'all 0.2s',
+                  '&:hover': {
+                    borderColor: '#667eea',
+                    backgroundColor: 'rgba(102, 126, 234, 0.02)',
+                  },
+                }}
+              >
+                <FormControlLabel
+                  value="search"
+                  control={
+                    <Radio
+                      sx={{
+                        color: '#667eea',
+                        '&.Mui-checked': {
+                          color: '#667eea',
+                        },
+                      }}
+                    />
+                  }
+                  label={
+                    <Box sx={{ width: '100%', ml: 1 }}>
+                      <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5, color: '#1e293b' }}>
+                        Search for New URL
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: '#64748b' }}>
+                        Find a different writing program URL by searching the company website
+                      </Typography>
+                    </Box>
+                  }
+                  sx={{
+                    width: '100%',
+                    alignItems: 'flex-start',
+                    m: 0,
+                  }}
+                />
+              </Box>
+            </RadioGroup>
+          </Box>
+        )}
+
+        {/* Only show search results if mode is 'search' or no existingUrl */}
+        {(!existingUrl || mode === 'search') && (
+          <>
+        {/* Loading State - Show spinner only */}
+        {loading && urls.length === 0 ? (
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              gap: 2,
+              py: 6,
+            }}
+          >
+            <CircularProgress size={48} sx={{ color: '#667eea' }} />
+            <Typography variant="body1" sx={{ fontWeight: 500, color: '#1e293b' }}>
+              Searching for writing programs...
+            </Typography>
+            <Typography variant="body2" color="text.secondary">
+              This may take a few moments
+            </Typography>
+          </Box>
         ) : (
           <>
             {/* URLs Found - Show list */}
@@ -370,6 +493,8 @@ export const WritingProgramUrlSelectionDialog: React.FC<WritingProgramUrlSelecti
             )}
           </>
         )}
+        </>
+        )}
       </DialogContent>
 
       <DialogActions sx={{ px: 3, pb: 3, pt: 2 }}>
@@ -385,7 +510,10 @@ export const WritingProgramUrlSelectionDialog: React.FC<WritingProgramUrlSelecti
         </Button>
         <Button
           onClick={handleSelect}
-          disabled={!selectedUrl && !customUrl.trim()}
+          disabled={
+            // Disable if no option is selected
+            (existingUrl && mode === 'existing' ? false : !selectedUrl && !customUrl.trim())
+          }
           variant="contained"
           sx={{
             textTransform: 'none',
@@ -404,6 +532,8 @@ export const WritingProgramUrlSelectionDialog: React.FC<WritingProgramUrlSelecti
             ? 'Searching...'
             : loading
             ? 'Analyzing...'
+            : existingUrl && mode === 'existing'
+            ? 'Analyze Existing URL'
             : 'Analyze Program'}
         </Button>
       </DialogActions>

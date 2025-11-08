@@ -35,12 +35,13 @@ import {
   detectFieldSection,
   detectEntityType,
   detectDropdownFields,
+  detectDateFields,
   isPersonalLinkedInProfile,
   isCompanyLinkedInField
 } from '../../../services/api/csvImportService';
 import { useAuth } from '../../../contexts/AuthContext';
 import { usePipelineConfigContext } from '../../../contexts/PipelineConfigContext';
-import { DetectedDropdownField, isDropdownColumn } from '../../../types/fieldDefinitions';
+import { DetectedDropdownField, DetectedDateField, isDropdownColumn } from '../../../types/fieldDefinitions';
 import { DropdownOptionsEditor } from './DropdownOptionsEditor';
 
 interface CSVFieldMappingDialogProps {
@@ -85,6 +86,7 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
   const [importResult, setImportResult] = useState<ImportResult | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [dropdownFields, setDropdownFields] = useState<DetectedDropdownField[]>([]);
+  const [dateFields, setDateFields] = useState<DetectedDateField[]>([]);
 
   // Auto-detect mappings on mount (only run once when headers change)
   useEffect(() => {
@@ -205,6 +207,37 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
     }
   }, [mappings, headers, data]);
 
+  // Detect date fields when mappings change
+  useEffect(() => {
+    if (mappings.length > 0 && data.length > 0) {
+      const detected = detectDateFields(headers, data, mappings);
+      setDateFields(detected);
+    }
+  }, [mappings, headers, data]);
+
+  // Update mappings with field types from detected dropdown and date fields
+  useEffect(() => {
+    if (dropdownFields.length > 0 || dateFields.length > 0) {
+      setMappings((prev) =>
+        prev.map((mapping) => {
+          // Check if this field is a detected dropdown
+          const isDropdown = dropdownFields.some(d => d.columnName === mapping.csvField);
+          if (isDropdown) {
+            return { ...mapping, fieldType: 'dropdown' as const };
+          }
+
+          // Check if this field is a detected date
+          const isDate = dateFields.some(d => d.columnName === mapping.csvField);
+          if (isDate) {
+            return { ...mapping, fieldType: 'date' as const };
+          }
+
+          return mapping;
+        })
+      );
+    }
+  }, [dropdownFields, dateFields]);
+
   const handleMappingChange = (csvField: string, leadField: string) => {
     setMappings((prev) =>
       prev.map((mapping) => {
@@ -313,7 +346,7 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
         autoCreateFields,
         user.uid,
         dropdownFields.length > 0 ? dropdownFields : undefined,
-        undefined, // dateFields - will be added in next iteration
+        dateFields.length > 0 ? dateFields : undefined,
         (current, total) => {
           setImportProgress({ current, total });
         }

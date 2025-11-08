@@ -20,6 +20,8 @@ import {
   Select,
   Chip,
   CircularProgress,
+  Checkbox,
+  FormControlLabel,
 } from '@mui/material';
 import {
   CheckCircle as SuccessIcon,
@@ -31,6 +33,10 @@ import {
   analyzeWritingProgramDetails,
 } from '../../../services/firebase/cloudFunctions';
 import { updateCompany } from '../../../services/api/companies';
+import {
+  getProgramUrlFieldMapping,
+  getCompanyProgramUrl,
+} from '../../../services/api/programUrlFieldMappingService';
 
 interface BulkWritingProgramDialogProps {
   open: boolean;
@@ -50,6 +56,7 @@ interface CompanyProgress {
   analyzingMessage?: string;
   foundUrls: string[];
   selectedUrl?: string;
+  urlSource?: 'mapped' | 'searched'; // Track where URL came from
   analysisData?: any;
 }
 
@@ -64,6 +71,7 @@ export const BulkWritingProgramDialog: React.FC<BulkWritingProgramDialogProps> =
   const [findingProgress, setFindingProgress] = useState(0);
   const [analyzingProgress, setAnalyzingProgress] = useState(0);
   const [totalCost, setTotalCost] = useState(0);
+  const [useMappedField, setUseMappedField] = useState(true); // Default to true
 
   // Initialize progress map and start finding when dialog opens
   useEffect(() => {
@@ -112,6 +120,34 @@ export const BulkWritingProgramDialog: React.FC<BulkWritingProgramDialogProps> =
           return newProgress;
         });
 
+        // Check if we should use mapped field first
+        let programUrl: string | undefined;
+        let urlSource: 'mapped' | 'searched' = 'searched';
+
+        if (useMappedField) {
+          programUrl = getCompanyProgramUrl(company);
+          if (programUrl) {
+            urlSource = 'mapped';
+            // Found URL in mapped field - skip search
+            setProgress(prev => {
+              const newProgress = new Map(prev);
+              const companyProgress = newProgress.get(company.id);
+              if (companyProgress) {
+                companyProgress.findingStatus = 'success';
+                companyProgress.findingMessage = 'Found URL in mapped field';
+                companyProgress.foundUrls = [programUrl!];
+                companyProgress.selectedUrl = programUrl;
+                companyProgress.urlSource = 'mapped';
+              }
+              return newProgress;
+            });
+            completedCount++;
+            setFindingProgress((completedCount / companies.length) * 100);
+            continue;
+          }
+        }
+
+        // No URL in mapped field (or not using mapped field) - search for it
         // Get website from company
         const website = company.website || (company as any).writingProgramAnalysis?.programUrl;
 
@@ -158,6 +194,7 @@ export const BulkWritingProgramDialog: React.FC<BulkWritingProgramDialogProps> =
               : 'No URLs found';
             companyProgress.foundUrls = allUrls;
             companyProgress.selectedUrl = allUrls.length > 0 ? allUrls[0] : undefined;
+            companyProgress.urlSource = 'searched';
           }
           return newProgress;
         });
@@ -364,6 +401,37 @@ export const BulkWritingProgramDialog: React.FC<BulkWritingProgramDialogProps> =
         {/* Phase 1: Finding URLs */}
         {phase === 'finding' && (
           <Box>
+            {/* Checkbox for using mapped field */}
+            {getProgramUrlFieldMapping() && (
+              <Box sx={{ mb: 2, p: 2, bgcolor: '#f9fafb', borderRadius: 2 }}>
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={useMappedField}
+                      onChange={(e) => setUseMappedField(e.target.checked)}
+                      disabled={findingProgress > 0} // Disable after search starts
+                      sx={{
+                        color: '#667eea',
+                        '&.Mui-checked': {
+                          color: '#667eea',
+                        },
+                      }}
+                    />
+                  }
+                  label={
+                    <Box>
+                      <Typography variant="body2" sx={{ fontWeight: 600 }}>
+                        Use existing URLs from mapped field when available
+                      </Typography>
+                      <Typography variant="caption" sx={{ color: '#64748b' }}>
+                        Field: <strong>{getProgramUrlFieldMapping()}</strong>
+                      </Typography>
+                    </Box>
+                  }
+                />
+              </Box>
+            )}
+
             <Box sx={{ mb: 3 }}>
               <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
                 Progress: {Math.round(findingProgress)}%
@@ -447,6 +515,7 @@ export const BulkWritingProgramDialog: React.FC<BulkWritingProgramDialogProps> =
                   <TableRow>
                     <TableCell>Company</TableCell>
                     <TableCell>Found URLs</TableCell>
+                    <TableCell>Source</TableCell>
                     <TableCell>Select URL</TableCell>
                   </TableRow>
                 </TableHead>
@@ -464,6 +533,40 @@ export const BulkWritingProgramDialog: React.FC<BulkWritingProgramDialogProps> =
                             ? `${companyProgress.foundUrls.length} URL${companyProgress.foundUrls.length > 1 ? 's' : ''} found`
                             : 'No URLs found'}
                         </Typography>
+                      </TableCell>
+                      <TableCell>
+                        {companyProgress.urlSource === 'mapped' ? (
+                          <Chip
+                            size="small"
+                            label="Mapped Field"
+                            icon={<SuccessIcon />}
+                            sx={{
+                              bgcolor: '#dcfce7',
+                              color: '#16a34a',
+                              fontSize: '10px',
+                              height: '20px',
+                              '& .MuiChip-icon': {
+                                fontSize: 12,
+                                color: '#16a34a',
+                              },
+                            }}
+                          />
+                        ) : companyProgress.urlSource === 'searched' ? (
+                          <Chip
+                            size="small"
+                            label="Search"
+                            sx={{
+                              bgcolor: '#dbeafe',
+                              color: '#0077b5',
+                              fontSize: '10px',
+                              height: '20px',
+                            }}
+                          />
+                        ) : (
+                          <Typography variant="body2" fontSize="11px" color="text.secondary">
+                            -
+                          </Typography>
+                        )}
                       </TableCell>
                       <TableCell>
                         {companyProgress.foundUrls.length > 0 ? (
