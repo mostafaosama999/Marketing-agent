@@ -11,10 +11,14 @@ import {
   Tooltip,
   Snackbar,
   Alert,
+  Button,
+  ButtonGroup,
 } from '@mui/material';
 import {
   Add as AddIcon,
   Archive as ArchiveIcon,
+  ViewList as ViewListIcon,
+  Article as ArticleIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import { Company } from '../../types/crm';
@@ -28,6 +32,11 @@ import {
 } from '../../services/api/companies';
 import { CompanyDialog } from '../../components/features/companies/CompanyDialog';
 import { CompanyTable } from '../../components/features/companies/CompanyTable';
+import { WritingProgramTable } from '../../components/features/companies/WritingProgramTable';
+import { WritingProgramBulkActionsToolbar } from '../../components/features/companies/WritingProgramBulkActionsToolbar';
+import { BulkWritingProgramDialog } from '../../components/features/companies/BulkWritingProgramDialog';
+import { WritingProgramUrlSelectionDialog } from '../../components/features/companies/WritingProgramUrlSelectionDialog';
+import { WebsiteFieldMappingDialog } from '../../components/features/companies/WebsiteFieldMappingDialog';
 import { ArchivedCompaniesView } from '../../components/features/companies/ArchivedCompaniesView';
 import { CompanyBulkActionsToolbar } from '../../components/features/companies/CompanyBulkActionsToolbar';
 import { CompanyBulkEditDialog } from '../../components/features/companies/CompanyBulkEditDialog';
@@ -52,6 +61,27 @@ import {
   loadCompanyPreset,
   getDefaultCompanyPreset,
 } from '../../services/api/companyFilterPresetsService';
+import {
+  analyzeWritingProgram,
+  analyzeWritingProgramDetails,
+} from '../../services/firebase/cloudFunctions';
+import { updateCompany } from '../../services/api/companies';
+import {
+  getCompanyWebsite,
+  getWebsiteFieldMapping,
+} from '../../services/api/websiteFieldMappingService';
+
+/**
+ * Helper function to extract domain from URL
+ */
+function extractDomainFromUrl(url: string): string | null {
+  try {
+    const urlObj = new URL(url.startsWith('http') ? url : `https://${url}`);
+    return urlObj.hostname.replace('www.', '');
+  } catch (error) {
+    return null;
+  }
+}
 
 export const CompaniesPage: React.FC = () => {
   const navigate = useNavigate();
@@ -61,6 +91,12 @@ export const CompaniesPage: React.FC = () => {
   const [openDialog, setOpenDialog] = useState(false);
   const [openFiltersModal, setOpenFiltersModal] = useState(false);
 
+  // View mode state ('all' or 'writing-program')
+  const [currentView, setCurrentView] = useState<'all' | 'writing-program'>(() => {
+    const saved = localStorage.getItem('companies_current_view');
+    return (saved === 'writing-program' ? 'writing-program' : 'all') as 'all' | 'writing-program';
+  });
+
   // Archived companies state
   const [showArchivedView, setShowArchivedView] = useState(false);
   const [archivedCompaniesCount, setArchivedCompaniesCount] = useState(0);
@@ -69,6 +105,25 @@ export const CompaniesPage: React.FC = () => {
   // Selection state for bulk actions
   const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([]);
   const [showBulkEditDialog, setShowBulkEditDialog] = useState(false);
+
+  // Writing program analysis state
+  const [selectedWritingProgramIds, setSelectedWritingProgramIds] = useState<string[]>([]);
+  const [showBulkAnalysisDialog, setShowBulkAnalysisDialog] = useState(false);
+
+  // Single company analysis state
+  const [urlSelectionDialogOpen, setUrlSelectionDialogOpen] = useState(false);
+  const [foundUrls, setFoundUrls] = useState<Array<{
+    url: string;
+    source: 'pattern' | 'ai';
+    confidence?: 'high' | 'medium' | 'low';
+    verified?: boolean;
+  }>>([]);
+  const [currentAnalyzingCompany, setCurrentAnalyzingCompany] = useState<Company | null>(null);
+  const [analyzingLoading, setAnalyzingLoading] = useState(false);
+
+  // Website mapping dialog state
+  const [websiteMappingDialogOpen, setWebsiteMappingDialogOpen] = useState(false);
+  const [pendingAnalysisCompany, setPendingAnalysisCompany] = useState<Company | null>(null);
 
   // Filter state
   const [filters, setFilters] = useState<CompanyFilterState>(DEFAULT_COMPANY_FILTER_STATE);
@@ -127,6 +182,11 @@ export const CompaniesPage: React.FC = () => {
 
     loadLeadCounts();
   }, [companies]);
+
+  // Persist view preference to localStorage
+  useEffect(() => {
+    localStorage.setItem('companies_current_view', currentView);
+  }, [currentView]);
 
   // Load default preset on mount
   useEffect(() => {
@@ -442,6 +502,213 @@ export const CompaniesPage: React.FC = () => {
     }
   };
 
+  // Writing program bulk action handlers
+  const handleSelectWritingProgramCompany = (companyId: string) => {
+    setSelectedWritingProgramIds(prev => {
+      if (prev.includes(companyId)) {
+        return prev.filter(id => id !== companyId);
+      } else {
+        return [...prev, companyId];
+      }
+    });
+  };
+
+  const handleSelectAllWritingPrograms = (selected: boolean) => {
+    if (selected) {
+      setSelectedWritingProgramIds(filteredCompanies.map(c => c.id));
+    } else {
+      setSelectedWritingProgramIds([]);
+    }
+  };
+
+  const handleClearWritingProgramSelection = () => {
+    setSelectedWritingProgramIds([]);
+  };
+
+  const handleBulkAnalyzePrograms = () => {
+    setShowBulkAnalysisDialog(true);
+  };
+
+  const handleBulkAnalysisComplete = () => {
+    // Clear selection and close dialog
+    setSelectedWritingProgramIds([]);
+    setShowBulkAnalysisDialog(false);
+
+    // Show success message
+    setSnackbar({
+      open: true,
+      message: 'Writing program analysis complete!',
+      severity: 'success',
+    });
+  };
+
+  const handleAnalyzeSingleCompany = async (company: Company) => {
+    // Phase 1: Find writing program URLs
+    setCurrentAnalyzingCompany(company);
+    setAnalyzingLoading(true);
+    setFoundUrls([]); // Start with empty URLs
+    setUrlSelectionDialogOpen(true); // Open dialog IMMEDIATELY
+
+    try {
+      // Get website using the field mapping
+      let website = getCompanyWebsite(company);
+
+      // If no website found, check if we have a field mapping configured
+      if (!website) {
+        const mapping = getWebsiteFieldMapping();
+
+        if (!mapping) {
+          // No mapping configured yet - close URL dialog and show the mapping dialog
+          setUrlSelectionDialogOpen(false);
+          setPendingAnalysisCompany(company);
+          setWebsiteMappingDialogOpen(true);
+          setAnalyzingLoading(false);
+          setCurrentAnalyzingCompany(null);
+          return;
+        } else {
+          // Mapping exists but still no website - show helpful error in snackbar
+          setUrlSelectionDialogOpen(false);
+          setSnackbar({
+            open: true,
+            message: 'No website found for this company. Please add a website URL to the configured field.',
+            severity: 'error',
+          });
+          setAnalyzingLoading(false);
+          setCurrentAnalyzingCompany(null);
+          return;
+        }
+      }
+
+      // Call analyzeWritingProgram to find URLs
+      const result = await analyzeWritingProgram(website);
+
+      // Prepare URLs for selection
+      const urlOptions: Array<{
+        url: string;
+        source: 'pattern' | 'ai';
+        confidence?: 'high' | 'medium' | 'low';
+        verified?: boolean;
+      }> = [];
+
+      // Add pattern-matched URLs
+      result.validUrls.forEach((urlResult) => {
+        urlOptions.push({
+          url: urlResult.url,
+          source: 'pattern',
+          verified: true,
+        });
+      });
+
+      // Add AI suggestions
+      if (result.aiSuggestions) {
+        result.aiSuggestions.forEach((suggestion) => {
+          if (!urlOptions.some(u => u.url === suggestion.url)) {
+            urlOptions.push({
+              url: suggestion.url,
+              source: 'ai',
+              confidence: suggestion.confidence,
+              verified: suggestion.verified,
+            });
+          }
+        });
+      }
+
+      // Update dialog with found URLs (or empty array if none found)
+      setFoundUrls(urlOptions);
+      setAnalyzingLoading(false);
+      // Keep dialog open - user can enter custom URL if no URLs found
+
+    } catch (error: any) {
+      console.error('Error finding writing program URLs:', error);
+
+      // Keep dialog open and show error state
+      setFoundUrls([]);
+      setAnalyzingLoading(false);
+
+      // Show error in snackbar
+      setSnackbar({
+        open: true,
+        message: error.message || 'Failed to find writing program URLs. You can still enter a custom URL.',
+        severity: 'error',
+      });
+    }
+  };
+
+  const handleUrlSelect = async (selectedUrl: string) => {
+    if (!currentAnalyzingCompany) return;
+
+    // Phase 2: Analyze the selected URL
+    setAnalyzingLoading(true);
+    // Keep dialog open to show "Analyzing..." state
+
+    try {
+      const result = await analyzeWritingProgramDetails(
+        selectedUrl,
+        currentAnalyzingCompany.id
+      );
+
+      // Save to Firestore
+      await updateCompany(currentAnalyzingCompany.id, {
+        writingProgramAnalysis: {
+          ...result,
+          programUrl: selectedUrl,
+          lastAnalyzedAt: new Date(),
+        },
+      });
+
+      // Success - close dialog and show success message
+      setUrlSelectionDialogOpen(false);
+      setSnackbar({
+        open: true,
+        message: `Successfully analyzed writing program for ${currentAnalyzingCompany.name}`,
+        severity: 'success',
+      });
+
+    } catch (error: any) {
+      console.error('Error analyzing writing program:', error);
+
+      // Error - close dialog and show error message
+      setUrlSelectionDialogOpen(false);
+      setSnackbar({
+        open: true,
+        message: error.message || 'Failed to analyze writing program',
+        severity: 'error',
+      });
+    } finally {
+      setAnalyzingLoading(false);
+      setCurrentAnalyzingCompany(null);
+      setFoundUrls([]);
+    }
+  };
+
+  const handleUrlSelectionCancel = () => {
+    setUrlSelectionDialogOpen(false);
+    setFoundUrls([]);
+    setCurrentAnalyzingCompany(null);
+    setAnalyzingLoading(false);
+  };
+
+  const handleWebsiteMappingSave = () => {
+    // Close the mapping dialog
+    setWebsiteMappingDialogOpen(false);
+
+    // Retry analysis with the newly configured mapping
+    if (pendingAnalysisCompany) {
+      const company = pendingAnalysisCompany;
+      setPendingAnalysisCompany(null);
+
+      // Retry the analysis after a short delay to ensure mapping is saved
+      setTimeout(() => {
+        handleAnalyzeSingleCompany(company);
+      }, 100);
+    }
+  };
+
+  const handleWebsiteMappingCancel = () => {
+    setWebsiteMappingDialogOpen(false);
+    setPendingAnalysisCompany(null);
+  };
+
   if (loading) {
     return (
       <Box
@@ -504,6 +771,55 @@ export const CompaniesPage: React.FC = () => {
               Manage your companies and view associated leads
             </Typography>
           </Box>
+
+          {/* View Toggle Buttons */}
+          <ButtonGroup
+            variant="outlined"
+            sx={{
+              bgcolor: 'white',
+              boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
+              borderRadius: 2,
+              '& .MuiButton-root': {
+                borderColor: '#e2e8f0',
+                textTransform: 'none',
+                fontWeight: 500,
+                fontSize: '14px',
+                px: 3,
+                py: 1,
+              },
+            }}
+          >
+            <Button
+              startIcon={<ViewListIcon />}
+              onClick={() => setCurrentView('all')}
+              sx={{
+                ...(currentView === 'all' && {
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white',
+                  '&:hover': {
+                    background: 'linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%)',
+                  },
+                }),
+              }}
+            >
+              All Companies
+            </Button>
+            <Button
+              startIcon={<ArticleIcon />}
+              onClick={() => setCurrentView('writing-program')}
+              sx={{
+                ...(currentView === 'writing-program' && {
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white',
+                  '&:hover': {
+                    background: 'linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%)',
+                  },
+                }),
+              }}
+            >
+              Writing Programs
+            </Button>
+          </ButtonGroup>
         </Box>
 
         {/* Filter Bar and Column Visibility */}
@@ -587,16 +903,24 @@ export const CompaniesPage: React.FC = () => {
               flexDirection: 'column',
             }}
           >
-            {/* Bulk Actions Toolbar */}
-            <CompanyBulkActionsToolbar
-              selectedCount={selectedCompanyIds.length}
-              onEditFields={handleBulkEdit}
-              onExportCSV={handleBulkExportCSV}
-              onDelete={handleBulkDelete}
-              onClear={handleClearSelection}
-            />
+            {/* Bulk Actions Toolbar - Conditional based on current view */}
+            {currentView === 'all' ? (
+              <CompanyBulkActionsToolbar
+                selectedCount={selectedCompanyIds.length}
+                onEditFields={handleBulkEdit}
+                onExportCSV={handleBulkExportCSV}
+                onDelete={handleBulkDelete}
+                onClear={handleClearSelection}
+              />
+            ) : (
+              <WritingProgramBulkActionsToolbar
+                selectedCount={selectedWritingProgramIds.length}
+                onAnalyze={handleBulkAnalyzePrograms}
+                onClear={handleClearWritingProgramSelection}
+              />
+            )}
 
-            {/* Companies Table */}
+            {/* Companies Table - Conditional rendering based on current view */}
             <Box
               sx={{
                 flex: 1,
@@ -604,17 +928,28 @@ export const CompaniesPage: React.FC = () => {
                 overflow: 'hidden',
               }}
             >
-              <CompanyTable
-                companies={filteredCompanies}
-                onView={handleViewCompany}
-                visibleColumns={tableColumns}
-                selectedCompanyIds={selectedCompanyIds}
-                onSelectCompany={(companyId) => {
-                  const isSelected = selectedCompanyIds.includes(companyId);
-                  handleSelectCompany(companyId, !isSelected);
-                }}
-                onSelectAll={handleSelectAll}
-              />
+              {currentView === 'all' ? (
+                <CompanyTable
+                  companies={filteredCompanies}
+                  onView={handleViewCompany}
+                  visibleColumns={tableColumns}
+                  selectedCompanyIds={selectedCompanyIds}
+                  onSelectCompany={(companyId) => {
+                    const isSelected = selectedCompanyIds.includes(companyId);
+                    handleSelectCompany(companyId, !isSelected);
+                  }}
+                  onSelectAll={handleSelectAll}
+                />
+              ) : (
+                <WritingProgramTable
+                  companies={filteredCompanies}
+                  onCompanyClick={handleViewCompany}
+                  selectedCompanyIds={selectedWritingProgramIds}
+                  onSelectCompany={handleSelectWritingProgramCompany}
+                  onSelectAll={handleSelectAllWritingPrograms}
+                  onAnalyzeSingle={handleAnalyzeSingleCompany}
+                />
+              )}
             </Box>
           </Box>
 
@@ -675,6 +1010,31 @@ export const CompaniesPage: React.FC = () => {
             onClose={() => setShowBulkEditDialog(false)}
             onSave={handleBulkEditSave}
             selectedCount={selectedCompanyIds.length}
+          />
+
+          {/* Bulk Writing Program Analysis Dialog */}
+          <BulkWritingProgramDialog
+            open={showBulkAnalysisDialog}
+            companies={filteredCompanies.filter(c => selectedWritingProgramIds.includes(c.id))}
+            onClose={() => setShowBulkAnalysisDialog(false)}
+            onComplete={handleBulkAnalysisComplete}
+          />
+
+          {/* Single Company URL Selection Dialog */}
+          <WritingProgramUrlSelectionDialog
+            open={urlSelectionDialogOpen}
+            onClose={handleUrlSelectionCancel}
+            onSelect={handleUrlSelect}
+            urls={foundUrls}
+            loading={analyzingLoading}
+          />
+
+          {/* Website Field Mapping Dialog */}
+          <WebsiteFieldMappingDialog
+            open={websiteMappingDialogOpen}
+            onClose={handleWebsiteMappingCancel}
+            companies={companies}
+            onSave={handleWebsiteMappingSave}
           />
         </>
       )}

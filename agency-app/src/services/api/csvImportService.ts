@@ -473,9 +473,21 @@ export function applyForwardFill(data: CSVRow[], mappings: FieldMapping[]): CSVR
   // This prevents lead data from bleeding into company-only rows
   const columnsToFill: string[] = [];
 
+  // NEVER forward-fill these sensitive fields across companies
+  const SENSITIVE_FIELDS = ['website', 'url', 'domain', 'site', 'link'];
+
   for (const header of headers) {
     // Find mapping for this CSV column
     const mapping = mappings.find(m => m.csvField === header);
+
+    // Skip sensitive fields (websites, URLs) - these should NEVER be forward-filled
+    const lowerHeader = header.toLowerCase().trim();
+    const isSensitiveField = SENSITIVE_FIELDS.some(field => lowerHeader.includes(field));
+
+    if (isSensitiveField) {
+      console.warn(`[CSV Import] Skipping forward-fill for sensitive field: "${header}"`);
+      continue;
+    }
 
     if (mapping) {
       // Only fill if it's mapped to company field or entity type is company
@@ -492,7 +504,6 @@ export function applyForwardFill(data: CSVRow[], mappings: FieldMapping[]): CSVR
       }
     } else {
       // No mapping found - use heuristic detection for company field
-      const lowerHeader = header.toLowerCase().trim();
       const isCompanyField = lowerHeader === 'company' ||
                             lowerHeader === 'company name' ||
                             lowerHeader === 'organization';
@@ -510,13 +521,19 @@ export function applyForwardFill(data: CSVRow[], mappings: FieldMapping[]): CSVR
     }
   }
 
-  // Apply forward-fill ONLY to company columns
+  // Log forward-fill columns for debugging
+  if (columnsToFill.length > 0) {
+    console.warn(`[CSV Import] Forward-fill will be applied to ${columnsToFill.length} columns:`, columnsToFill);
+    console.warn('[CSV Import] Sensitive fields (website/URL) are excluded from forward-fill to prevent data contamination.');
+  }
+
+  // Apply forward-fill ONLY to company columns (sensitive fields already excluded)
   const filledData = data.map((row, index) => {
     const newRow = { ...row };
 
     for (const column of columnsToFill) {
       if (!newRow[column] || newRow[column].trim() === '') {
-        // Find previous non-empty value
+        // Find previous non-empty value (works for merged cells)
         for (let i = index - 1; i >= 0; i--) {
           if (data[i][column] && data[i][column].trim() !== '') {
             newRow[column] = data[i][column];
@@ -530,6 +547,62 @@ export function applyForwardFill(data: CSVRow[], mappings: FieldMapping[]): CSVR
   });
 
   return filledData;
+}
+
+/**
+ * Validate company data to detect potential issues like duplicate websites
+ * This helps catch data contamination from forward-fill or other import bugs
+ * @param companyDataByName Map of company name (lowercase) to company data
+ * @returns Validation result with any errors found
+ */
+export function validateCompanyData(
+  companyDataByName: Map<string, any>
+): { valid: boolean; errors: string[]; warnings: string[] } {
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const websiteToCompanies = new Map<string, string[]>();
+
+  // Check for duplicate websites across companies
+  companyDataByName.forEach((data, companyName) => {
+    const website = data.website?.toLowerCase().trim();
+
+    if (website && website !== '') {
+      const existing = websiteToCompanies.get(website) || [];
+      existing.push(companyName);
+      websiteToCompanies.set(website, existing);
+    }
+  });
+
+  // Report duplicates as errors
+  websiteToCompanies.forEach((companyNames, website) => {
+    if (companyNames.length > 1) {
+      errors.push(
+        `⚠️ Website "${website}" is assigned to multiple companies: ${companyNames.join(', ')}. ` +
+        `This may indicate a data contamination issue from CSV import.`
+      );
+    }
+  });
+
+  // Additional validation: check for companies without websites
+  let companiesWithoutWebsite = 0;
+  companyDataByName.forEach((data, companyName) => {
+    if (!data.website || data.website.trim() === '') {
+      companiesWithoutWebsite++;
+    }
+  });
+
+  if (companiesWithoutWebsite > 0) {
+    warnings.push(
+      `${companiesWithoutWebsite} companies have no website URL. ` +
+      `This is not necessarily an error, but review the data to ensure it's intentional.`
+    );
+  }
+
+  return {
+    valid: errors.length === 0,
+    errors,
+    warnings
+  };
 }
 
 /**
@@ -888,6 +961,31 @@ export async function importLeadsFromCSV(
   const uniqueCompanyNames = Array.from(
     new Set(validLeadsData.map((lead) => lead.company))
   );
+
+  // 3.5. Validate company data for potential issues (duplicate websites, etc.)
+  if (companyDataByName.size > 0) {
+    const validation = validateCompanyData(companyDataByName);
+
+    // Log validation errors and warnings
+    if (validation.errors.length > 0) {
+      console.error('[CSV Import] CRITICAL: Data validation errors detected:');
+      validation.errors.forEach(error => console.error(`  - ${error}`));
+
+      // Add errors to result
+      result.errors.push(...validation.errors.map(error => `VALIDATION ERROR: ${error}`));
+
+      // CRITICAL: Don't block import, but warn user about potential data contamination
+      console.warn('[CSV Import] Import will continue, but please review the data carefully!');
+    }
+
+    if (validation.warnings.length > 0) {
+      console.warn('[CSV Import] Validation warnings:');
+      validation.warnings.forEach(warning => console.warn(`  - ${warning}`));
+
+      // Add warnings to result (non-blocking)
+      result.errors.push(...validation.warnings.map(warning => `Warning: ${warning}`));
+    }
+  }
 
   // 4. Batch create/get all companies
   const companyIdMap = await getOrCreateCompaniesBatch(uniqueCompanyNames);

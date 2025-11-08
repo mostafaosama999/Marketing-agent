@@ -14,6 +14,7 @@ import {
   Alert,
   Link,
   TextField,
+  CircularProgress,
 } from '@mui/material';
 import {
   CheckCircle as CheckIcon,
@@ -103,208 +104,277 @@ export const WritingProgramUrlSelectionDialog: React.FC<WritingProgramUrlSelecti
           pb: 1,
         }}
       >
-        Select Writing Program URL
+        {loading && urls.length === 0
+          ? 'Finding Writing Programs...'
+          : !loading && urls.length === 0
+          ? 'No Programs Found'
+          : 'Select Writing Program URL'}
       </DialogTitle>
 
       <DialogContent sx={{ pt: 2 }}>
-        <Alert severity="info" sx={{ mb: 3 }}>
-          We found {urls.length} potential writing program URL{urls.length !== 1 ? 's' : ''}.
-          Please select the correct one to analyze in detail.
-        </Alert>
-
-        <RadioGroup
-          value={selectedUrl}
-          onChange={(e) => setSelectedUrl(e.target.value)}
-        >
-          {urls.map((urlOption, index) => (
+        {/* Loading State - Show spinner and custom URL input */}
+        {loading && urls.length === 0 ? (
+          <>
             <Box
-              key={index}
               sx={{
-                mb: 2,
-                p: 2,
-                border: '1px solid',
-                borderColor: selectedUrl === urlOption.url ? '#667eea' : '#e2e8f0',
-                borderRadius: 2,
-                backgroundColor: selectedUrl === urlOption.url ? 'rgba(102, 126, 234, 0.04)' : 'transparent',
-                transition: 'all 0.2s',
-                '&:hover': {
-                  borderColor: '#667eea',
-                  backgroundColor: 'rgba(102, 126, 234, 0.02)',
-                },
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                gap: 2,
+                py: 6,
               }}
             >
-              <FormControlLabel
-                value={urlOption.url}
-                control={
-                  <Radio
+              <CircularProgress size={48} sx={{ color: '#667eea' }} />
+              <Typography variant="body1" sx={{ fontWeight: 500, color: '#1e293b' }}>
+                Searching for writing programs...
+              </Typography>
+              <Typography variant="body2" color="text.secondary">
+                This may take a few moments
+              </Typography>
+            </Box>
+
+            {/* Custom URL Input - Show during loading as skip option */}
+            <Box
+              sx={{
+                mt: 3,
+                p: 2,
+                border: '1px solid',
+                borderColor: useCustom ? '#667eea' : '#e2e8f0',
+                borderRadius: 2,
+                backgroundColor: useCustom ? 'rgba(102, 126, 234, 0.04)' : 'transparent',
+                transition: 'all 0.2s',
+              }}
+            >
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                <EditIcon sx={{ color: '#667eea', fontSize: 20 }} />
+                <Typography variant="body2" sx={{ fontWeight: 600, color: '#1e293b' }}>
+                  Or Enter Custom URL
+                </Typography>
+              </Box>
+              <TextField
+                fullWidth
+                placeholder="https://example.com/write-for-us"
+                value={customUrl}
+                onChange={(e) => handleCustomUrlChange(e.target.value)}
+                size="small"
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    '&.Mui-focused fieldset': {
+                      borderColor: '#667eea',
+                    },
+                  },
+                }}
+              />
+              <Typography variant="caption" sx={{ color: '#64748b', display: 'block', mt: 1 }}>
+                Skip the search and enter the URL directly
+              </Typography>
+            </Box>
+          </>
+        ) : (
+          <>
+            {/* URLs Found - Show list */}
+            {!loading && urls.length > 0 && (
+              <>
+                <Alert severity="info" sx={{ mb: 3 }}>
+                  We found {urls.length} potential writing program URL{urls.length !== 1 ? 's' : ''}.
+                  Please select the correct one to analyze in detail.
+                </Alert>
+
+                <RadioGroup
+                  value={selectedUrl}
+                  onChange={(e) => setSelectedUrl(e.target.value)}
+                >
+                  {urls.map((urlOption, index) => (
+                    <Box
+                      key={index}
+                      sx={{
+                        mb: 2,
+                        p: 2,
+                        border: '1px solid',
+                        borderColor: selectedUrl === urlOption.url ? '#667eea' : '#e2e8f0',
+                        borderRadius: 2,
+                        backgroundColor: selectedUrl === urlOption.url ? 'rgba(102, 126, 234, 0.04)' : 'transparent',
+                        transition: 'all 0.2s',
+                        '&:hover': {
+                          borderColor: '#667eea',
+                          backgroundColor: 'rgba(102, 126, 234, 0.02)',
+                        },
+                      }}
+                    >
+                      <FormControlLabel
+                        value={urlOption.url}
+                        control={
+                          <Radio
+                            sx={{
+                              color: '#667eea',
+                              '&.Mui-checked': {
+                                color: '#667eea',
+                              },
+                            }}
+                          />
+                        }
+                        label={
+                          <Box sx={{ width: '100%', ml: 1 }}>
+                            {/* URL with link */}
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                              <Link
+                                href={urlOption.url}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                sx={{
+                                  color: '#667eea',
+                                  textDecoration: 'none',
+                                  fontWeight: 500,
+                                  fontSize: '14px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  gap: 0.5,
+                                  '&:hover': {
+                                    textDecoration: 'underline',
+                                  },
+                                }}
+                                onClick={(e) => e.stopPropagation()}
+                              >
+                                {urlOption.url}
+                                <OpenIcon sx={{ fontSize: 14 }} />
+                              </Link>
+                            </Box>
+
+                            {/* Badges */}
+                            <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
+                              {/* Source badge */}
+                              <Chip
+                                size="small"
+                                label={urlOption.source === 'pattern' ? 'Pattern Match' : 'AI Suggestion'}
+                                icon={urlOption.source === 'pattern' ? <CheckIcon /> : undefined}
+                                sx={{
+                                  bgcolor: urlOption.source === 'pattern' ? '#e0e7ff' : '#fef3c7',
+                                  color: urlOption.source === 'pattern' ? '#4338ca' : '#92400e',
+                                  fontSize: '11px',
+                                  height: '22px',
+                                  '& .MuiChip-icon': {
+                                    fontSize: 14,
+                                    color: urlOption.source === 'pattern' ? '#4338ca' : '#92400e',
+                                  },
+                                }}
+                              />
+
+                              {/* Confidence badge for AI suggestions */}
+                              {urlOption.source === 'ai' && urlOption.confidence && (
+                                <Chip
+                                  size="small"
+                                  label={`${urlOption.confidence} confidence`}
+                                  sx={{
+                                    bgcolor: `${getConfidenceColor(urlOption.confidence)}20`,
+                                    color: getConfidenceColor(urlOption.confidence),
+                                    fontSize: '11px',
+                                    height: '22px',
+                                  }}
+                                />
+                              )}
+
+                              {/* Verified badge */}
+                              {urlOption.verified && (
+                                <Chip
+                                  size="small"
+                                  label="Verified"
+                                  icon={<CheckIcon />}
+                                  sx={{
+                                    bgcolor: '#d1fae5',
+                                    color: '#065f46',
+                                    fontSize: '11px',
+                                    height: '22px',
+                                    '& .MuiChip-icon': {
+                                      fontSize: 14,
+                                      color: '#065f46',
+                                    },
+                                  }}
+                                />
+                              )}
+
+                              {/* Unverified badge */}
+                              {urlOption.source === 'ai' && urlOption.verified === false && (
+                                <Chip
+                                  size="small"
+                                  label="Unverified"
+                                  icon={<ErrorIcon />}
+                                  sx={{
+                                    bgcolor: '#fee2e2',
+                                    color: '#991b1b',
+                                    fontSize: '11px',
+                                    height: '22px',
+                                    '& .MuiChip-icon': {
+                                      fontSize: 14,
+                                      color: '#991b1b',
+                                    },
+                                  }}
+                                />
+                              )}
+                            </Box>
+                          </Box>
+                        }
+                        sx={{
+                          width: '100%',
+                          alignItems: 'flex-start',
+                          m: 0,
+                        }}
+                      />
+                    </Box>
+                  ))}
+                </RadioGroup>
+              </>
+            )}
+
+            {/* No URLs Found - Show custom URL input only */}
+            {!loading && urls.length === 0 && (
+              <>
+                <Alert severity="info" sx={{ mb: 3 }}>
+                  No writing program URLs found. Please enter a custom URL below.
+                </Alert>
+
+                <Box
+                  sx={{
+                    p: 2,
+                    border: '1px solid',
+                    borderColor: useCustom ? '#667eea' : '#e2e8f0',
+                    borderRadius: 2,
+                    backgroundColor: useCustom ? 'rgba(102, 126, 234, 0.04)' : 'transparent',
+                    transition: 'all 0.2s',
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
+                    <EditIcon sx={{ color: '#667eea', fontSize: 20 }} />
+                    <Typography variant="body2" sx={{ fontWeight: 600, color: '#1e293b' }}>
+                      Enter Custom URL
+                    </Typography>
+                  </Box>
+                  <TextField
+                    fullWidth
+                    placeholder="https://example.com/write-for-us"
+                    value={customUrl}
+                    onChange={(e) => handleCustomUrlChange(e.target.value)}
+                    size="small"
                     sx={{
-                      color: '#667eea',
-                      '&.Mui-checked': {
-                        color: '#667eea',
+                      '& .MuiOutlinedInput-root': {
+                        '&.Mui-focused fieldset': {
+                          borderColor: '#667eea',
+                        },
                       },
                     }}
                   />
-                }
-                label={
-                  <Box sx={{ width: '100%', ml: 1 }}>
-                    {/* URL with link */}
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
-                      <Link
-                        href={urlOption.url}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        sx={{
-                          color: '#667eea',
-                          textDecoration: 'none',
-                          fontWeight: 500,
-                          fontSize: '14px',
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 0.5,
-                          '&:hover': {
-                            textDecoration: 'underline',
-                          },
-                        }}
-                        onClick={(e) => e.stopPropagation()}
-                      >
-                        {urlOption.url}
-                        <OpenIcon sx={{ fontSize: 14 }} />
-                      </Link>
-                    </Box>
-
-                    {/* Badges */}
-                    <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap' }}>
-                      {/* Source badge */}
-                      <Chip
-                        size="small"
-                        label={urlOption.source === 'pattern' ? 'Pattern Match' : 'AI Suggestion'}
-                        icon={urlOption.source === 'pattern' ? <CheckIcon /> : undefined}
-                        sx={{
-                          bgcolor: urlOption.source === 'pattern' ? '#e0e7ff' : '#fef3c7',
-                          color: urlOption.source === 'pattern' ? '#4338ca' : '#92400e',
-                          fontSize: '11px',
-                          height: '22px',
-                          '& .MuiChip-icon': {
-                            fontSize: 14,
-                            color: urlOption.source === 'pattern' ? '#4338ca' : '#92400e',
-                          },
-                        }}
-                      />
-
-                      {/* Confidence badge for AI suggestions */}
-                      {urlOption.source === 'ai' && urlOption.confidence && (
-                        <Chip
-                          size="small"
-                          label={`${urlOption.confidence} confidence`}
-                          sx={{
-                            bgcolor: `${getConfidenceColor(urlOption.confidence)}20`,
-                            color: getConfidenceColor(urlOption.confidence),
-                            fontSize: '11px',
-                            height: '22px',
-                          }}
-                        />
-                      )}
-
-                      {/* Verified badge */}
-                      {urlOption.verified && (
-                        <Chip
-                          size="small"
-                          label="Verified"
-                          icon={<CheckIcon />}
-                          sx={{
-                            bgcolor: '#d1fae5',
-                            color: '#065f46',
-                            fontSize: '11px',
-                            height: '22px',
-                            '& .MuiChip-icon': {
-                              fontSize: 14,
-                              color: '#065f46',
-                            },
-                          }}
-                        />
-                      )}
-
-                      {/* Unverified badge */}
-                      {urlOption.source === 'ai' && urlOption.verified === false && (
-                        <Chip
-                          size="small"
-                          label="Unverified"
-                          icon={<ErrorIcon />}
-                          sx={{
-                            bgcolor: '#fee2e2',
-                            color: '#991b1b',
-                            fontSize: '11px',
-                            height: '22px',
-                            '& .MuiChip-icon': {
-                              fontSize: 14,
-                              color: '#991b1b',
-                            },
-                          }}
-                        />
-                      )}
-                    </Box>
-                  </Box>
-                }
-                sx={{
-                  width: '100%',
-                  alignItems: 'flex-start',
-                  m: 0,
-                }}
-              />
-            </Box>
-          ))}
-        </RadioGroup>
-
-        {/* Custom URL Input */}
-        <Box
-          sx={{
-            mt: 3,
-            p: 2,
-            border: '1px solid',
-            borderColor: useCustom ? '#667eea' : '#e2e8f0',
-            borderRadius: 2,
-            backgroundColor: useCustom ? 'rgba(102, 126, 234, 0.04)' : 'transparent',
-            transition: 'all 0.2s',
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-            <EditIcon sx={{ color: '#667eea', fontSize: 20 }} />
-            <Typography variant="body2" sx={{ fontWeight: 600, color: '#1e293b' }}>
-              Or Enter Custom URL
-            </Typography>
-          </Box>
-          <TextField
-            fullWidth
-            placeholder="https://example.com/write-for-us"
-            value={customUrl}
-            onChange={(e) => handleCustomUrlChange(e.target.value)}
-            size="small"
-            sx={{
-              '& .MuiOutlinedInput-root': {
-                '&.Mui-focused fieldset': {
-                  borderColor: '#667eea',
-                },
-              },
-            }}
-          />
-          <Typography variant="caption" sx={{ color: '#64748b', display: 'block', mt: 1 }}>
-            Enter a custom writing program URL if the ones above are incorrect
-          </Typography>
-        </Box>
-
-        {urls.length === 0 && (
-          <Box sx={{ textAlign: 'center', py: 4 }}>
-            <Typography variant="body2" color="text.secondary">
-              No writing program URLs found
-            </Typography>
-          </Box>
+                  <Typography variant="caption" sx={{ color: '#64748b', display: 'block', mt: 1 }}>
+                    Enter the URL of the company's writing program
+                  </Typography>
+                </Box>
+              </>
+            )}
+          </>
         )}
       </DialogContent>
 
       <DialogActions sx={{ px: 3, pb: 3, pt: 2 }}>
         <Button
           onClick={handleClose}
-          disabled={loading}
           sx={{
             textTransform: 'none',
             fontWeight: 600,
@@ -315,7 +385,7 @@ export const WritingProgramUrlSelectionDialog: React.FC<WritingProgramUrlSelecti
         </Button>
         <Button
           onClick={handleSelect}
-          disabled={(!selectedUrl && !customUrl.trim()) || loading}
+          disabled={!selectedUrl && !customUrl.trim()}
           variant="contained"
           sx={{
             textTransform: 'none',
@@ -330,7 +400,11 @@ export const WritingProgramUrlSelectionDialog: React.FC<WritingProgramUrlSelecti
             },
           }}
         >
-          {loading ? 'Analyzing...' : 'Analyze Selected URL'}
+          {loading && urls.length === 0
+            ? 'Searching...'
+            : loading
+            ? 'Analyzing...'
+            : 'Analyze Program'}
         </Button>
       </DialogActions>
     </Dialog>

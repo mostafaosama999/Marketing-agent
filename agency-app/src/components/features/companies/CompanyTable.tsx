@@ -19,10 +19,23 @@ import {
   Menu,
   MenuItem,
   Popover,
+  CircularProgress,
+  Tooltip,
+  Snackbar,
+  Alert,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
+  RadioGroup,
+  FormControlLabel,
+  Radio,
 } from '@mui/material';
 import {
   OpenInNew as OpenInNewIcon,
   Business as BusinessIcon,
+  AutoAwesome as AutoAwesomeIcon,
 } from '@mui/icons-material';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -31,7 +44,8 @@ import { Company } from '../../../types/crm';
 import { TableColumnConfig } from '../../../types/table';
 import { FieldDefinition } from '../../../types/fieldDefinitions';
 import { getFieldDefinitions } from '../../../services/api/fieldDefinitionsService';
-import { updateCompanyCustomField, updateCompanyField } from '../../../services/api/companies';
+import { updateCompanyCustomField, updateCompanyField, updateCompany } from '../../../services/api/companies';
+import { bulkFindWritingPrograms, bulkAnalyzeWritingPrograms } from '../../../services/api/bulkWritingProgramService';
 
 interface CompanyTableProps {
   companies: Array<Company & { leadCount: number }>;
@@ -78,6 +92,21 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
     const saved = localStorage.getItem('companies_table_rows_per_page');
     return saved ? parseInt(saved, 10) : 25;
   });
+
+  // Writing program analysis state
+  const [analyzingCompanies, setAnalyzingCompanies] = useState<Set<string>>(new Set());
+  const [urlSelectionDialog, setUrlSelectionDialog] = useState<{
+    open: boolean;
+    companyId: string;
+    companyName: string;
+    urls: string[];
+  } | null>(null);
+  const [selectedUrl, setSelectedUrl] = useState<string>('');
+  const [snackbar, setSnackbar] = useState<{
+    open: boolean;
+    message: string;
+    severity: 'success' | 'error' | 'info';
+  }>({ open: false, message: '', severity: 'success' });
 
   // Fetch all field definitions on mount (dropdowns, dates, etc.)
   useEffect(() => {
@@ -192,6 +221,164 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
       }
     }
     handleDatePickerClose();
+  };
+
+  // Writing program analysis handler
+  const handleAnalyzeWritingProgram = async (company: Company) => {
+    // Check if company has a website
+    if (!company.website) {
+      setSnackbar({
+        open: true,
+        message: `${company.name} doesn't have a website URL`,
+        severity: 'error',
+      });
+      return;
+    }
+
+    // Add to analyzing set
+    setAnalyzingCompanies(prev => new Set(prev).add(company.id));
+
+    try {
+      // Step 1: Find writing program URLs
+      const findResults = await bulkFindWritingPrograms(
+        [company],
+        (companyId, phase, status, message) => {
+          console.log(`[${companyId}] ${phase}: ${status} - ${message}`);
+        }
+      );
+
+      const result = findResults.get(company.id);
+
+      if (!result) {
+        throw new Error('No result returned from find operation');
+      }
+
+      if (result.error) {
+        throw new Error(result.error);
+      }
+
+      // Check if any URLs found
+      const urlsFromResults = (result.urls || []).filter(u => u.exists).map(u => u.url);
+      const urlsFromAI = (result.aiSuggestions || []).map(u => u.url);
+      const allUrls = [...urlsFromResults, ...urlsFromAI];
+
+      if (allUrls.length === 0) {
+        setSnackbar({
+          open: true,
+          message: `No writing program found for ${company.name}`,
+          severity: 'info',
+        });
+        setAnalyzingCompanies(prev => {
+          const next = new Set(prev);
+          next.delete(company.id);
+          return next;
+        });
+        return;
+      }
+
+      // If single URL, analyze automatically
+      if (allUrls.length === 1) {
+        await analyzeProgram(company, allUrls[0]);
+        return;
+      }
+
+      // Multiple URLs found - show selection dialog
+      setUrlSelectionDialog({
+        open: true,
+        companyId: company.id,
+        companyName: company.name,
+        urls: allUrls,
+      });
+      setSelectedUrl(allUrls[0]); // Pre-select first URL
+
+      // Keep company in analyzing set until user selects URL
+
+    } catch (error) {
+      console.error('Error analyzing writing program:', error);
+      setSnackbar({
+        open: true,
+        message: `Failed to analyze ${company.name}: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        severity: 'error',
+      });
+      setAnalyzingCompanies(prev => {
+        const next = new Set(prev);
+        next.delete(company.id);
+        return next;
+      });
+    }
+  };
+
+  // Analyze specific program URL
+  const analyzeProgram = async (company: Company, programUrl: string) => {
+    try {
+      // Step 2: Analyze the selected URL
+      const analyzeResults = await bulkAnalyzeWritingPrograms(
+        new Map([[company.id, {
+          companyId: company.id,
+          companyName: company.name,
+          programUrl,
+        }]]),
+        (companyId, phase, status, message) => {
+          console.log(`[${companyId}] ${phase}: ${status} - ${message}`);
+        }
+      );
+
+      const analyzeResult = analyzeResults.get(company.id);
+
+      if (analyzeResult?.error) {
+        throw new Error(analyzeResult.error);
+      }
+
+      setSnackbar({
+        open: true,
+        message: `Writing program analyzed successfully for ${company.name}!`,
+        severity: 'success',
+      });
+
+      // Remove from analyzing set
+      setAnalyzingCompanies(prev => {
+        const next = new Set(prev);
+        next.delete(company.id);
+        return next;
+      });
+
+    } catch (error) {
+      console.error('Error in program analysis:', error);
+      setSnackbar({
+        open: true,
+        message: `Failed to analyze program: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        severity: 'error',
+      });
+      setAnalyzingCompanies(prev => {
+        const next = new Set(prev);
+        next.delete(company.id);
+        return next;
+      });
+    }
+  };
+
+  // Handle URL selection from dialog
+  const handleUrlSelectionConfirm = async () => {
+    if (!urlSelectionDialog || !selectedUrl) return;
+
+    const company = companies.find(c => c.id === urlSelectionDialog.companyId);
+    if (!company) return;
+
+    setUrlSelectionDialog(null);
+    await analyzeProgram(company, selectedUrl);
+  };
+
+  // Handle URL selection dialog close
+  const handleUrlSelectionCancel = () => {
+    if (urlSelectionDialog) {
+      setAnalyzingCompanies(prev => {
+        const next = new Set(prev);
+        next.delete(urlSelectionDialog.companyId);
+        return next;
+      });
+    }
+    setUrlSelectionDialog(null);
+    setSelectedUrl('');
   };
 
   // Helper function to check if a custom field is a date
@@ -782,22 +969,57 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
                     {displayColumns.map((column) => renderCell(column.id, company))}
 
                     {/* Actions cell */}
-                    <TableCell align="right">
-                      <IconButton
-                        size="small"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onView(company);
-                        }}
-                        sx={{
-                          color: '#667eea',
-                          '&:hover': {
-                            backgroundColor: 'rgba(102, 126, 234, 0.1)',
-                          },
-                        }}
-                      >
-                        <OpenInNewIcon sx={{ fontSize: '16px' }} />
-                      </IconButton>
+                    <TableCell align="right" sx={{ px: 0.5 }}>
+                      <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
+                        {/* Writing Program Analysis Button */}
+                        {company.website && !company.writingProgramAnalysis && (
+                          <Tooltip title="Analyze writing program">
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleAnalyzeWritingProgram(company);
+                              }}
+                              disabled={analyzingCompanies.has(company.id)}
+                              sx={{
+                                color: '#667eea',
+                                '&:hover': {
+                                  backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                                },
+                                '&.Mui-disabled': {
+                                  color: '#667eea',
+                                  opacity: 0.6,
+                                },
+                              }}
+                            >
+                              {analyzingCompanies.has(company.id) ? (
+                                <CircularProgress size={16} sx={{ color: '#667eea' }} />
+                              ) : (
+                                <AutoAwesomeIcon sx={{ fontSize: '16px' }} />
+                              )}
+                            </IconButton>
+                          </Tooltip>
+                        )}
+
+                        {/* Open Button */}
+                        <Tooltip title="View details">
+                          <IconButton
+                            size="small"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onView(company);
+                            }}
+                            sx={{
+                              color: '#667eea',
+                              '&:hover': {
+                                backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                              },
+                            }}
+                          >
+                            <OpenInNewIcon sx={{ fontSize: '16px' }} />
+                          </IconButton>
+                        </Tooltip>
+                      </Box>
                     </TableCell>
                   </TableRow>
                 );
@@ -910,6 +1132,82 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
           </LocalizationProvider>
         </Box>
       </Popover>
+
+      {/* URL Selection Dialog */}
+      <Dialog
+        open={urlSelectionDialog?.open || false}
+        onClose={handleUrlSelectionCancel}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          Select Writing Program URL
+          <Typography variant="body2" sx={{ color: '#64748b', mt: 0.5 }}>
+            Multiple writing program URLs found for {urlSelectionDialog?.companyName}. Please select one to analyze:
+          </Typography>
+        </DialogTitle>
+        <DialogContent>
+          <RadioGroup
+            value={selectedUrl}
+            onChange={(e) => setSelectedUrl(e.target.value)}
+          >
+            {urlSelectionDialog?.urls.map((url, index) => (
+              <FormControlLabel
+                key={index}
+                value={url}
+                control={<Radio sx={{ color: '#667eea', '&.Mui-checked': { color: '#667eea' } }} />}
+                label={
+                  <Box>
+                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                      Option {index + 1}
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: '#64748b', wordBreak: 'break-all' }}>
+                      {url}
+                    </Typography>
+                  </Box>
+                }
+                sx={{ my: 1, alignItems: 'flex-start' }}
+              />
+            ))}
+          </RadioGroup>
+        </DialogContent>
+        <DialogActions sx={{ px: 3, pb: 2 }}>
+          <Button onClick={handleUrlSelectionCancel} sx={{ textTransform: 'none' }}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleUrlSelectionConfirm}
+            disabled={!selectedUrl}
+            variant="contained"
+            sx={{
+              textTransform: 'none',
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              '&:hover': {
+                background: 'linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%)',
+              },
+            }}
+          >
+            Analyze Selected URL
+          </Button>
+        </DialogActions>
+      </Dialog>
+
+      {/* Snackbar for notifications */}
+      <Snackbar
+        open={snackbar.open}
+        autoHideDuration={4000}
+        onClose={() => setSnackbar({ ...snackbar, open: false })}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+      >
+        <Alert
+          onClose={() => setSnackbar({ ...snackbar, open: false })}
+          severity={snackbar.severity}
+          variant="filled"
+          sx={{ width: '100%' }}
+        >
+          {snackbar.message}
+        </Alert>
+      </Snackbar>
     </Box>
   );
 };
