@@ -165,52 +165,27 @@ export class WandBScraper extends BaseProfileScraper {
       const articles = await page.evaluate(() => {
         const results: WandBArticleRow[] = [];
 
-        // Try to find reports table
-        // W&B typically uses a table or list structure
-        const rows = document.querySelectorAll('tr, [data-test="report-row"], [role="row"]');
+        // W&B uses direct links for each report
+        const reportLinks = document.querySelectorAll('a[href*="/reports/"]');
 
-        rows.forEach((row) => {
+        reportLinks.forEach((link) => {
           try {
-            // Look for title and link
-            const linkElement = row.querySelector('a[href*="/reports/"]') as HTMLAnchorElement;
+            const anchorElement = link as HTMLAnchorElement;
+            const title = anchorElement.textContent?.trim() || '';
+            const href = anchorElement.href;
 
-            if (linkElement) {
-              const title = linkElement.textContent?.trim() || '';
-              const href = linkElement.href;
-
-              // Look for description
-              const descElement = row.querySelector('[class*="description"], [class*="summary"]');
-              const description = descElement?.textContent?.trim() || '';
-
-              // Look for dates
-              const dateElements = row.querySelectorAll('time, [class*="date"]');
-              let createdOn = '';
-              let lastEdited = '';
-
-              if (dateElements.length >= 1) {
-                createdOn = dateElements[0].textContent?.trim() || '';
-              }
-              if (dateElements.length >= 2) {
-                lastEdited = dateElements[1].textContent?.trim() || '';
-              }
-
-              // Look for view count
-              const viewsElement = row.querySelector('[class*="views"], [class*="count"]');
-              const views = viewsElement ? parseInt(viewsElement.textContent?.trim() || '0') : 0;
-
-              if (title && href) {
-                results.push({
-                  title,
-                  url: href,
-                  description,
-                  createdOn,
-                  lastEdited,
-                  views,
-                });
-              }
+            if (title && href) {
+              results.push({
+                title,
+                url: href,
+                description: '', // W&B doesn't show descriptions on list page
+                createdOn: '', // Dates would need more complex scraping
+                lastEdited: '',
+                views: 0,
+              });
             }
           } catch (error) {
-            console.error('Error parsing row:', error);
+            console.error('Error parsing link:', error);
           }
         });
 

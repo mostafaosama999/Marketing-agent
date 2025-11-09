@@ -8,7 +8,6 @@ import ProtectedRoute from './ProtectedRoute';
 
 // Pages
 import Login from './pages/auth/Login';
-import TaskReview from './pages/tasks/TaskReview';
 import TeamManagement from './pages/team/TeamManagement';
 import TeamMemberPerformance from './pages/team/TeamMemberPerformance';
 import ProjectMonitoring from './pages/analytics/ProjectMonitoring';
@@ -82,7 +81,6 @@ function AppContent() {
         overflow: 'auto'
       }}>
         <Routes>
-          <Route path="/review/:taskId" element={<TaskReview />} />
           <Route path="/companies/:companyId" element={<CompanyDetailPage />} />
           <Route path="/leads/:leadId" element={<LeadDetailPage />} />
           <Route path="/team" element={<TeamManagement />} />
