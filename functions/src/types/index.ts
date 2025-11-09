@@ -276,6 +276,8 @@ export interface WritingProgramAnalysisResult {
   submissionGuidelines?: string;
   contactEmail?: string;
   responseTime?: string;
+  publishedDate?: string | null;         // Date the writing program was published (e.g., "July 20, 2021")
+  publishedDateSource?: string | null;   // Where the date was found (e.g., "article header", "meta tag")
   programDetails: string;
   aiReasoning: string;
   costInfo?: ApiCostInfo;

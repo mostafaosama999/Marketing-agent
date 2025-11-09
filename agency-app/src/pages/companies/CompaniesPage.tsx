@@ -45,9 +45,12 @@ import {
   TableColumnConfig,
   DEFAULT_COMPANIES_TABLE_COLUMNS,
   COMPANIES_TABLE_COLUMNS_STORAGE_KEY,
+  DEFAULT_WRITING_PROGRAM_TABLE_COLUMNS,
+  WRITING_PROGRAM_TABLE_COLUMNS_STORAGE_KEY,
 } from '../../types/table';
 import {
   buildCompaniesTableColumns,
+  buildWritingProgramTableColumns,
   columnsToPreferences,
   applyColumnPreferences,
 } from '../../services/api/tableColumnsService';
@@ -72,8 +75,10 @@ import {
 } from '../../services/api/websiteFieldMappingService';
 import {
   getCompanyProgramUrl,
+  getProgramUrlFieldMapping,
 } from '../../services/api/programUrlFieldMappingService';
 import { ProgramUrlFieldMappingSelector } from '../../components/features/companies/ProgramUrlFieldMappingSelector';
+import { BlogUrlFieldMappingSelector } from '../../components/features/companies/BlogUrlFieldMappingSelector';
 
 /**
  * Helper function to extract domain from URL
@@ -137,8 +142,16 @@ export const CompaniesPage: React.FC = () => {
   // Preset dialog state
   const [showSavePresetDialog, setShowSavePresetDialog] = useState(false);
 
-  // Table column visibility state
-  const [tableColumns, setTableColumns] = useState<TableColumnConfig[]>(DEFAULT_COMPANIES_TABLE_COLUMNS);
+  // Table column visibility state - DUAL STATE for both views
+  const [allCompaniesColumns, setAllCompaniesColumns] = useState<TableColumnConfig[]>(DEFAULT_COMPANIES_TABLE_COLUMNS);
+  const [writingProgramColumns, setWritingProgramColumns] = useState<TableColumnConfig[]>(DEFAULT_WRITING_PROGRAM_TABLE_COLUMNS);
+
+  // Computed values based on current view
+  const activeColumns = currentView === 'all' ? allCompaniesColumns : writingProgramColumns;
+  const setActiveColumns = currentView === 'all' ? setAllCompaniesColumns : setWritingProgramColumns;
+  const activeStorageKey = currentView === 'all'
+    ? COMPANIES_TABLE_COLUMNS_STORAGE_KEY
+    : WRITING_PROGRAM_TABLE_COLUMNS_STORAGE_KEY;
 
   // Snackbar state
   const [snackbar, setSnackbar] = useState<{
@@ -208,8 +221,8 @@ export const CompaniesPage: React.FC = () => {
           // Apply table column preferences if saved in preset
           if (defaultPreset.tableColumns) {
             const preferences = defaultPreset.tableColumns;
-            const columnsWithPreferences = applyColumnPreferences(tableColumns, preferences);
-            setTableColumns(columnsWithPreferences);
+            const columnsWithPreferences = applyColumnPreferences(allCompaniesColumns, preferences);
+            setAllCompaniesColumns(columnsWithPreferences);
           }
         }
       } catch (error) {
@@ -218,35 +231,49 @@ export const CompaniesPage: React.FC = () => {
     }
 
     loadDefaultPreset();
-  }, [user, tableColumns]); // Include tableColumns dependency
+  }, [user, allCompaniesColumns]); // Include allCompaniesColumns dependency
 
-  // Load table columns (default + custom fields from companies)
+  // Load table columns (default + custom fields from companies) - BOTH VIEWS
   useEffect(() => {
     async function initializeTableColumns() {
       try {
-        // Build complete column list from default + company custom fields
-        const allColumns = await buildCompaniesTableColumns(companies);
+        // 1. Build and load ALL COMPANIES columns
+        const allCols = await buildCompaniesTableColumns(companies);
+        const savedAllPrefs = localStorage.getItem(COMPANIES_TABLE_COLUMNS_STORAGE_KEY);
+        let allPreferences: Record<string, boolean | { visible: boolean; order: number }> | null = null;
 
-        // Load saved preferences (visibility + order) from localStorage
-        const savedPrefs = localStorage.getItem(COMPANIES_TABLE_COLUMNS_STORAGE_KEY);
-        let preferences: Record<string, boolean | { visible: boolean; order: number }> | null = null;
-
-        if (savedPrefs) {
+        if (savedAllPrefs) {
           try {
-            preferences = JSON.parse(savedPrefs);
+            allPreferences = JSON.parse(savedAllPrefs);
           } catch (e) {
-            console.error('Error parsing saved column preferences:', e);
+            console.error('Error parsing all companies column preferences:', e);
           }
         }
 
-        // Apply saved preferences to columns (handles both old and new format)
-        const columnsWithPreferences = applyColumnPreferences(allColumns, preferences);
+        const allWithPreferences = applyColumnPreferences(allCols, allPreferences);
+        setAllCompaniesColumns(allWithPreferences);
 
-        setTableColumns(columnsWithPreferences);
+        // 2. Build and load WRITING PROGRAM columns
+        const wpCols = await buildWritingProgramTableColumns(companies);
+        const savedWpPrefs = localStorage.getItem(WRITING_PROGRAM_TABLE_COLUMNS_STORAGE_KEY);
+        let wpPreferences: Record<string, boolean | { visible: boolean; order: number }> | null = null;
+
+        if (savedWpPrefs) {
+          try {
+            wpPreferences = JSON.parse(savedWpPrefs);
+          } catch (e) {
+            console.error('Error parsing writing program column preferences:', e);
+          }
+        }
+
+        const wpWithPreferences = applyColumnPreferences(wpCols, wpPreferences);
+        setWritingProgramColumns(wpWithPreferences);
+
       } catch (error) {
         console.error('Error loading table columns:', error);
         // Fallback to default columns
-        setTableColumns(DEFAULT_COMPANIES_TABLE_COLUMNS);
+        setAllCompaniesColumns(DEFAULT_COMPANIES_TABLE_COLUMNS);
+        setWritingProgramColumns(DEFAULT_WRITING_PROGRAM_TABLE_COLUMNS);
       }
     }
 
@@ -312,38 +339,40 @@ export const CompaniesPage: React.FC = () => {
     setOpenDialog(false);
   };
 
-  // Column visibility handlers
+  // Column visibility handlers - works with active column set based on current view
   const handleColumnVisibilityChange = (columnId: string, visible: boolean) => {
-    const updatedColumns = tableColumns.map(col =>
+    const updatedColumns = activeColumns.map(col =>
       col.id === columnId ? { ...col, visible } : col
     );
-    setTableColumns(updatedColumns);
+    setActiveColumns(updatedColumns);
 
-    // Save preferences (visibility + order) to localStorage
+    // Save preferences (visibility + order) to localStorage for active view
     const preferences = columnsToPreferences(updatedColumns);
-    localStorage.setItem(COMPANIES_TABLE_COLUMNS_STORAGE_KEY, JSON.stringify(preferences));
+    localStorage.setItem(activeStorageKey, JSON.stringify(preferences));
   };
 
-  // Column reordering handler
+  // Column reordering handler - works with active column set based on current view
   const handleReorderColumns = (reorderedColumns: TableColumnConfig[]) => {
-    setTableColumns(reorderedColumns);
+    setActiveColumns(reorderedColumns);
 
-    // Save preferences (visibility + order) to localStorage
+    // Save preferences (visibility + order) to localStorage for active view
     const preferences = columnsToPreferences(reorderedColumns);
-    localStorage.setItem(COMPANIES_TABLE_COLUMNS_STORAGE_KEY, JSON.stringify(preferences));
+    localStorage.setItem(activeStorageKey, JSON.stringify(preferences));
   };
 
-  // Reset column order to default (auto-grouped by section)
+  // Reset column order to default (auto-grouped by section) - works with active view
   const handleResetColumnOrder = async () => {
     try {
-      // Clear saved preferences
-      localStorage.removeItem(COMPANIES_TABLE_COLUMNS_STORAGE_KEY);
+      // Clear saved preferences for active view
+      localStorage.removeItem(activeStorageKey);
 
-      // Rebuild columns with auto-grouping (no saved preferences)
-      const allColumns = await buildCompaniesTableColumns(companies);
+      // Rebuild columns with auto-grouping (no saved preferences) based on current view
+      const freshColumns = currentView === 'all'
+        ? await buildCompaniesTableColumns(companies)
+        : await buildWritingProgramTableColumns(companies);
 
-      // Update state with auto-grouped columns
-      setTableColumns(allColumns);
+      // Update state with auto-grouped columns for active view
+      setActiveColumns(freshColumns);
 
       setSnackbar({ open: true, message: 'Column order reset to default grouping', severity: 'success' });
     } catch (error) {
@@ -383,8 +412,8 @@ export const CompaniesPage: React.FC = () => {
         // Apply table column preferences if saved in preset
         if (preset.tableColumns) {
           const preferences = preset.tableColumns;
-          const columnsWithPreferences = applyColumnPreferences(tableColumns, preferences);
-          setTableColumns(columnsWithPreferences);
+          const columnsWithPreferences = applyColumnPreferences(allCompaniesColumns, preferences);
+          setAllCompaniesColumns(columnsWithPreferences);
         }
       }
     } catch (error) {
@@ -402,7 +431,7 @@ export const CompaniesPage: React.FC = () => {
       description: '',
       advancedRules: advancedFilterRules,
       basicFilters: filters,
-      tableColumns: columnsToPreferences(tableColumns),
+      tableColumns: columnsToPreferences(activeColumns),
       isDefault: false,
     };
   };
@@ -552,40 +581,117 @@ export const CompaniesPage: React.FC = () => {
     const mappedProgramUrl = getCompanyProgramUrl(company);
     setExistingProgramUrl(mappedProgramUrl);
 
-    // Phase 1: Find writing program URLs
+    // Get website to check if it exists (but don't search yet)
+    let website = getCompanyWebsite(company);
+
+    // If no website found, check if we have a field mapping configured
+    if (!website) {
+      const mapping = getWebsiteFieldMapping();
+
+      if (!mapping) {
+        // No mapping configured yet - show the mapping dialog
+        setPendingAnalysisCompany(company);
+        setWebsiteMappingDialogOpen(true);
+        return;
+      } else {
+        // Mapping exists but still no website - show helpful error in snackbar
+        setSnackbar({
+          open: true,
+          message: 'No website found for this company. Please add a website URL to the configured field.',
+          severity: 'error',
+        });
+        return;
+      }
+    }
+
+    // Set the current company first
     setCurrentAnalyzingCompany(company);
+    setFoundUrls([]);
+
+    // Check if there's a program URL field mapping configured
+    const programUrlMapping = getProgramUrlFieldMapping();
+
+    // If mapping exists but company has no URL in that field, auto-search
+    if (programUrlMapping && !mappedProgramUrl) {
+      // Open dialog and automatically start searching
+      setUrlSelectionDialogOpen(true);
+      setAnalyzingLoading(true);
+
+      try {
+        // Search for writing program URLs
+        const result = await analyzeWritingProgram(website);
+
+        // Prepare URL options for selection
+        const urlOptions: Array<{
+          url: string;
+          source: 'pattern' | 'ai';
+          confidence?: 'high' | 'medium' | 'low';
+          verified?: boolean;
+        }> = [];
+
+        // Add pattern-matched URLs
+        result.validUrls.forEach((urlResult) => {
+          urlOptions.push({
+            url: urlResult.url,
+            source: 'pattern',
+            verified: true,
+          });
+        });
+
+        // Add AI suggestions
+        if (result.aiSuggestions) {
+          result.aiSuggestions.forEach((suggestion) => {
+            if (!urlOptions.some(u => u.url === suggestion.url)) {
+              urlOptions.push({
+                url: suggestion.url,
+                source: 'ai',
+                confidence: suggestion.confidence,
+                verified: suggestion.verified,
+              });
+            }
+          });
+        }
+
+        // Update dialog with found URLs (or empty array if none found)
+        setFoundUrls(urlOptions);
+        setAnalyzingLoading(false);
+
+      } catch (error: any) {
+        console.error('Error finding writing program URLs:', error);
+
+        // Keep dialog open and show error state
+        setFoundUrls([]);
+        setAnalyzingLoading(false);
+
+        // Show error in snackbar
+        setSnackbar({
+          open: true,
+          message: error.message || 'Failed to find writing program URLs. You can still enter a custom URL.',
+          severity: 'error',
+        });
+      }
+
+      return;
+    }
+
+    // Open dialog without auto-searching (either has existing URL or no mapping)
+    setAnalyzingLoading(false);
+    setUrlSelectionDialogOpen(true);
+  };
+
+  // New function: Actually perform the search when user chooses to search
+  const handleStartSearch = async () => {
+    if (!currentAnalyzingCompany) return;
+
     setAnalyzingLoading(true);
-    setFoundUrls([]); // Start with empty URLs
-    setUrlSelectionDialogOpen(true); // Open dialog IMMEDIATELY
+    setFoundUrls([]); // Clear any previous results
 
     try {
       // Get website using the field mapping
-      let website = getCompanyWebsite(company);
+      const website = getCompanyWebsite(currentAnalyzingCompany);
 
-      // If no website found, check if we have a field mapping configured
       if (!website) {
-        const mapping = getWebsiteFieldMapping();
-
-        if (!mapping) {
-          // No mapping configured yet - close URL dialog and show the mapping dialog
-          setUrlSelectionDialogOpen(false);
-          setPendingAnalysisCompany(company);
-          setWebsiteMappingDialogOpen(true);
-          setAnalyzingLoading(false);
-          setCurrentAnalyzingCompany(null);
-          return;
-        } else {
-          // Mapping exists but still no website - show helpful error in snackbar
-          setUrlSelectionDialogOpen(false);
-          setSnackbar({
-            open: true,
-            message: 'No website found for this company. Please add a website URL to the configured field.',
-            severity: 'error',
-          });
-          setAnalyzingLoading(false);
-          setCurrentAnalyzingCompany(null);
-          return;
-        }
+        throw new Error('No website found for this company');
       }
 
       // Call analyzeWritingProgram to find URLs
@@ -839,6 +945,14 @@ export const CompaniesPage: React.FC = () => {
           </Typography>
           <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
 
+          {/* Blog URL Field Mapping Selector - Only in All Companies view */}
+          {currentView === 'all' && (
+            <>
+              <BlogUrlFieldMappingSelector companies={companies} />
+              <Box sx={{ width: '1px', height: '32px', bgcolor: '#e2e8f0' }} />
+            </>
+          )}
+
           {/* Program URL Field Mapping Selector - Only in Writing Programs view */}
           {currentView === 'writing-program' && (
             <>
@@ -848,7 +962,7 @@ export const CompaniesPage: React.FC = () => {
           )}
 
           <TableColumnVisibilityMenu
-            columns={tableColumns}
+            columns={activeColumns}
             onToggleVisibility={handleColumnVisibilityChange}
             onReorderColumns={handleReorderColumns}
             onResetToDefault={handleResetColumnOrder}
@@ -951,7 +1065,7 @@ export const CompaniesPage: React.FC = () => {
                 <CompanyTable
                   companies={filteredCompanies}
                   onView={handleViewCompany}
-                  visibleColumns={tableColumns}
+                  visibleColumns={allCompaniesColumns}
                   selectedCompanyIds={selectedCompanyIds}
                   onSelectCompany={(companyId) => {
                     const isSelected = selectedCompanyIds.includes(companyId);
@@ -963,6 +1077,7 @@ export const CompaniesPage: React.FC = () => {
                 <WritingProgramTable
                   companies={filteredCompanies}
                   onCompanyClick={handleViewCompany}
+                  visibleColumns={writingProgramColumns}
                   selectedCompanyIds={selectedWritingProgramIds}
                   onSelectCompany={handleSelectWritingProgramCompany}
                   onSelectAll={handleSelectAllWritingPrograms}
@@ -1044,6 +1159,7 @@ export const CompaniesPage: React.FC = () => {
             open={urlSelectionDialogOpen}
             onClose={handleUrlSelectionCancel}
             onSelect={handleUrlSelect}
+            onStartSearch={handleStartSearch}
             urls={foundUrls}
             loading={analyzingLoading}
             existingUrl={existingProgramUrl}

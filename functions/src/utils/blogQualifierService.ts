@@ -770,35 +770,35 @@ ANALYSIS CRITERIA:
 
 RESPONSE FORMAT (JSON ONLY - MUST be valid JSON):
 {
-  "active_blog": boolean,
-  "post_count": number,
-  "multiple_authors": boolean,
-  "author_count": number,
+  "activeBlog": boolean,
+  "postCount": number,
+  "multipleAuthors": boolean,
+  "authorCount": number,
   "authors": ["Name 1", "Name 2"],
-  "last_post_date": "YYYY-MM-DD" or null,
-  "is_developer_b2b_saas": boolean,
-  "authors_are_employees": "employees"|"freelancers"|"mixed"|"unknown",
-  "covers_ai_topics": boolean,
-  "content_summary": "REQUIRED: Bullet list of 3-5 main topics covered. Min 50 chars. Use • Topic format.",
+  "lastPostDate": "YYYY-MM-DD" or null,
+  "isDeveloperB2BSaas": boolean,
+  "authorsAreEmployees": "employees"|"freelancers"|"mixed"|"unknown",
+  "coversAiTopics": boolean,
+  "contentSummary": "REQUIRED: Bullet list of 3-5 main topics covered. Min 50 chars. Use • Topic format.",
 
-  "content_quality_rating": "low"|"medium"|"high" (REQUIRED - pick one),
-  "content_quality_reasoning": "REQUIRED: Min 150 chars. Must include: (1) Specific topics mentioned (2) Code languages if any (3) Quoted phrases showing quality level (4) Why you chose this rating. Example: 'Posts cover data ingestion architecture with Python examples. Quote: \"We implemented CDC using Debezium...\" Shows intermediate depth but lacks advanced system design.'",
+  "contentQualityRating": "low"|"medium"|"high" (REQUIRED - pick one),
+  "contentQualityReasoning": "REQUIRED: Min 150 chars. Must include: (1) Specific topics mentioned (2) Code languages if any (3) Quoted phrases showing quality level (4) Why you chose this rating. Example: 'Posts cover data ingestion architecture with Python examples. Quote: \"We implemented CDC using Debezium...\" Shows intermediate depth but lacks advanced system design.'",
 
-  "is_ai_written": boolean (REQUIRED),
-  "ai_written_confidence": "low"|"medium"|"high" (REQUIRED),
-  "ai_written_evidence": "REQUIRED: Min 100 chars. If AI: List specific patterns found with quotes. If human: Explain why (specific examples, personality, real data). Example: 'Generic intro detected: \"In today\\'s digital landscape\". No specific metrics or war stories. Repetitive structure across posts.' OR 'Human indicators: Real metrics (\"500ms → 50ms\"), specific company examples (Stripe, AWS), author personality.'",
+  "isAIWritten": boolean (REQUIRED),
+  "aiWrittenConfidence": "low"|"medium"|"high" (REQUIRED),
+  "aiWrittenEvidence": "REQUIRED: Min 100 chars. If AI: List specific patterns found with quotes. If human: Explain why (specific examples, personality, real data). Example: 'Generic intro detected: \"In today\\'s digital landscape\". No specific metrics or war stories. Repetitive structure across posts.' OR 'Human indicators: Real metrics (\"500ms → 50ms\"), specific company examples (Stripe, AWS), author personality.'",
 
-  "has_code_examples": boolean,
-  "code_examples_count": number (count actual code blocks with >3 lines),
-  "code_languages": ["Python", "JavaScript", "Go"] (extract from code blocks, empty [] if none),
+  "hasCodeExamples": boolean,
+  "codeExamplesCount": number (count actual code blocks with >3 lines),
+  "codeLanguages": ["Python", "JavaScript", "Go"] (extract from code blocks, empty [] if none),
 
-  "has_diagrams": boolean,
-  "diagrams_count": number,
+  "hasDiagrams": boolean,
+  "diagramsCount": number,
 
-  "technical_depth": "beginner"|"intermediate"|"advanced" (REQUIRED),
-  "funnel_stage": "top"|"middle"|"bottom" (REQUIRED),
+  "technicalDepth": "beginner"|"intermediate"|"advanced" (REQUIRED),
+  "funnelStage": "top"|"middle"|"bottom" (REQUIRED),
 
-  "example_quotes": ["Quote 1 showing quality/issues", "Quote 2", "Quote 3"] (REQUIRED: Provide 2-3 actual quotes from content)
+  "exampleQuotes": ["Quote 1 showing quality/issues", "Quote 2", "Quote 3"] (REQUIRED: Provide 2-3 actual quotes from content)
 }
 
 RATING GUIDELINES (Be HARSH but FAIR):
@@ -831,10 +831,10 @@ LOW (⭐⭐):
 Example topics: "5 Benefits of Cloud Computing", "Why You Need Event-Driven Architecture"
 
 ⚠️ BEFORE SUBMITTING YOUR RESPONSE, VERIFY:
-✓ content_quality_reasoning is at least 150 characters with specific examples
-✓ ai_written_evidence is at least 100 characters with specific examples
-✓ content_summary is at least 50 characters
-✓ example_quotes has 2-3 actual quotes from the content
+✓ contentQualityReasoning is at least 150 characters with specific examples
+✓ aiWrittenEvidence is at least 100 characters with specific examples
+✓ contentSummary is at least 50 characters
+✓ exampleQuotes has 2-3 actual quotes from the content
 ✓ NO empty strings ("") in any field
 ✓ All REQUIRED fields are filled
 
@@ -871,19 +871,19 @@ RESPOND WITH ONLY THE JSON OBJECT - no markdown, no explanation, just valid JSON
     const validationErrors: string[] = [];
 
     if (!data.contentQualityReasoning || data.contentQualityReasoning.length < 100) {
-      validationErrors.push("content_quality_reasoning too short or missing");
+      validationErrors.push("contentQualityReasoning too short or missing");
     }
     if (!data.aiWrittenEvidence || data.aiWrittenEvidence.length < 80) {
-      validationErrors.push("ai_written_evidence too short or missing");
+      validationErrors.push("aiWrittenEvidence too short or missing");
     }
     if (!data.contentSummary || data.contentSummary.length < 30) {
-      validationErrors.push("content_summary too short or missing");
+      validationErrors.push("contentSummary too short or missing");
     }
     if (!data.exampleQuotes || data.exampleQuotes.length < 1) {
-      validationErrors.push("example_quotes missing or empty");
+      validationErrors.push("exampleQuotes missing or empty");
     }
     if (!data.contentQualityRating) {
-      validationErrors.push("content_quality_rating missing");
+      validationErrors.push("contentQualityRating missing");
     }
 
     if (validationErrors.length > 0) {

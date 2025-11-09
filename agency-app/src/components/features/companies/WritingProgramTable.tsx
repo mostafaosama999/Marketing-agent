@@ -24,6 +24,7 @@ import {
   Science as AnalyzeIcon,
 } from '@mui/icons-material';
 import { Company } from '../../../types/crm';
+import { TableColumnConfig } from '../../../types/table';
 
 interface WritingProgramTableProps {
   companies: Array<Company & { leadCount?: number }>;
@@ -32,6 +33,7 @@ interface WritingProgramTableProps {
   onSelectCompany?: (companyId: string) => void;
   onSelectAll?: (selected: boolean) => void;
   onAnalyzeSingle?: (company: Company) => void;
+  visibleColumns: TableColumnConfig[];
 }
 
 type SortDirection = 'asc' | 'desc';
@@ -43,11 +45,57 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
   onSelectCompany,
   onSelectAll,
   onAnalyzeSingle,
+  visibleColumns,
 }) => {
   const [orderBy, setOrderBy] = useState<string>('name');
   const [order, setOrder] = useState<SortDirection>('asc');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
+
+  // Filter to only visible columns (both default and custom)
+  const displayColumns = useMemo(() => {
+    return visibleColumns.filter(col => col.visible).sort((a, b) => a.order - b.order);
+  }, [visibleColumns]);
+
+  // Helper to check if a column is visible
+  const isColumnVisible = (columnId: string) => {
+    return displayColumns.some(col => col.id === columnId);
+  };
+
+  // Helper to render community program status with color coding
+  const renderCommunityProgramStatus = (status: string | undefined) => {
+    if (!status || status === '-') {
+      return <Typography variant="body2" sx={{ fontSize: '11px' }}>-</Typography>;
+    }
+
+    // Color scheme based on importance
+    const statusStyles: Record<string, { background?: string; bgcolor?: string; color: string }> = {
+      'Inactive': { bgcolor: '#f1f5f9', color: '#94a3b8' },  // Muted gray - de-emphasized
+      'Contacted': {  // Bold purple gradient - high priority
+        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        color: 'white'
+      },
+      'Not Yet contacted': { bgcolor: '#fef3c7', color: '#d97706' },  // Amber/Orange - attention needed
+      'In Progress': { bgcolor: '#dbeafe', color: '#2563eb' },  // Blue
+      'Pending Response': { bgcolor: '#ccfbf1', color: '#0d9488' },  // Teal
+      'Follow-up Needed': { bgcolor: '#fef9c3', color: '#ca8a04' },  // Yellow
+    };
+
+    const style = statusStyles[status] || { bgcolor: '#e5e7eb', color: '#6b7280' };  // Default gray
+
+    return (
+      <Chip
+        label={status}
+        size="small"
+        sx={{
+          fontSize: '10px',
+          height: '20px',
+          fontWeight: status === 'Contacted' ? 600 : 500,
+          ...style,
+        }}
+      />
+    );
+  };
 
   // Filter companies that have writing program analysis or relevant custom fields
   const companiesWithProgramData = useMemo(() => {
@@ -71,20 +119,12 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
     });
   }, [companies]);
 
-  // Get all custom field names that match the keywords
-  const programRelatedCustomFields = useMemo(() => {
-    const fields = new Set<string>();
-    companiesWithProgramData.forEach(company => {
-      if (company.customFields) {
-        Object.keys(company.customFields).forEach(fieldName => {
-          if (/community|writing|program/i.test(fieldName)) {
-            fields.add(fieldName);
-          }
-        });
-      }
-    });
-    return Array.from(fields).sort();
-  }, [companiesWithProgramData]);
+  // Get visible custom field columns
+  const visibleCustomFields = useMemo(() => {
+    return displayColumns
+      .filter(col => col.type === 'custom' && col.fieldName)
+      .map(col => col.fieldName!);
+  }, [displayColumns]);
 
   // Sorting handler
   const handleRequestSort = (property: string) => {
@@ -119,6 +159,10 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
         case 'paymentAmount':
           aValue = a.writingProgramAnalysis?.payment?.amount;
           bValue = b.writingProgramAnalysis?.payment?.amount;
+          break;
+        case 'publishedDate':
+          aValue = a.writingProgramAnalysis?.publishedDate;
+          bValue = b.writingProgramAnalysis?.publishedDate;
           break;
         default:
           // Custom field sorting
@@ -204,61 +248,88 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
                   />
                 </TableCell>
               )}
-              <TableCell sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
-                <TableSortLabel
-                  active={orderBy === 'name'}
-                  direction={orderBy === 'name' ? order : 'asc'}
-                  onClick={() => handleRequestSort('name')}
-                >
-                  Company
-                </TableSortLabel>
-              </TableCell>
-              <TableCell sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
-                <TableSortLabel
-                  active={orderBy === 'website'}
-                  direction={orderBy === 'website' ? order : 'asc'}
-                  onClick={() => handleRequestSort('website')}
-                >
-                  Website
-                </TableSortLabel>
-              </TableCell>
-              <TableCell sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
-                <TableSortLabel
-                  active={orderBy === 'hasProgram'}
-                  direction={orderBy === 'hasProgram' ? order : 'asc'}
-                  onClick={() => handleRequestSort('hasProgram')}
-                >
-                  Program Found
-                </TableSortLabel>
-              </TableCell>
-              <TableCell sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
-                <TableSortLabel
-                  active={orderBy === 'isOpen'}
-                  direction={orderBy === 'isOpen' ? order : 'asc'}
-                  onClick={() => handleRequestSort('isOpen')}
-                >
-                  Status
-                </TableSortLabel>
-              </TableCell>
-              <TableCell sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
-                <TableSortLabel
-                  active={orderBy === 'paymentAmount'}
-                  direction={orderBy === 'paymentAmount' ? order : 'asc'}
-                  onClick={() => handleRequestSort('paymentAmount')}
-                >
-                  Payment
-                </TableSortLabel>
-              </TableCell>
-              <TableCell sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
-                Payment Method
-              </TableCell>
-              <TableCell sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
-                Program URL
-              </TableCell>
-              <TableCell sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
-                Contact
-              </TableCell>
-              {programRelatedCustomFields.map(fieldName => (
+              {isColumnVisible('company') && (
+                <TableCell sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
+                  <TableSortLabel
+                    active={orderBy === 'name'}
+                    direction={orderBy === 'name' ? order : 'asc'}
+                    onClick={() => handleRequestSort('name')}
+                  >
+                    Company
+                  </TableSortLabel>
+                </TableCell>
+              )}
+              {isColumnVisible('website') && (
+                <TableCell sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
+                  <TableSortLabel
+                    active={orderBy === 'website'}
+                    direction={orderBy === 'website' ? order : 'asc'}
+                    onClick={() => handleRequestSort('website')}
+                  >
+                    Website
+                  </TableSortLabel>
+                </TableCell>
+              )}
+              {isColumnVisible('programFound') && (
+                <TableCell sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
+                  <TableSortLabel
+                    active={orderBy === 'hasProgram'}
+                    direction={orderBy === 'hasProgram' ? order : 'asc'}
+                    onClick={() => handleRequestSort('hasProgram')}
+                  >
+                    Program Found
+                  </TableSortLabel>
+                </TableCell>
+              )}
+              {isColumnVisible('status') && (
+                <TableCell sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
+                  <TableSortLabel
+                    active={orderBy === 'isOpen'}
+                    direction={orderBy === 'isOpen' ? order : 'asc'}
+                    onClick={() => handleRequestSort('isOpen')}
+                  >
+                    Status
+                  </TableSortLabel>
+                </TableCell>
+              )}
+              {isColumnVisible('payment') && (
+                <TableCell sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
+                  <TableSortLabel
+                    active={orderBy === 'paymentAmount'}
+                    direction={orderBy === 'paymentAmount' ? order : 'asc'}
+                    onClick={() => handleRequestSort('paymentAmount')}
+                  >
+                    Payment
+                  </TableSortLabel>
+                </TableCell>
+              )}
+              {isColumnVisible('paymentMethod') && (
+                <TableCell sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
+                  Payment Method
+                </TableCell>
+              )}
+              {isColumnVisible('programUrl') && (
+                <TableCell sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
+                  Program URL
+                </TableCell>
+              )}
+              {isColumnVisible('contactEmail') && (
+                <TableCell sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
+                  Contact
+                </TableCell>
+              )}
+              {isColumnVisible('publishedDate') && (
+                <TableCell sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
+                  <TableSortLabel
+                    active={orderBy === 'publishedDate'}
+                    direction={orderBy === 'publishedDate' ? order : 'asc'}
+                    onClick={() => handleRequestSort('publishedDate')}
+                  >
+                    Published
+                  </TableSortLabel>
+                </TableCell>
+              )}
+              {visibleCustomFields.map(fieldName => (
                 <TableCell
                   key={fieldName}
                   sx={{ fontWeight: 600, fontSize: '12px', color: '#667eea', textTransform: 'uppercase' }}
@@ -283,7 +354,7 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
             {paginatedCompanies.length === 0 ? (
               <TableRow>
                 <TableCell
-                  colSpan={8 + programRelatedCustomFields.length + (onSelectCompany ? 1 : 0) + (onAnalyzeSingle ? 1 : 0)}
+                  colSpan={displayColumns.length + (onSelectCompany ? 1 : 0) + (onAnalyzeSingle ? 1 : 0)}
                   align="center"
                   sx={{ py: 4 }}
                 >
@@ -320,139 +391,167 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
                   )}
 
                   {/* Company Name */}
-                  <TableCell>
-                    <Typography variant="body2" sx={{ fontSize: '11px', fontWeight: 600 }}>
-                      {company.name}
-                    </Typography>
-                  </TableCell>
+                  {isColumnVisible('company') && (
+                    <TableCell>
+                      <Typography variant="body2" sx={{ fontSize: '11px', fontWeight: 600 }}>
+                        {company.name}
+                      </Typography>
+                    </TableCell>
+                  )}
 
                   {/* Website */}
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    {company.website ? (
-                      <Link
-                        href={company.website}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        sx={{ fontSize: '11px', color: '#667eea' }}
-                      >
-                        {company.website.replace(/^https?:\/\//, '')}
-                      </Link>
-                    ) : (
-                      <Typography variant="body2" sx={{ fontSize: '11px', color: 'text.secondary' }}>
-                        -
-                      </Typography>
-                    )}
-                  </TableCell>
+                  {isColumnVisible('website') && (
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      {company.website ? (
+                        <Link
+                          href={company.website}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          sx={{ fontSize: '11px', color: '#667eea' }}
+                        >
+                          {company.website.replace(/^https?:\/\//, '')}
+                        </Link>
+                      ) : (
+                        <Typography variant="body2" sx={{ fontSize: '11px', color: 'text.secondary' }}>
+                          -
+                        </Typography>
+                      )}
+                    </TableCell>
+                  )}
 
                   {/* Program Found */}
-                  <TableCell>
-                    {company.writingProgramAnalysis?.hasProgram === true ? (
-                      <Chip
-                        icon={<CheckIcon sx={{ fontSize: '14px' }} />}
-                        label="Yes"
-                        size="small"
-                        sx={{
-                          bgcolor: '#dcfce7',
-                          color: '#16a34a',
-                          fontSize: '10px',
-                          height: '20px',
-                        }}
-                      />
-                    ) : company.writingProgramAnalysis?.hasProgram === false ? (
-                      <Chip
-                        icon={<CancelIcon sx={{ fontSize: '14px' }} />}
-                        label="No"
-                        size="small"
-                        sx={{
-                          bgcolor: '#fee2e2',
-                          color: '#dc2626',
-                          fontSize: '10px',
-                          height: '20px',
-                        }}
-                      />
-                    ) : (
-                      <Typography variant="body2" sx={{ fontSize: '11px', color: 'text.secondary' }}>
-                        -
-                      </Typography>
-                    )}
-                  </TableCell>
+                  {isColumnVisible('programFound') && (
+                    <TableCell>
+                      {company.writingProgramAnalysis?.hasProgram === true ? (
+                        <Chip
+                          icon={<CheckIcon sx={{ fontSize: '14px' }} />}
+                          label="Yes"
+                          size="small"
+                          sx={{
+                            bgcolor: '#dcfce7',
+                            color: '#16a34a',
+                            fontSize: '10px',
+                            height: '20px',
+                          }}
+                        />
+                      ) : company.writingProgramAnalysis?.hasProgram === false ? (
+                        <Chip
+                          icon={<CancelIcon sx={{ fontSize: '14px' }} />}
+                          label="No"
+                          size="small"
+                          sx={{
+                            bgcolor: '#fee2e2',
+                            color: '#dc2626',
+                            fontSize: '10px',
+                            height: '20px',
+                          }}
+                        />
+                      ) : (
+                        <Typography variant="body2" sx={{ fontSize: '11px', color: 'text.secondary' }}>
+                          -
+                        </Typography>
+                      )}
+                    </TableCell>
+                  )}
 
                   {/* Program Status (Open/Closed) */}
-                  <TableCell>
-                    {company.writingProgramAnalysis?.isOpen === true ? (
-                      <Chip
-                        label="Open"
-                        size="small"
-                        sx={{
-                          bgcolor: '#dcfce7',
-                          color: '#16a34a',
-                          fontSize: '10px',
-                          height: '20px',
-                        }}
-                      />
-                    ) : company.writingProgramAnalysis?.isOpen === false ? (
-                      <Chip
-                        label="Closed"
-                        size="small"
-                        sx={{
-                          bgcolor: '#fee2e2',
-                          color: '#dc2626',
-                          fontSize: '10px',
-                          height: '20px',
-                        }}
-                      />
-                    ) : (
-                      <Typography variant="body2" sx={{ fontSize: '11px', color: 'text.secondary' }}>
-                        -
-                      </Typography>
-                    )}
-                  </TableCell>
+                  {isColumnVisible('status') && (
+                    <TableCell>
+                      {company.writingProgramAnalysis?.isOpen === true ? (
+                        <Chip
+                          label="Open"
+                          size="small"
+                          sx={{
+                            bgcolor: '#dcfce7',
+                            color: '#16a34a',
+                            fontSize: '10px',
+                            height: '20px',
+                          }}
+                        />
+                      ) : company.writingProgramAnalysis?.isOpen === false ? (
+                        <Chip
+                          label="Closed"
+                          size="small"
+                          sx={{
+                            bgcolor: '#fee2e2',
+                            color: '#dc2626',
+                            fontSize: '10px',
+                            height: '20px',
+                          }}
+                        />
+                      ) : (
+                        <Typography variant="body2" sx={{ fontSize: '11px', color: 'text.secondary' }}>
+                          -
+                        </Typography>
+                      )}
+                    </TableCell>
+                  )}
 
                   {/* Payment Amount */}
-                  <TableCell>
-                    <Typography variant="body2" sx={{ fontSize: '11px' }}>
-                      {company.writingProgramAnalysis?.payment?.amount || '-'}
-                    </Typography>
-                  </TableCell>
+                  {isColumnVisible('payment') && (
+                    <TableCell>
+                      <Typography variant="body2" sx={{ fontSize: '11px' }}>
+                        {company.writingProgramAnalysis?.payment?.amount || '-'}
+                      </Typography>
+                    </TableCell>
+                  )}
 
                   {/* Payment Method */}
-                  <TableCell>
-                    <Typography variant="body2" sx={{ fontSize: '11px' }}>
-                      {company.writingProgramAnalysis?.payment?.method || '-'}
-                    </Typography>
-                  </TableCell>
+                  {isColumnVisible('paymentMethod') && (
+                    <TableCell>
+                      <Typography variant="body2" sx={{ fontSize: '11px' }}>
+                        {company.writingProgramAnalysis?.payment?.method || '-'}
+                      </Typography>
+                    </TableCell>
+                  )}
 
                   {/* Program URL */}
-                  <TableCell onClick={(e) => e.stopPropagation()}>
-                    {company.writingProgramAnalysis?.programUrl ? (
-                      <Link
-                        href={company.writingProgramAnalysis.programUrl}
-                        target="_blank"
-                        rel="noopener noreferrer"
-                        sx={{ fontSize: '11px', color: '#667eea' }}
-                      >
-                        View
-                      </Link>
-                    ) : (
-                      <Typography variant="body2" sx={{ fontSize: '11px', color: 'text.secondary' }}>
-                        -
-                      </Typography>
-                    )}
-                  </TableCell>
+                  {isColumnVisible('programUrl') && (
+                    <TableCell onClick={(e) => e.stopPropagation()}>
+                      {company.writingProgramAnalysis?.programUrl ? (
+                        <Link
+                          href={company.writingProgramAnalysis.programUrl}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          sx={{ fontSize: '11px', color: '#667eea' }}
+                        >
+                          View
+                        </Link>
+                      ) : (
+                        <Typography variant="body2" sx={{ fontSize: '11px', color: 'text.secondary' }}>
+                          -
+                        </Typography>
+                      )}
+                    </TableCell>
+                  )}
 
                   {/* Contact Email */}
-                  <TableCell>
-                    <Typography variant="body2" sx={{ fontSize: '11px' }}>
-                      {company.writingProgramAnalysis?.contactEmail || '-'}
-                    </Typography>
-                  </TableCell>
+                  {isColumnVisible('contactEmail') && (
+                    <TableCell>
+                      <Typography variant="body2" sx={{ fontSize: '11px' }}>
+                        {company.writingProgramAnalysis?.contactEmail || '-'}
+                      </Typography>
+                    </TableCell>
+                  )}
+
+                  {isColumnVisible('publishedDate') && (
+                    <TableCell>
+                      <Typography variant="body2" sx={{ fontSize: '11px' }}>
+                        {company.writingProgramAnalysis?.publishedDate || '-'}
+                      </Typography>
+                    </TableCell>
+                  )}
 
                   {/* Dynamic Custom Fields */}
-                  {programRelatedCustomFields.map(fieldName => (
+                  {visibleCustomFields.map(fieldName => (
                     <TableCell key={fieldName}>
-                      <Typography variant="body2" sx={{ fontSize: '11px' }}>
-                        {company.customFields?.[fieldName] || '-'}
-                      </Typography>
+                      {fieldName === 'community_program_status' ? (
+                        renderCommunityProgramStatus(company.customFields?.[fieldName])
+                      ) : (
+                        <Typography variant="body2" sx={{ fontSize: '11px' }}>
+                          {company.customFields?.[fieldName] || '-'}
+                        </Typography>
+                      )}
                     </TableCell>
                   ))}
 

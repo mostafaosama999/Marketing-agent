@@ -28,15 +28,15 @@ import {
   Error as ErrorIcon,
 } from '@mui/icons-material';
 import { Company } from '../../../types/crm';
-import {
-  analyzeWritingProgram,
-  analyzeWritingProgramDetails,
-} from '../../../services/firebase/cloudFunctions';
 import { updateCompany } from '../../../services/api/companies';
 import {
   getProgramUrlFieldMapping,
   getCompanyProgramUrl,
 } from '../../../services/api/programUrlFieldMappingService';
+import {
+  bulkFindWritingPrograms,
+  bulkAnalyzeWritingPrograms,
+} from '../../../services/api/bulkWritingProgramService';
 
 interface BulkWritingProgramDialogProps {
   open: boolean;
@@ -101,120 +101,156 @@ export const BulkWritingProgramDialog: React.FC<BulkWritingProgramDialogProps> =
   }, [open]);
 
   const startFindingPhase = async () => {
+    console.log('[BulkWritingProgram] ========== STARTING FINDING PHASE ==========');
+    console.log('[BulkWritingProgram] Total companies to process:', companies.length);
+    console.log('[BulkWritingProgram] Companies:', companies.map(c => ({
+      id: c.id,
+      name: c.name,
+      website: c.website,
+      hasWritingProgramAnalysis: !!(c as any).writingProgramAnalysis,
+    })));
+    console.log('[BulkWritingProgram] useMappedField:', useMappedField);
+    console.log('[BulkWritingProgram] Mapped field name:', getProgramUrlFieldMapping());
+
     setPhase('finding');
     setFindingProgress(0);
 
+    // Separate companies into two groups:
+    // 1. Companies with mapped field URLs (skip search)
+    // 2. Companies that need URL search
+    const companiesWithMappedUrls: Company[] = [];
+    const companiesNeedingSearch: Company[] = [];
+
     let completedCount = 0;
 
-    // Process each company sequentially to avoid overwhelming the API
-    for (const company of companies) {
+    companies.forEach(company => {
+      // Check if we should use mapped field first
+      if (useMappedField) {
+        const programUrl = getCompanyProgramUrl(company);
+        console.log(`[BulkWritingProgram] Checking mapped field for ${company.name}:`, programUrl);
+        if (programUrl) {
+          console.log(`[BulkWritingProgram] ✓ Found mapped URL for ${company.name}:`, programUrl);
+          companiesWithMappedUrls.push(company);
+          // Update progress immediately for mapped URLs
+          setProgress(prev => {
+            const newProgress = new Map(prev);
+            const companyProgress = newProgress.get(company.id);
+            if (companyProgress) {
+              companyProgress.findingStatus = 'success';
+              companyProgress.findingMessage = 'Found URL in mapped field';
+              companyProgress.foundUrls = [programUrl];
+              companyProgress.selectedUrl = programUrl;
+              companyProgress.urlSource = 'mapped';
+            }
+            return newProgress;
+          });
+          completedCount++;
+          setFindingProgress((completedCount / companies.length) * 100);
+          return;
+        }
+      }
+
+      // No mapped URL - needs search
+      console.log(`[BulkWritingProgram] ✗ No mapped URL for ${company.name}, adding to search queue`);
+      companiesNeedingSearch.push(company);
+    });
+
+    // If there are companies needing search, use the bulk service
+    console.log('[BulkWritingProgram] Companies needing search:', companiesNeedingSearch.length);
+    console.log('[BulkWritingProgram] Companies with mapped URLs:', companiesWithMappedUrls.length);
+
+    if (companiesNeedingSearch.length > 0) {
       try {
-        // Update status to pending
-        setProgress(prev => {
-          const newProgress = new Map(prev);
-          const companyProgress = newProgress.get(company.id);
-          if (companyProgress) {
-            companyProgress.findingStatus = 'pending';
-            companyProgress.findingMessage = 'Searching for writing program...';
-          }
-          return newProgress;
-        });
+        console.log('[BulkWritingProgram] ========== CALLING bulkFindWritingPrograms ==========');
+        console.log('[BulkWritingProgram] Passing companies:', companiesNeedingSearch.map(c => ({
+          id: c.id,
+          name: c.name,
+          website: c.website,
+        })));
 
-        // Check if we should use mapped field first
-        let programUrl: string | undefined;
-        let urlSource: 'mapped' | 'searched' = 'searched';
-
-        if (useMappedField) {
-          programUrl = getCompanyProgramUrl(company);
-          if (programUrl) {
-            urlSource = 'mapped';
-            // Found URL in mapped field - skip search
+        // Call the bulk service with progress callback
+        const results = await bulkFindWritingPrograms(
+          companiesNeedingSearch,
+          (companyId, phase, status, message) => {
+            console.log(`[BulkWritingProgram] Progress callback: ${companyId} - ${phase} - ${status} - ${message}`);
+            // Update progress for this company
             setProgress(prev => {
               const newProgress = new Map(prev);
-              const companyProgress = newProgress.get(company.id);
+              const companyProgress = newProgress.get(companyId);
               if (companyProgress) {
-                companyProgress.findingStatus = 'success';
-                companyProgress.findingMessage = 'Found URL in mapped field';
-                companyProgress.foundUrls = [programUrl!];
-                companyProgress.selectedUrl = programUrl;
-                companyProgress.urlSource = 'mapped';
+                companyProgress.findingStatus = status;
+                companyProgress.findingMessage = message || '';
               }
               return newProgress;
             });
-            completedCount++;
-            setFindingProgress((completedCount / companies.length) * 100);
-            continue;
           }
-        }
+        );
 
-        // No URL in mapped field (or not using mapped field) - search for it
-        // Get website from company
-        const website = company.website || (company as any).writingProgramAnalysis?.programUrl;
+        console.log('[BulkWritingProgram] ========== bulkFindWritingPrograms RETURNED ==========');
+        console.log('[BulkWritingProgram] Results size:', results.size);
+        console.log('[BulkWritingProgram] Results:', Array.from(results.entries()).map(([id, r]) => ({
+          companyId: id,
+          success: r.success,
+          urlCount: r.urls?.length || 0,
+          aiSuggestionsCount: r.aiSuggestions?.length || 0,
+          error: r.error,
+        })));
 
-        if (!website) {
+        // Process the results
+        results.forEach((result, companyId) => {
+          const allUrls: string[] = [];
+
+          // Add pattern-matched URLs
+          if (result.urls) {
+            allUrls.push(...result.urls.map(u => u.url));
+          }
+
+          // Add AI suggestions
+          if (result.aiSuggestions) {
+            allUrls.push(...result.aiSuggestions.map(s => s.url));
+          }
+
+          // Update final progress with all URLs
+          setProgress(prev => {
+            const newProgress = new Map(prev);
+            const companyProgress = newProgress.get(companyId);
+            if (companyProgress) {
+              companyProgress.findingStatus = result.success ? 'success' : 'error';
+              companyProgress.findingMessage = result.error || (allUrls.length > 0
+                ? `Found ${allUrls.length} URL${allUrls.length > 1 ? 's' : ''}`
+                : 'No URLs found');
+              companyProgress.foundUrls = allUrls;
+              companyProgress.selectedUrl = allUrls.length > 0 ? allUrls[0] : undefined;
+              companyProgress.urlSource = 'searched';
+            }
+            return newProgress;
+          });
+
+          completedCount++;
+          setFindingProgress((completedCount / companies.length) * 100);
+        });
+
+      } catch (error: any) {
+        console.error('[BulkWritingProgram] ========== ERROR in bulkFindWritingPrograms ==========');
+        console.error('[BulkWritingProgram] Error:', error);
+        console.error('[BulkWritingProgram] Error message:', error.message);
+        console.error('[BulkWritingProgram] Error stack:', error.stack);
+        // Mark all companies needing search as errored
+        companiesNeedingSearch.forEach(company => {
           setProgress(prev => {
             const newProgress = new Map(prev);
             const companyProgress = newProgress.get(company.id);
             if (companyProgress) {
               companyProgress.findingStatus = 'error';
-              companyProgress.findingMessage = 'No website found';
+              companyProgress.findingMessage = error.message || 'Failed to find URLs';
               companyProgress.foundUrls = [];
             }
             return newProgress;
           });
           completedCount++;
           setFindingProgress((completedCount / companies.length) * 100);
-          continue;
-        }
-
-        // Call the SAME function as the single "Analyze Program" button
-        const result = await analyzeWritingProgram(website);
-
-        // Collect all found URLs
-        const allUrls: string[] = [];
-
-        // Add pattern-matched URLs
-        if (result.validUrls) {
-          allUrls.push(...result.validUrls.map(u => u.url));
-        }
-
-        // Add AI suggestions
-        if (result.aiSuggestions) {
-          allUrls.push(...result.aiSuggestions.map(s => s.url));
-        }
-
-        // Update progress with results
-        setProgress(prev => {
-          const newProgress = new Map(prev);
-          const companyProgress = newProgress.get(company.id);
-          if (companyProgress) {
-            companyProgress.findingStatus = 'success';
-            companyProgress.findingMessage = allUrls.length > 0
-              ? `Found ${allUrls.length} URL${allUrls.length > 1 ? 's' : ''}`
-              : 'No URLs found';
-            companyProgress.foundUrls = allUrls;
-            companyProgress.selectedUrl = allUrls.length > 0 ? allUrls[0] : undefined;
-            companyProgress.urlSource = 'searched';
-          }
-          return newProgress;
-        });
-
-      } catch (error: any) {
-        console.error(`Error finding URLs for ${company.name}:`, error);
-        setProgress(prev => {
-          const newProgress = new Map(prev);
-          const companyProgress = newProgress.get(company.id);
-          if (companyProgress) {
-            companyProgress.findingStatus = 'error';
-            companyProgress.findingMessage = error.message || 'Failed to find URLs';
-            companyProgress.foundUrls = [];
-          }
-          return newProgress;
         });
       }
-
-      completedCount++;
-      setFindingProgress((completedCount / companies.length) * 100);
     }
 
     // Move to confirmation phase
@@ -235,72 +271,118 @@ export const BulkWritingProgramDialog: React.FC<BulkWritingProgramDialogProps> =
       return;
     }
 
+    // Prepare selections map for bulk service
+    const selections = new Map<string, { companyId: string; companyName: string; programUrl: string }>();
+    companiesToAnalyze.forEach(cp => {
+      if (cp.selectedUrl) {
+        selections.set(cp.companyId, {
+          companyId: cp.companyId,
+          companyName: cp.companyName,
+          programUrl: cp.selectedUrl,
+        });
+      }
+    });
+
     let completedCount = 0;
     let totalCost = 0;
 
-    // Process each company sequentially
-    for (const companyProgress of companiesToAnalyze) {
-      try {
-        // Update status to pending
-        setProgress(prev => {
-          const newProgress = new Map(prev);
-          const cp = newProgress.get(companyProgress.companyId);
-          if (cp) {
-            cp.analyzingStatus = 'pending';
-            cp.analyzingMessage = 'Analyzing writing program...';
-          }
-          return newProgress;
-        });
-
-        // Call the SAME function as the single "Analyze Program" button
-        const result = await analyzeWritingProgramDetails(
-          companyProgress.selectedUrl!,
-          companyProgress.companyId
-        );
-
-        // Save to Firestore
-        await updateCompany(companyProgress.companyId, {
-          writingProgramAnalysis: {
-            ...result,
-            programUrl: companyProgress.selectedUrl,
-            lastAnalyzedAt: new Date(),
-          },
-        });
-
-        // Update progress
-        setProgress(prev => {
-          const newProgress = new Map(prev);
-          const cp = newProgress.get(companyProgress.companyId);
-          if (cp) {
-            cp.analyzingStatus = 'success';
-            cp.analysisData = result;
-            const paymentInfo = result.payment?.amount || 'Unknown payment';
-            const statusInfo = result.isOpen === true ? 'Open' : result.isOpen === false ? 'Closed' : 'Unknown';
-            cp.analyzingMessage = `${paymentInfo} - ${statusInfo}`;
-          }
-          return newProgress;
-        });
-
-        // Accumulate cost
-        if (result.costInfo) {
-          totalCost += result.costInfo.totalCost || 0;
+    try {
+      // Call the bulk service with progress callback
+      const results = await bulkAnalyzeWritingPrograms(
+        selections,
+        (companyId, phase, status, message) => {
+          // Update progress for this company
+          setProgress(prev => {
+            const newProgress = new Map(prev);
+            const cp = newProgress.get(companyId);
+            if (cp) {
+              cp.analyzingStatus = status;
+              cp.analyzingMessage = message || '';
+            }
+            return newProgress;
+          });
         }
+      );
 
-      } catch (error: any) {
-        console.error(`Error analyzing ${companyProgress.companyName}:`, error);
-        setProgress(prev => {
-          const newProgress = new Map(prev);
-          const cp = newProgress.get(companyProgress.companyId);
-          if (cp) {
-            cp.analyzingStatus = 'error';
-            cp.analyzingMessage = error.message || 'Failed to analyze';
+      // Process the results and save to Firestore
+      for (const [companyId, result] of Array.from(results.entries())) {
+        try {
+          if (result.success && result.data) {
+            // Save to Firestore
+            await updateCompany(companyId, {
+              writingProgramAnalysis: {
+                ...result.data,
+                programUrl: result.programUrl,
+                lastAnalyzedAt: new Date(),
+              },
+            });
+
+            // Update progress with final data
+            setProgress(prev => {
+              const newProgress = new Map(prev);
+              const cp = newProgress.get(companyId);
+              if (cp) {
+                cp.analyzingStatus = 'success';
+                cp.analysisData = result.data;
+                const paymentInfo = result.data.payment?.amount || 'Unknown payment';
+                const statusInfo = result.data.isOpen === true ? 'Open' : result.data.isOpen === false ? 'Closed' : 'Unknown';
+                cp.analyzingMessage = `${paymentInfo} - ${statusInfo}`;
+              }
+              return newProgress;
+            });
+
+            // Accumulate cost
+            if (result.data.costInfo) {
+              totalCost += result.data.costInfo.totalCost || 0;
+            }
+          } else {
+            // Update with error
+            setProgress(prev => {
+              const newProgress = new Map(prev);
+              const cp = newProgress.get(companyId);
+              if (cp) {
+                cp.analyzingStatus = 'error';
+                cp.analyzingMessage = result.error || 'Failed to analyze';
+              }
+              return newProgress;
+            });
           }
-          return newProgress;
-        });
+
+          completedCount++;
+          setAnalyzingProgress((completedCount / companiesToAnalyze.length) * 100);
+
+        } catch (error: any) {
+          console.error(`Error saving analysis for company ${companyId}:`, error);
+          setProgress(prev => {
+            const newProgress = new Map(prev);
+            const cp = newProgress.get(companyId);
+            if (cp) {
+              cp.analyzingStatus = 'error';
+              cp.analyzingMessage = error.message || 'Failed to save analysis';
+            }
+            return newProgress;
+          });
+          completedCount++;
+          setAnalyzingProgress((completedCount / companiesToAnalyze.length) * 100);
+        }
       }
 
-      completedCount++;
-      setAnalyzingProgress((completedCount / companiesToAnalyze.length) * 100);
+    } catch (error: any) {
+      console.error('Error in bulk analyze writing programs:', error);
+      // Mark all as errored
+      companiesToAnalyze.forEach(cp => {
+        setProgress(prev => {
+          const newProgress = new Map(prev);
+          const companyProgress = newProgress.get(cp.companyId);
+          if (companyProgress) {
+            companyProgress.analyzingStatus = 'error';
+            companyProgress.analyzingMessage = error.message || 'Failed to analyze';
+          }
+          return newProgress;
+        });
+        completedCount++;
+        setAnalyzingProgress((completedCount / companiesToAnalyze.length) * 100);
+      });
     }
 
     setTotalCost(totalCost);

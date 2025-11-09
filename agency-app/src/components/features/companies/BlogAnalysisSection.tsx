@@ -7,12 +7,16 @@ import {
   People as PeopleIcon,
   Star as StarIcon,
   Refresh as RefreshIcon,
+  RssFeed as RssIcon,
+  SmartToy as AIIcon,
 } from '@mui/icons-material';
 import Grid from '@mui/material/Grid';
 import { Company } from '../../../types/crm';
 import { AnalysisCard } from './AnalysisCard';
+import { ContentQualityCard } from './ContentQualityCard';
 import { formatCost } from '../../../services/firebase/cloudFunctions';
 import { BlogUrlSelectionDialog } from './BlogUrlSelectionDialog';
+import { getBlogUrlFieldMapping, getCompanyBlogUrl } from '../../../services/api/blogUrlFieldMappingService';
 
 interface BlogAnalysisSectionProps {
   company: Company;
@@ -30,7 +34,18 @@ export const BlogAnalysisSection: React.FC<BlogAnalysisSectionProps> = ({
   const [dialogOpen, setDialogOpen] = useState(false);
   const analysis = company.blogAnalysis;
 
+  // Check for mapped blog URL field
+  const hasMappedField = Boolean(getBlogUrlFieldMapping());
+  const mappedBlogUrl = getCompanyBlogUrl(company);
+
   const handleOpenDialog = () => {
+    // If mapped URL exists, use it directly without opening dialog
+    if (hasMappedField && mappedBlogUrl) {
+      onAnalyze(mappedBlogUrl);
+      return;
+    }
+
+    // Otherwise, open dialog for manual URL selection
     setDialogOpen(true);
   };
 
@@ -268,7 +283,13 @@ export const BlogAnalysisSection: React.FC<BlogAnalysisSectionProps> = ({
               },
             }}
           >
-            {analysis ? 'Re-analyze' : 'Analyze Blog'}
+            {hasMappedField && mappedBlogUrl && analysis
+              ? 'Re-analyze Blog'
+              : hasMappedField && mappedBlogUrl
+              ? 'Analyze Mapped Blog'
+              : analysis
+              ? 'Re-analyze'
+              : 'Analyze Blog'}
           </Button>
           {analysis?.lastAnalyzedAt && (
             <Typography variant="caption" sx={{ display: 'block', color: '#64748b' }}>
@@ -288,6 +309,22 @@ export const BlogAnalysisSection: React.FC<BlogAnalysisSectionProps> = ({
       {error && (
         <Alert severity="error" sx={{ mb: 3 }}>
           {error}
+        </Alert>
+      )}
+
+      {/* Mapped Blog URL Info - Show when mapped URL exists and no analysis yet */}
+      {hasMappedField && mappedBlogUrl && !analysis && !loading && (
+        <Alert
+          severity="info"
+          sx={{ mb: 3 }}
+          icon={<RssIcon />}
+        >
+          <Typography variant="body2" sx={{ fontWeight: 600, mb: 0.5 }}>
+            Mapped Blog URL: <strong>{mappedBlogUrl}</strong>
+          </Typography>
+          <Typography variant="caption" sx={{ color: '#64748b' }}>
+            Click "Analyze Blog" above to analyze this URL
+          </Typography>
         </Alert>
       )}
 
@@ -336,132 +373,175 @@ export const BlogAnalysisSection: React.FC<BlogAnalysisSectionProps> = ({
 
       {/* Analysis Results */}
       {analysis && !loading && (
-        <Grid container spacing={3}>
-          {/* Card 1: Last Activity */}
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <AnalysisCard
-              icon={<CalendarIcon />}
-              title="Last Active Post"
-              value={formatLastPost()}
-              subtitle={
-                analysis.lastActivePost
-                  ? getLastPostStatus() === 'success'
-                    ? 'Recently active'
-                    : getLastPostStatus() === 'warning'
-                    ? 'Moderately active'
-                    : 'Inactive'
-                  : 'No recent posts found'
-              }
-              status={getLastPostStatus()}
-              link={analysis.lastPostUrl || analysis.blogUrl || undefined}
-            />
-          </Grid>
-
-          {/* Card 2: Frequency */}
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <AnalysisCard
-              icon={<ChartIcon />}
-              title="Monthly Frequency"
-              value={`${analysis.monthlyFrequency} posts`}
-              subtitle={
-                analysis.monthlyFrequency >= 4
-                  ? 'High activity'
-                  : analysis.monthlyFrequency >= 2
-                  ? 'Moderate activity'
-                  : 'Low activity'
-              }
-              status={
-                analysis.monthlyFrequency >= 4
-                  ? 'success'
-                  : analysis.monthlyFrequency >= 2
-                  ? 'warning'
-                  : 'error'
-              }
-            >
+        <Box>
+          {/* Section 1: Blog Activity Metrics (RSS-based) */}
+          <Box sx={{ mb: 4 }}>
+            <Box sx={{ mb: 2, display: 'flex', alignItems: 'center', gap: 1 }}>
               <Typography
-                variant="caption"
+                variant="h6"
                 sx={{
-                  color: '#64748b',
-                  fontSize: '11px',
+                  fontWeight: 700,
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  backgroundClip: 'text',
+                  WebkitBackgroundClip: 'text',
+                  color: 'transparent',
                 }}
               >
-                Based on last 30 days
+                📊 Blog Activity Metrics
               </Typography>
-            </AnalysisCard>
-          </Grid>
-
-          {/* Card 3: Writers */}
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <AnalysisCard
-              icon={<PeopleIcon />}
-              title="Writers"
-              value={`${analysis.writers.count} writer${analysis.writers.count !== 1 ? 's' : ''}`}
-              subtitle={getWriterTypeLabel()}
-              status={analysis.writers.count >= 2 ? 'success' : 'info'}
-            >
-              {analysis.writers.list.length > 0 && (
-                <Box>
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      color: '#64748b',
-                      fontSize: '11px',
-                      fontWeight: 600,
-                      display: 'block',
-                      mb: 0.5,
-                    }}
-                  >
-                    Writers:
-                  </Typography>
-                  {analysis.writers.list.map((writer, index) => (
-                    <Chip
-                      key={index}
-                      label={writer}
-                      size="small"
-                      sx={{
-                        fontSize: '10px',
-                        height: '18px',
-                        mr: 0.5,
-                        mb: 0.5,
-                      }}
-                    />
-                  ))}
-                </Box>
+              {analysis.rssFeedUrl ? (
+                <Chip
+                  icon={<RssIcon sx={{ fontSize: 14 }} />}
+                  label="RSS Feed Data"
+                  size="small"
+                  sx={{
+                    fontSize: '11px',
+                    height: '22px',
+                    background: '#10b981',
+                    color: 'white',
+                    fontWeight: 600,
+                    '& .MuiChip-icon': {
+                      color: 'white',
+                    },
+                  }}
+                />
+              ) : (
+                <Chip
+                  icon={<AIIcon sx={{ fontSize: 14 }} />}
+                  label="AI Estimate"
+                  size="small"
+                  sx={{
+                    fontSize: '11px',
+                    height: '22px',
+                    background: '#f59e0b',
+                    color: 'white',
+                    fontWeight: 600,
+                    '& .MuiChip-icon': {
+                      color: 'white',
+                    },
+                  }}
+                />
               )}
-            </AnalysisCard>
-          </Grid>
+            </Box>
 
-          {/* Card 4: Blog Nature */}
-          <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-            <AnalysisCard
-              icon={<StarIcon />}
-              title="Content Quality"
-              value={`${getRatingStars(analysis.blogNature.rating)} ${analysis.blogNature.rating.toUpperCase()}`}
-              subtitle="Not working for now"
-              status={
-                analysis.blogNature.rating === 'high'
-                  ? 'success'
-                  : analysis.blogNature.rating === 'medium'
-                  ? 'warning'
-                  : 'error'
-              }
-              badges={getContentBadges()}
-            >
-              <Typography
-                variant="caption"
-                sx={{
-                  color: '#f59e0b',
-                  fontSize: '11px',
-                  display: 'block',
-                  mt: 1,
-                  fontWeight: 600,
-                }}
-              >
-                Feature temporarily disabled
-              </Typography>
-            </AnalysisCard>
-          </Grid>
-        </Grid>
+            {!analysis.rssFeedUrl && (
+              <Alert severity="warning" sx={{ mb: 2 }}>
+                RSS feed not available - metrics below are AI estimates and may be less accurate
+              </Alert>
+            )}
+
+            <Grid container spacing={3}>
+              {/* Card 1: Last Activity */}
+              <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                <AnalysisCard
+                  icon={<CalendarIcon />}
+                  title="Last Active Post"
+                  value={analysis.lastActivePost ? formatLastPost() : 'Unable to determine'}
+                  subtitle={
+                    analysis.lastActivePost
+                      ? getLastPostStatus() === 'success'
+                        ? 'Recently active'
+                        : getLastPostStatus() === 'warning'
+                        ? 'Moderately active'
+                        : 'Inactive'
+                      : 'No data from blog page'
+                  }
+                  status={analysis.lastActivePost ? getLastPostStatus() : 'info'}
+                  link={analysis.lastPostUrl || analysis.blogUrl || undefined}
+                />
+              </Grid>
+
+              {/* Card 2: Frequency */}
+              <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                <AnalysisCard
+                  icon={<ChartIcon />}
+                  title="Monthly Frequency"
+                  value={analysis.monthlyFrequency > 0 ? `${analysis.monthlyFrequency} posts` : 'Unable to determine'}
+                  subtitle={
+                    analysis.monthlyFrequency >= 4
+                      ? 'High activity'
+                      : analysis.monthlyFrequency >= 2
+                      ? 'Moderate activity'
+                      : analysis.monthlyFrequency > 0
+                      ? 'Low activity'
+                      : 'No data available'
+                  }
+                  status={
+                    analysis.monthlyFrequency >= 4
+                      ? 'success'
+                      : analysis.monthlyFrequency >= 2
+                      ? 'warning'
+                      : analysis.monthlyFrequency > 0
+                      ? 'error'
+                      : 'info'
+                  }
+                >
+                  {analysis.monthlyFrequency > 0 && (
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color: '#64748b',
+                        fontSize: '11px',
+                      }}
+                    >
+                      Based on last 30 days
+                    </Typography>
+                  )}
+                </AnalysisCard>
+              </Grid>
+
+              {/* Card 3: Writers */}
+              <Grid size={{ xs: 12, sm: 6, md: 4 }}>
+                <AnalysisCard
+                  icon={<PeopleIcon />}
+                  title="Writers"
+                  value={analysis.writers.count > 0 ? `${analysis.writers.count} writer${analysis.writers.count !== 1 ? 's' : ''}` : 'Unable to determine'}
+                  subtitle={analysis.writers.count > 0 ? getWriterTypeLabel() : 'No data available'}
+                  status={analysis.writers.count >= 2 ? 'success' : analysis.writers.count > 0 ? 'info' : 'info'}
+                >
+                  {analysis.writers.list.length > 0 && (
+                    <Box>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          color: '#64748b',
+                          fontSize: '11px',
+                          fontWeight: 600,
+                          display: 'block',
+                          mb: 0.5,
+                        }}
+                      >
+                        Writers:
+                      </Typography>
+                      {analysis.writers.list.map((writer, index) => (
+                        <Chip
+                          key={index}
+                          label={writer}
+                          size="small"
+                          sx={{
+                            fontSize: '10px',
+                            height: '18px',
+                            mr: 0.5,
+                            mb: 0.5,
+                          }}
+                        />
+                      ))}
+                    </Box>
+                  )}
+                </AnalysisCard>
+              </Grid>
+            </Grid>
+          </Box>
+
+          {/* Section 2: Content Quality Analysis (AI-based) */}
+          {analysis.blogNature && (
+            <ContentQualityCard
+              blogNature={analysis.blogNature}
+              isDeveloperB2BSaas={analysis.isDeveloperB2BSaas}
+              contentSummary={analysis.contentSummary}
+            />
+          )}
+        </Box>
       )}
 
       {/* Blog URL Selection Dialog */}

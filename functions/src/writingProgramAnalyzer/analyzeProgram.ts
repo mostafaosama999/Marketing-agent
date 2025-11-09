@@ -154,7 +154,13 @@ Based on this information, extract the following details about the writing progr
 6. **Submission Guidelines**: Detailed how-to-submit instructions, format requirements, process
 7. **Contact**: Email or contact method for submissions
 8. **Response Time**: How long does it take to hear back?
-9. **Overall Details**: A comprehensive summary of the entire program
+9. **Publication Date**: When was this writing program published or created?
+   - Look for text like "Published on [date]", "Last updated [date]", "Posted [date]"
+   - Check meta tags, timestamps, or date indicators near the program announcement
+   - Common formats: "July 20, 2021", "2021-07-20", "20 Jul 2021", etc.
+   - Extract the original date string exactly as found on the page
+   - Note where you found it (e.g., "article header", "meta tag", "hero section")
+10. **Overall Details**: A comprehensive summary of the entire program
 
 Return your response as a JSON object with this structure:
 {
@@ -173,6 +179,8 @@ Return your response as a JSON object with this structure:
   "submissionGuidelines": "how to submit...",
   "contactEmail": "email@example.com" | null,
   "responseTime": "X weeks" | null,
+  "publishedDate": "date string as found on page" | null,
+  "publishedDateSource": "where the date was found (e.g., 'article header', 'meta tag')" | null,
   "programDetails": "comprehensive summary of the entire program including all important details",
   "reasoning": "your analysis and confidence level"
 }
@@ -332,6 +340,8 @@ export const analyzeWritingProgramDetailsCloud = functions
         submissionGuidelines: analysis.submissionGuidelines || null,
         contactEmail: analysis.contactEmail || null,
         responseTime: analysis.responseTime || null,
+        publishedDate: analysis.publishedDate || null,
+        publishedDateSource: analysis.publishedDateSource || null,
         programDetails: analysis.programDetails || "",
         aiReasoning: analysis.reasoning || "Analysis completed",
         costInfo: costInfo || undefined,

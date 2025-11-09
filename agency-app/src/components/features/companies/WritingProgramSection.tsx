@@ -28,6 +28,7 @@ import {
   Email as EmailIcon,
   Schedule as ScheduleIcon,
   Assignment as AssignmentIcon,
+  CalendarToday as CalendarIcon,
 } from '@mui/icons-material';
 import Grid from '@mui/material/Grid';
 import { Company } from '../../../types/crm';
@@ -597,6 +598,17 @@ export const WritingProgramSection: React.FC<WritingProgramSectionProps> = ({
             >
               {analysis.programDetails}
             </Typography>
+
+            {/* Published Date */}
+            {analysis.publishedDate && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 2 }}>
+                <CalendarIcon sx={{ color: '#667eea', fontSize: 16 }} />
+                <Typography variant="caption" sx={{ color: '#64748b' }}>
+                  Published: {analysis.publishedDate}
+                  {analysis.publishedDateSource && ` (${analysis.publishedDateSource})`}
+                </Typography>
+              </Box>
+            )}
           </Box>
         )}
 

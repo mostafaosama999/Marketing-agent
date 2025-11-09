@@ -7,14 +7,18 @@
     "shell": "npm run build && firebase functions:shell",
     "start": "npm run shell",
     "deploy": "firebase deploy --only functions",
-    "logs": "firebase functions:log"
+    "logs": "firebase functions:log",
+    "test:scraper": "npm run build && node lib/test/runScraperLocal.js",
+    "debug:scraper": "npm run build && node lib/test/debugScraper.js"
   },
   "engines": {
     "node": "20"
   },
   "main": "lib/index.js",
   "dependencies": {
+    "@google-cloud/storage": "^7.17.3",
     "@slack/web-api": "^7.10.0",
+    "@types/papaparse": "^5.5.0",
     "axios": "^1.6.8",
     "cheerio": "^1.0.0-rc.12",
     "cors": "^2.8.5",
@@ -22,6 +26,8 @@
     "firebase-functions": "^5.0.0",
     "googleapis": "^134.0.0",
     "openai": "^4.38.2",
+    "papaparse": "^5.5.3",
+    "puppeteer": "^24.29.1",
     "rss-parser": "^3.13.0"
   },
   "devDependencies": {

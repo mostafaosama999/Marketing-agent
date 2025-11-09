@@ -1,6 +1,7 @@
 // src/services/api/bulkWritingProgramService.ts
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { Company } from '../../types/crm';
+import { getCompanyWebsite } from './websiteFieldMappingService';
 
 export interface FindProgramResult {
   companyId: string;
@@ -77,6 +78,15 @@ export async function bulkFindWritingPrograms(
   companies: Company[],
   onProgress?: ProgressCallback
 ): Promise<Map<string, FindProgramResult>> {
+  console.log('[bulkWritingProgramService] ========== bulkFindWritingPrograms CALLED ==========');
+  console.log('[bulkWritingProgramService] Companies received:', companies.length);
+  console.log('[bulkWritingProgramService] Companies:', companies.map(c => ({
+    id: c.id,
+    name: c.name,
+    website: c.website,
+    hasWritingProgramAnalysis: !!(c as any).writingProgramAnalysis,
+  })));
+
   const functions = getFunctions();
   const findProgramCloud = httpsCallable(functions, 'findWritingProgramCloud');
 
@@ -86,20 +96,26 @@ export async function bulkFindWritingPrograms(
   const companiesWithWebsites: Array<Company & { effectiveWebsite: string }> = [];
 
   companies.forEach(company => {
-    let effectiveWebsite = company.website;
+    console.log(`[bulkWritingProgramService] Processing ${company.name}...`);
+    let effectiveWebsite = getCompanyWebsite(company);
+    console.log(`[bulkWritingProgramService]   - website (using field mapping):`, effectiveWebsite);
 
     // If no website, try to extract domain from existing writing program URL
     if (!effectiveWebsite && (company as any).writingProgramAnalysis?.programUrl) {
       const programUrl = (company as any).writingProgramAnalysis.programUrl;
+      console.log(`[bulkWritingProgramService]   - trying to extract domain from programUrl:`, programUrl);
       const extractedDomain = extractDomainFromUrl(programUrl);
+      console.log(`[bulkWritingProgramService]   - extracted domain:`, extractedDomain);
       if (extractedDomain) {
         effectiveWebsite = extractedDomain;
       }
     }
 
     if (effectiveWebsite) {
+      console.log(`[bulkWritingProgramService]   ✓ ${company.name} has effective website:`, effectiveWebsite);
       companiesWithWebsites.push({ ...company, effectiveWebsite });
     } else {
+      console.log(`[bulkWritingProgramService]   ✗ ${company.name} has NO website - marking as error`);
       // Mark companies without any website source as errors
       results.set(company.id, {
         companyId: company.id,
@@ -115,10 +131,18 @@ export async function bulkFindWritingPrograms(
     }
   });
 
+  console.log('[bulkWritingProgramService] Companies with websites:', companiesWithWebsites.length);
+  console.log('[bulkWritingProgramService] Companies without websites:', companies.length - companiesWithWebsites.length);
+
   // Process companies in batches
   const batches = chunkArray(companiesWithWebsites, BATCH_SIZE);
+  console.log('[bulkWritingProgramService] Total batches to process:', batches.length);
 
   for (const batch of batches) {
+    console.log('[bulkWritingProgramService] ========== PROCESSING BATCH ==========');
+    console.log('[bulkWritingProgramService] Batch size:', batch.length);
+    console.log('[bulkWritingProgramService] Batch companies:', batch.map(c => c.name));
+
     // Mark all in batch as pending
     batch.forEach(company => {
       if (onProgress) {
@@ -132,12 +156,21 @@ export async function bulkFindWritingPrograms(
 
       for (let attempt = 0; attempt <= RETRY_ATTEMPTS; attempt++) {
         try {
+          console.log(`[bulkWritingProgramService] ========== CALLING CLOUD FUNCTION for ${company.name} (attempt ${attempt + 1}) ==========`);
+          console.log(`[bulkWritingProgramService] Calling findProgramCloud with website:`, company.effectiveWebsite);
+
           const response = await findProgramCloud({
             website: company.effectiveWebsite,
             useAiFallback: true,
           });
 
+          console.log(`[bulkWritingProgramService] ========== CLOUD FUNCTION RESPONSE for ${company.name} ==========`);
+          console.log(`[bulkWritingProgramService] Response:`, response);
+
           const data: any = response.data;
+          console.log(`[bulkWritingProgramService] Response data:`, data);
+          console.log(`[bulkWritingProgramService]   - validUrls count:`, data.validUrls?.length || 0);
+          console.log(`[bulkWritingProgramService]   - aiSuggestions count:`, data.aiSuggestions?.length || 0);
 
           const result: FindProgramResult = {
             companyId: company.id,
@@ -149,6 +182,7 @@ export async function bulkFindWritingPrograms(
           };
 
           results.set(company.id, result);
+          console.log(`[bulkWritingProgramService] ✓ Successfully stored result for ${company.name}`);
 
           if (onProgress) {
             const urlCount = (data.validUrls?.length || 0) + (data.aiSuggestions?.length || 0);
@@ -163,7 +197,10 @@ export async function bulkFindWritingPrograms(
           return; // Success, break retry loop
         } catch (error) {
           lastError = error;
-          console.error(`Attempt ${attempt + 1} failed for ${company.name}:`, error);
+          console.error(`[bulkWritingProgramService] ✗✗✗ ATTEMPT ${attempt + 1} FAILED for ${company.name} ✗✗✗`);
+          console.error(`[bulkWritingProgramService] Error:`, error);
+          console.error(`[bulkWritingProgramService] Error message:`, (error as any)?.message);
+          console.error(`[bulkWritingProgramService] Error code:`, (error as any)?.code);
 
           if (attempt < RETRY_ATTEMPTS) {
             await delay(RETRY_DELAY * (attempt + 1)); // Exponential backoff
@@ -194,6 +231,17 @@ export async function bulkFindWritingPrograms(
       await delay(1000);
     }
   }
+
+  console.log('[bulkWritingProgramService] ========== bulkFindWritingPrograms COMPLETE ==========');
+  console.log('[bulkWritingProgramService] Total results:', results.size);
+  console.log('[bulkWritingProgramService] Final results:', Array.from(results.entries()).map(([id, r]) => ({
+    companyId: id,
+    companyName: r.companyName,
+    success: r.success,
+    urlCount: r.urls?.length || 0,
+    aiSuggestionsCount: r.aiSuggestions?.length || 0,
+    error: r.error,
+  })));
 
   return results;
 }

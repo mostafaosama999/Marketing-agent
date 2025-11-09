@@ -19,7 +19,7 @@ import { useClient } from '../../hooks/useClients';
 import { ticketsService } from '../../services/api/tickets';
 import { ticketFinancialsService } from '../../services/api/ticketSubcollections';
 import { Ticket, TicketFinancials } from '../../types';
-import MonthFilter from '../../components/features/kanban/MonthFilter';
+import MonthFilter from '../../components/common/filters/MonthFilter';
 
 // Modern theme
 const modernTheme = createTheme({

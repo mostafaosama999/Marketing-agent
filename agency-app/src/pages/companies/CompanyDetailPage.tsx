@@ -65,6 +65,10 @@ import {
   getCompanyWebsite,
   getWebsiteFieldMapping,
 } from '../../services/api/websiteFieldMappingService';
+import {
+  getCompanyBlogUrl,
+  getBlogUrlFieldMapping,
+} from '../../services/api/blogUrlFieldMappingService';
 import { useAuth } from '../../contexts/AuthContext';
 
 export const CompanyDetailPage: React.FC = () => {
@@ -672,12 +676,18 @@ export const CompanyDetailPage: React.FC = () => {
     try {
       const result = await analyzeBlog(company.name, urlToAnalyze);
 
-      // Check if RSS feed was found
-      if (!result.rssFeedUrl && result.blogPostCount === 0) {
+      // Check if analysis failed completely (neither RSS nor AI worked)
+      if (!result.rssFeedUrl && result.blogPostCount === 0 && (!result.analysisMethod || result.analysisMethod === 'None')) {
         throw new Error(
-          'No RSS feed found at this URL. Please verify the blog URL is correct and has an RSS feed. ' +
+          'Unable to analyze blog. Please verify the blog URL is correct and accessible. ' +
+          'The system tried both RSS feed discovery and AI-powered analysis but could not extract blog data. ' +
           'Common RSS feed patterns: /feed, /rss, /feed.xml, /blog/feed'
         );
+      }
+
+      // Log informational message when AI fallback is used (no RSS feed)
+      if (!result.rssFeedUrl && result.analysisMethod === 'AI') {
+        console.log('ℹ️ Blog analyzed using AI-powered web scraping (no RSS feed found)');
       }
 
       // Warn if no posts found but RSS exists
@@ -706,35 +716,23 @@ export const CompanyDetailPage: React.FC = () => {
         }
       }
 
-      // Build blogNature object conditionally to avoid undefined values
+      // Build blogNature object with all AI analysis fields
       const blogNature: any = {
         isAIWritten: result.isAIWritten || false,
         isTechnical: result.technicalDepth === 'advanced' || result.technicalDepth === 'intermediate',
         rating,
+        reasoning: result.contentQualityReasoning || 'No detailed reasoning provided by analysis',
         hasCodeExamples: result.hasCodeExamples || false,
         codeExamplesCount: result.codeExamplesCount || 0,
         codeLanguages: result.codeLanguages || [],
         hasDiagrams: result.hasDiagrams || false,
         diagramsCount: result.diagramsCount || 0,
         exampleQuotes: result.exampleQuotes || [],
+        aiWrittenConfidence: result.aiWrittenConfidence || null,
+        aiWrittenEvidence: result.aiWrittenEvidence || null,
+        technicalDepth: result.technicalDepth || null,
+        funnelStage: result.funnelStage || null,
       };
-
-      // Only add optional fields if they have values (Firestore doesn't allow undefined)
-      if (result.aiWrittenConfidence) {
-        blogNature.aiWrittenConfidence = result.aiWrittenConfidence;
-      }
-      if (result.aiWrittenEvidence) {
-        blogNature.aiWrittenEvidence = result.aiWrittenEvidence;
-      }
-      if (result.technicalDepth) {
-        blogNature.technicalDepth = result.technicalDepth;
-      }
-      if (result.funnelStage) {
-        blogNature.funnelStage = result.funnelStage;
-      }
-      if (result.contentQualityReasoning) {
-        blogNature.reasoning = result.contentQualityReasoning;
-      }
 
       const analysisData: any = {
         lastActivePost: result.lastBlogCreatedAt || null,
@@ -751,6 +749,7 @@ export const CompanyDetailPage: React.FC = () => {
         blogUrl: urlToAnalyze, // Store the original URL user entered/selected
         lastPostUrl: result.lastPostUrl || null,
         rssFeedUrl: result.rssFeedUrl || null,
+        analysisMethod: result.analysisMethod || 'Unknown', // Track data source: RSS, AI, RSS + AI
         lastAnalyzedAt: new Date(),
       };
 
@@ -1813,6 +1812,7 @@ export const CompanyDetailPage: React.FC = () => {
           setFoundUrls([]);
         }}
         onSelect={handleUrlSelected}
+        onStartSearch={handleAnalyzeWritingProgram}
         urls={foundUrls}
         loading={detailsAnalysisLoading}
       />

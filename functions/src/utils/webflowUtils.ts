@@ -1,5 +1,6 @@
 import axios, { AxiosInstance } from 'axios';
 import * as functions from 'firebase-functions';
+import {ScrapedArticle} from '../scrapers/baseScraper';
 
 export interface WebflowBlogPost {
   _id?: string;
@@ -9,6 +10,17 @@ export interface WebflowBlogPost {
   _draft?: boolean;
   url?: string;
   postSummary?: string;
+  externalUrl?: string;
+  createdOn?: string;
+  lastEdited?: string;
+}
+
+export interface SyncStats {
+  totalArticles: number;
+  created: number;
+  skipped: number;
+  failed: number;
+  errors: string[];
 }
 
 export interface WebflowCollection {
@@ -232,6 +244,166 @@ export class WebflowAPI {
       return blogCollection;
     } catch (error) {
       console.error('❌ Error fetching collection info:', error);
+      throw error;
+    }
+  }
+
+  /**
+   * Check if an article exists by slug
+   * NEW METHOD - For profile scraper deduplication
+   */
+  async checkArticleExists(slug: string): Promise<boolean> {
+    try {
+      console.log(`🔍 Checking if article with slug "${slug}" exists...`);
+
+      const blogPosts = await this.getAllBlogPosts();
+      const exists = blogPosts.some(post => post.slug === slug);
+
+      console.log(`🎯 Article with slug "${slug}" exists: ${exists}`);
+      return exists;
+    } catch (error) {
+      console.error(`❌ Error checking article existence by slug: ${slug}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Create article post from ScrapedArticle data
+   * NEW METHOD - Maps scraped data to Webflow fields
+   */
+  async createArticlePost(article: ScrapedArticle): Promise<WebflowBlogPost> {
+    try {
+      console.log(`🆕 Creating article post: ${article.name}`);
+
+      const postData = {
+        fieldData: {
+          name: article.name,
+          slug: article.slug,
+          'external-url': article.externalUrl,
+          'post-summary': article.description || '',
+          'created-on': article.createdOn || '',
+          'last-edited': article.lastEdited || '',
+          // You can add more fields as needed based on your Webflow collection schema
+        },
+        isDraft: true, // Always create as draft for review
+        isArchived: false,
+      };
+
+      const response = await this.api.post(
+        `/v2/collections/${this.blogCollectionId}/items`,
+        postData
+      );
+
+      const createdItem = response.data;
+      console.log(`✅ Successfully created article: ${createdItem.fieldData.name}`);
+
+      const createdPost: WebflowBlogPost = {
+        _id: createdItem.id,
+        name: createdItem.fieldData.name,
+        slug: createdItem.fieldData.slug,
+        externalUrl: createdItem.fieldData['external-url'],
+        postSummary: createdItem.fieldData['post-summary'],
+        createdOn: createdItem.fieldData['created-on'],
+        lastEdited: createdItem.fieldData['last-edited'],
+        _draft: createdItem.isDraft,
+        _archived: createdItem.isArchived,
+      };
+
+      return createdPost;
+    } catch (error) {
+      console.error(`❌ Error creating article post: ${article.name}`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Sync multiple articles from CSV data
+   * NEW METHOD - Batch sync with deduplication
+   */
+  async syncFromCSV(articles: ScrapedArticle[]): Promise<SyncStats> {
+    const stats: SyncStats = {
+      totalArticles: articles.length,
+      created: 0,
+      skipped: 0,
+      failed: 0,
+      errors: [],
+    };
+
+    console.log(`🔄 Starting sync of ${articles.length} articles from CSV...`);
+
+    // Get all existing posts for deduplication
+    let existingSlugs: Set<string>;
+    try {
+      const existingPosts = await this.getAllBlogPosts();
+      existingSlugs = new Set(existingPosts.map(post => post.slug));
+      console.log(`📊 Found ${existingSlugs.size} existing articles in Webflow`);
+    } catch (error) {
+      console.error('❌ Failed to fetch existing posts, aborting sync');
+      stats.errors.push(`Failed to fetch existing posts: ${(error as Error).message}`);
+      return stats;
+    }
+
+    // Process each article
+    for (const article of articles) {
+      try {
+        // Check if already exists
+        if (existingSlugs.has(article.slug)) {
+          console.log(`⏭️  Skipping existing article: ${article.name}`);
+          stats.skipped++;
+          continue;
+        }
+
+        // Create new article
+        await this.createArticlePost(article);
+        stats.created++;
+
+        // Rate limiting: wait 500ms between requests to avoid API throttling
+        await new Promise(resolve => setTimeout(resolve, 500));
+      } catch (error) {
+        console.error(`❌ Failed to sync article: ${article.name}`, error);
+        stats.failed++;
+        stats.errors.push(`${article.name}: ${(error as Error).message}`);
+      }
+    }
+
+    console.log(`✅ Sync completed:`, {
+      total: stats.totalArticles,
+      created: stats.created,
+      skipped: stats.skipped,
+      failed: stats.failed,
+    });
+
+    return stats;
+  }
+
+  /**
+   * Get blog posts from a specific collection ID
+   * NEW METHOD - For supporting multiple collections
+   */
+  async getBlogPostsFromCollection(collectionId: string): Promise<WebflowBlogPost[]> {
+    try {
+      console.log(`🔍 Fetching blog posts from collection: ${collectionId}...`);
+
+      const response = await this.api.get(
+        `/v2/collections/${collectionId}/items`
+      );
+
+      const items = response.data?.items || [];
+      console.log(`📊 Found ${items.length} blog posts in collection ${collectionId}`);
+
+      const blogPosts = items.map((item: any) => ({
+        _id: item.id,
+        name: item.fieldData.name || item.fieldData.title || '',
+        slug: item.fieldData.slug || '',
+        _archived: item.isArchived || false,
+        _draft: item.isDraft || false,
+        url: item.fieldData.url || item.fieldData['external-url'] || '',
+        externalUrl: item.fieldData['external-url'] || '',
+      }));
+
+      return blogPosts;
+    } catch (error) {
+      console.error(`❌ Error fetching blog posts from collection ${collectionId}:`, error);
       throw error;
     }
   }

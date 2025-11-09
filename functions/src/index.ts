@@ -26,3 +26,14 @@ export {getLeadIdeas, updateIdeaStatus} from "./ideaGenerator/generateIdeas";
 export {fetchApolloEmail} from "./apollo/apolloProxy";
 export {enrichOrganizationCloud} from "./apollo/enrichOrganization";
 export {searchPeopleCloud} from "./apollo/searchPeople";
+
+// Export new profile scraper functions
+export {profileScraperSync} from "./webflow/profileSync";
+export {
+  triggerProfileScraper,
+  runScraperOnly,
+  getCSVDownloadUrl,
+  listCSVFiles,
+  getScraperStatusInfo,
+  runAllScrapersManual,
+} from "./webflow/manualTrigger";

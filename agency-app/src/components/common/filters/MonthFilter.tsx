@@ -1,4 +1,4 @@
-// src/components/features/kanban/MonthFilter.tsx
+// src/components/common/filters/MonthFilter.tsx
 import React from 'react';
 import {
   FormControl,

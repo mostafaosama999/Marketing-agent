@@ -34,6 +34,7 @@ interface WritingProgramUrlSelectionDialogProps {
   open: boolean;
   onClose: () => void;
   onSelect: (selectedUrl: string) => void;
+  onStartSearch: () => Promise<void>; // Callback to trigger search when user chooses to search
   urls: URLOption[];
   loading?: boolean;
   existingUrl?: string; // URL from mapped custom field
@@ -43,6 +44,7 @@ export const WritingProgramUrlSelectionDialog: React.FC<WritingProgramUrlSelecti
   open,
   onClose,
   onSelect,
+  onStartSearch,
   urls,
   loading = false,
   existingUrl,
@@ -85,6 +87,15 @@ export const WritingProgramUrlSelectionDialog: React.FC<WritingProgramUrlSelecti
     setCustomUrl(value);
     setUseCustom(true);
     setSelectedUrl('');
+  };
+
+  const handleModeChange = async (newMode: 'existing' | 'search') => {
+    setMode(newMode);
+
+    // If user selects "search", trigger the search immediately
+    if (newMode === 'search') {
+      await onStartSearch();
+    }
   };
 
   const getConfidenceColor = (confidence?: 'high' | 'medium' | 'low') => {
@@ -139,7 +150,7 @@ export const WritingProgramUrlSelectionDialog: React.FC<WritingProgramUrlSelecti
 
             <RadioGroup
               value={mode}
-              onChange={(e) => setMode(e.target.value as 'existing' | 'search')}
+              onChange={(e) => handleModeChange(e.target.value as 'existing' | 'search')}
             >
               {/* Option 1: Use existing URL */}
               <Box
@@ -528,10 +539,8 @@ export const WritingProgramUrlSelectionDialog: React.FC<WritingProgramUrlSelecti
             },
           }}
         >
-          {loading && urls.length === 0
-            ? 'Searching...'
-            : loading
-            ? 'Analyzing...'
+          {loading
+            ? (mode === 'search' && urls.length === 0 ? 'Searching...' : 'Analyzing...')
             : existingUrl && mode === 'existing'
             ? 'Analyze Existing URL'
             : 'Analyze Program'}

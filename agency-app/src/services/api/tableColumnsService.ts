@@ -4,7 +4,8 @@
 import {
   TableColumnConfig,
   DEFAULT_LEADS_TABLE_COLUMNS,
-  DEFAULT_COMPANIES_TABLE_COLUMNS
+  DEFAULT_COMPANIES_TABLE_COLUMNS,
+  DEFAULT_WRITING_PROGRAM_TABLE_COLUMNS
 } from '../../types/table';
 import { Company } from '../../types/crm';
 import { Lead } from '../../types/lead';
@@ -220,6 +221,85 @@ export async function buildCompaniesTableColumns(companies: Company[]): Promise<
     console.error('Error building companies table columns:', error);
     // Return just default columns on error
     return DEFAULT_COMPANIES_TABLE_COLUMNS;
+  }
+}
+
+/**
+ * Build writing program table columns (default + custom fields from companies)
+ * Only includes custom fields that contain "community", "writing", or "program" in their name
+ * These are likely related to writing programs and should be shown in the writing program view
+ */
+export async function buildWritingProgramTableColumns(companies: Company[]): Promise<TableColumnConfig[]> {
+  try {
+    // Start with default writing program columns
+    const columns: TableColumnConfig[] = [...DEFAULT_WRITING_PROGRAM_TABLE_COLUMNS];
+
+    // Extract custom field names that are related to writing programs
+    const customFieldNames = new Set<string>();
+    companies.forEach(company => {
+      if (company.customFields) {
+        Object.keys(company.customFields).forEach(fieldName => {
+          // Only include fields that likely relate to writing programs
+          const lowerFieldName = fieldName.toLowerCase();
+          if (
+            lowerFieldName.includes('community') ||
+            lowerFieldName.includes('writing') ||
+            lowerFieldName.includes('program') ||
+            lowerFieldName.includes('contributor')
+          ) {
+            customFieldNames.add(fieldName);
+          }
+        });
+      }
+    });
+
+    // Query field definitions to determine field types and sections
+    const fieldDefinitions = await getFieldDefinitions('company');
+    const fieldDefMap = new Map(fieldDefinitions.map(def => [def.name, def]));
+
+    // Create column configs for each writing-program-related custom field
+    const customFieldColumns: TableColumnConfig[] = Array.from(customFieldNames)
+      .sort()
+      .map((fieldName, index) => {
+        const totalIndex = columns.length + index;
+        const fieldDef = fieldDefMap.get(fieldName);
+
+        // Clean up label by removing prefixes
+        const cleanFieldName = fieldName
+          .replace(/^linkedin_/, '')
+          .replace(/^email_/, '');
+
+        const label = cleanFieldName
+          .split('_')
+          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+          .join(' ');
+
+        // Get field type from definition, or default to text
+        const fieldType: 'dropdown' | 'text' = fieldDef?.fieldType === 'dropdown' ? 'dropdown' : 'text';
+        const section: FieldSection | undefined = fieldDef?.section || getSectionFromFieldName(fieldName);
+
+        return {
+          id: `custom_${fieldName}`,
+          label: label,
+          sortable: true,
+          visible: true, // Show all writing program custom fields by default
+          type: 'custom' as const,
+          order: totalIndex,
+          section: section,
+          fieldType: fieldType,
+          fieldName: fieldName,
+        };
+      });
+
+    // Combine default and custom columns
+    const allColumns = [...columns, ...customFieldColumns];
+
+    // Auto-group by section
+    return autoGroupColumnsBySection(allColumns);
+  } catch (error) {
+    console.error('Error building writing program table columns:', error);
+    // Return just default columns on error
+    return DEFAULT_WRITING_PROGRAM_TABLE_COLUMNS;
   }
 }
 
