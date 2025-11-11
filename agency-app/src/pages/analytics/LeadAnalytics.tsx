@@ -21,10 +21,12 @@ import {
   People as PeopleIcon,
   CheckCircle as CheckCircleIcon,
   Schedule as ScheduleIcon,
+  LinkedIn as LinkedInIcon,
+  Email as EmailIcon,
+  Send as SendIcon,
 } from '@mui/icons-material';
 import { subscribeToLeads } from '../../services/api/leads';
 import { Lead, LeadStatus } from '../../types/lead';
-import { useAuth } from '../../contexts/AuthContext';
 
 // Modern theme
 const modernTheme = createTheme({
@@ -72,6 +74,7 @@ const LeadAnalytics: React.FC = () => {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode, setViewMode] = useState<'daily' | 'weekly'>('weekly');
+  const [outreachDayRange, setOutreachDayRange] = useState<7 | 14 | 30>(30);
 
   // Subscribe to leads
   useEffect(() => {
@@ -209,6 +212,105 @@ const LeadAnalytics: React.FC = () => {
   //
   //   return stages.filter(s => s.count > 0);
   // }, [leads]);
+
+  // Outreach metrics
+  const outreachMetrics = useMemo(() => {
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - outreachDayRange);
+
+    const linkedInOutreach = leads.filter(lead => {
+      if (!lead.outreach?.linkedIn?.sentAt) return false;
+      const sentDate = lead.outreach.linkedIn.sentAt instanceof Date
+        ? lead.outreach.linkedIn.sentAt
+        : new Date(lead.outreach.linkedIn.sentAt);
+      return sentDate >= cutoffDate;
+    });
+
+    const emailOutreach = leads.filter(lead => {
+      if (!lead.outreach?.email?.sentAt) return false;
+      const sentDate = lead.outreach.email.sentAt instanceof Date
+        ? lead.outreach.email.sentAt
+        : new Date(lead.outreach.email.sentAt);
+      return sentDate >= cutoffDate;
+    });
+
+    const totalOutreach = linkedInOutreach.length + emailOutreach.length;
+
+    // Calculate response rates (status = 'replied')
+    const linkedInReplies = linkedInOutreach.filter(
+      lead => lead.outreach?.linkedIn?.status === 'replied'
+    ).length;
+    const emailReplies = emailOutreach.filter(
+      lead => lead.outreach?.email?.status === 'replied'
+    ).length;
+
+    const linkedInResponseRate = linkedInOutreach.length > 0
+      ? ((linkedInReplies / linkedInOutreach.length) * 100).toFixed(1)
+      : '0';
+    const emailResponseRate = emailOutreach.length > 0
+      ? ((emailReplies / emailOutreach.length) * 100).toFixed(1)
+      : '0';
+
+    return {
+      linkedInCount: linkedInOutreach.length,
+      emailCount: emailOutreach.length,
+      totalCount: totalOutreach,
+      linkedInResponseRate,
+      emailResponseRate,
+    };
+  }, [leads, outreachDayRange]);
+
+  // Outreach activity over time (daily)
+  const outreachActivityData = useMemo(() => {
+    const dailyLinkedIn: { [date: string]: number } = {};
+    const dailyEmail: { [date: string]: number } = {};
+
+    const cutoffDate = new Date();
+    cutoffDate.setDate(cutoffDate.getDate() - outreachDayRange);
+
+    // Aggregate LinkedIn outreach by day
+    leads.forEach(lead => {
+      if (lead.outreach?.linkedIn?.sentAt) {
+        const sentDate = lead.outreach.linkedIn.sentAt instanceof Date
+          ? lead.outreach.linkedIn.sentAt
+          : new Date(lead.outreach.linkedIn.sentAt);
+
+        if (sentDate >= cutoffDate) {
+          const dateStr = getDateString(sentDate);
+          dailyLinkedIn[dateStr] = (dailyLinkedIn[dateStr] || 0) + 1;
+        }
+      }
+    });
+
+    // Aggregate email outreach by day
+    leads.forEach(lead => {
+      if (lead.outreach?.email?.sentAt) {
+        const sentDate = lead.outreach.email.sentAt instanceof Date
+          ? lead.outreach.email.sentAt
+          : new Date(lead.outreach.email.sentAt);
+
+        if (sentDate >= cutoffDate) {
+          const dateStr = getDateString(sentDate);
+          dailyEmail[dateStr] = (dailyEmail[dateStr] || 0) + 1;
+        }
+      }
+    });
+
+    // Generate array of dates for the selected range
+    const dates: string[] = [];
+    const today = new Date();
+    for (let i = outreachDayRange - 1; i >= 0; i--) {
+      const date = new Date(today);
+      date.setDate(today.getDate() - i);
+      dates.push(getDateString(date));
+    }
+
+    return dates.map(date => ({
+      label: formatDateLabel(date),
+      linkedIn: dailyLinkedIn[date] || 0,
+      email: dailyEmail[date] || 0,
+    }));
+  }, [leads, outreachDayRange]);
 
   return (
     <ThemeProvider theme={modernTheme}>
@@ -441,6 +543,7 @@ const LeadAnalytics: React.FC = () => {
                 backdropFilter: 'blur(20px)',
                 border: '1px solid rgba(226, 232, 240, 0.5)',
                 boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08)',
+                mb: 4,
               }}>
                 <CardContent sx={{ p: 4 }}>
                   <Typography variant="h5" sx={{
@@ -467,6 +570,209 @@ const LeadAnalytics: React.FC = () => {
                           dataKey: 'count',
                           label: 'New Leads',
                           color: '#667eea',
+                          curve: 'linear',
+                        },
+                      ]}
+                      margin={{ left: 60, right: 20, top: 20, bottom: 60 }}
+                      grid={{ vertical: true, horizontal: true }}
+                    />
+                  </Box>
+                </CardContent>
+              </Card>
+            )}
+
+            {/* Outreach Activity Section */}
+            <Box sx={{ mt: 6, mb: 4 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                  <SendIcon sx={{ fontSize: 36, color: '#667eea' }} />
+                  <Box>
+                    <Typography variant="h5" sx={{
+                      fontWeight: 700,
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      backgroundClip: 'text',
+                      WebkitBackgroundClip: 'text',
+                      color: 'transparent',
+                    }}>
+                      Outreach Activity
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: '#64748b', mt: 0.5 }}>
+                      Track LinkedIn and email outreach performance
+                    </Typography>
+                  </Box>
+                </Box>
+
+                {/* Day Range Selector */}
+                <ToggleButtonGroup
+                  value={outreachDayRange}
+                  exclusive
+                  onChange={(e, newRange) => newRange && setOutreachDayRange(newRange)}
+                  aria-label="day range"
+                  sx={{
+                    backgroundColor: 'white',
+                    borderRadius: 2,
+                    boxShadow: '0 2px 8px rgba(0, 0, 0, 0.08)',
+                    '& .MuiToggleButton-root': {
+                      border: 'none',
+                      borderRadius: 2,
+                      px: 2.5,
+                      py: 1,
+                      fontSize: '14px',
+                      fontWeight: 600,
+                      textTransform: 'none',
+                      color: '#64748b',
+                      '&.Mui-selected': {
+                        backgroundColor: '#667eea',
+                        color: 'white',
+                        '&:hover': {
+                          backgroundColor: '#5a67d8',
+                        }
+                      },
+                      '&:hover': {
+                        backgroundColor: '#f1f5f9',
+                      }
+                    }
+                  }}
+                >
+                  <ToggleButton value={7}>7 Days</ToggleButton>
+                  <ToggleButton value={14}>14 Days</ToggleButton>
+                  <ToggleButton value={30}>30 Days</ToggleButton>
+                </ToggleButtonGroup>
+              </Box>
+            </Box>
+
+            {/* Outreach Summary Cards */}
+            <Grid container spacing={3} sx={{ mb: 4 }}>
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                <Card sx={{
+                  background: 'linear-gradient(135deg, #0077b5 0%, #005885 100%)',
+                  borderRadius: 3,
+                  boxShadow: '0 4px 20px rgba(0, 119, 181, 0.3)',
+                }}>
+                  <CardContent>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                      <LinkedInIcon sx={{ fontSize: 40, color: 'white', opacity: 0.9 }} />
+                      <Box>
+                        <Typography variant="h4" sx={{ color: 'white', fontWeight: 700 }}>
+                          {outreachMetrics.linkedInCount}
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.9)' }}>
+                          LinkedIn Outreach
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                <Card sx={{
+                  background: 'linear-gradient(135deg, #ea4335 0%, #c5221f 100%)',
+                  borderRadius: 3,
+                  boxShadow: '0 4px 20px rgba(234, 67, 53, 0.3)',
+                }}>
+                  <CardContent>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                      <EmailIcon sx={{ fontSize: 40, color: 'white', opacity: 0.9 }} />
+                      <Box>
+                        <Typography variant="h4" sx={{ color: 'white', fontWeight: 700 }}>
+                          {outreachMetrics.emailCount}
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.9)' }}>
+                          Email Outreach
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                <Card sx={{
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  borderRadius: 3,
+                  boxShadow: '0 4px 20px rgba(102, 126, 234, 0.3)',
+                }}>
+                  <CardContent>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                      <SendIcon sx={{ fontSize: 40, color: 'white', opacity: 0.9 }} />
+                      <Box>
+                        <Typography variant="h4" sx={{ color: 'white', fontWeight: 700 }}>
+                          {outreachMetrics.totalCount}
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.9)' }}>
+                          Total Outreach
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              <Grid size={{ xs: 12, sm: 6, md: 3 }}>
+                <Card sx={{
+                  background: 'linear-gradient(135deg, #4caf50 0%, #388e3c 100%)',
+                  borderRadius: 3,
+                  boxShadow: '0 4px 20px rgba(76, 175, 80, 0.3)',
+                }}>
+                  <CardContent>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                      <CheckCircleIcon sx={{ fontSize: 40, color: 'white', opacity: 0.9 }} />
+                      <Box>
+                        <Typography variant="h4" sx={{ color: 'white', fontWeight: 700 }}>
+                          {outreachMetrics.linkedInResponseRate}%
+                        </Typography>
+                        <Typography variant="body2" sx={{ color: 'rgba(255,255,255,0.9)' }}>
+                          LinkedIn Response
+                        </Typography>
+                      </Box>
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
+
+            {/* Outreach Activity Over Time Chart */}
+            {outreachActivityData.length > 0 && (
+              <Card sx={{
+                background: 'rgba(255, 255, 255, 0.9)',
+                borderRadius: 3,
+                backdropFilter: 'blur(20px)',
+                border: '1px solid rgba(226, 232, 240, 0.5)',
+                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08)',
+                mb: 4,
+              }}>
+                <CardContent sx={{ p: 4 }}>
+                  <Typography variant="h5" sx={{
+                    fontWeight: 700,
+                    mb: 1,
+                    background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)',
+                    backgroundClip: 'text',
+                    WebkitBackgroundClip: 'text',
+                    color: 'transparent',
+                  }}>
+                    Daily Outreach Activity
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: '#64748b', mb: 4 }}>
+                    LinkedIn and email outreach trends over the last {outreachDayRange} days
+                  </Typography>
+
+                  <Box sx={{ height: 400 }}>
+                    <LineChart
+                      dataset={outreachActivityData}
+                      xAxis={[{ dataKey: 'label', scaleType: 'point' }]}
+                      yAxis={[{ label: 'Outreach Count' }]}
+                      series={[
+                        {
+                          dataKey: 'linkedIn',
+                          label: 'LinkedIn',
+                          color: '#0077b5',
+                          curve: 'linear',
+                        },
+                        {
+                          dataKey: 'email',
+                          label: 'Email',
+                          color: '#ea4335',
                           curve: 'linear',
                         },
                       ]}

@@ -245,10 +245,22 @@ function CRMBoard() {
 
   // Load filters from sessionStorage on mount (for persistence across navigation)
   useEffect(() => {
+    const debugMode = localStorage.getItem('crm_debug') === 'true';
+
     try {
       const savedFilters = sessionStorage.getItem(ACTIVE_FILTERS_SESSION_KEY);
+
+      if (debugMode) {
+        console.log('[CRM Filter Persistence] Loading filters from sessionStorage:', savedFilters);
+      }
+
       if (savedFilters) {
         const parsed = JSON.parse(savedFilters);
+
+        if (debugMode) {
+          console.log('[CRM Filter Persistence] Parsed filter state:', parsed);
+        }
+
         if (parsed.filters) {
           setFilters(parsed.filters);
         }
@@ -258,11 +270,37 @@ function CRMBoard() {
         if (parsed.currentView) {
           setCurrentView(parsed.currentView);
         }
+
+        if (debugMode) {
+          console.log('[CRM Filter Persistence] Filters successfully restored');
+        }
+      } else if (debugMode) {
+        console.log('[CRM Filter Persistence] No saved filters found in sessionStorage');
       }
     } catch (error) {
       console.error('Error loading filters from sessionStorage:', error);
     }
   }, []); // Only run once on mount
+
+  // Helper function to save filters to sessionStorage
+  const saveFiltersToSession = React.useCallback(() => {
+    try {
+      const filterState = {
+        filters,
+        advancedFilterRules,
+        currentView,
+      };
+      sessionStorage.setItem(ACTIVE_FILTERS_SESSION_KEY, JSON.stringify(filterState));
+
+      // Debug logging (only if crm_debug is enabled)
+      const debugMode = localStorage.getItem('crm_debug') === 'true';
+      if (debugMode) {
+        console.log('[CRM Filter Persistence] Saved filters to sessionStorage:', filterState);
+      }
+    } catch (error) {
+      console.error('Error saving filters to sessionStorage:', error);
+    }
+  }, [filters, advancedFilterRules, currentView]);
 
   // Save filters to sessionStorage whenever they change (skip initial mount)
   useEffect(() => {
@@ -272,17 +310,27 @@ function CRMBoard() {
       return;
     }
 
-    try {
-      const filterState = {
-        filters,
-        advancedFilterRules,
-        currentView,
-      };
-      sessionStorage.setItem(ACTIVE_FILTERS_SESSION_KEY, JSON.stringify(filterState));
-    } catch (error) {
-      console.error('Error saving filters to sessionStorage:', error);
-    }
-  }, [filters, advancedFilterRules, currentView]);
+    saveFiltersToSession();
+  }, [filters, advancedFilterRules, currentView, saveFiltersToSession]);
+
+  // Add beforeunload handler to ensure filters are saved before navigation
+  useEffect(() => {
+    const handleBeforeUnload = () => {
+      // Force save filters before page unload/navigation
+      saveFiltersToSession();
+    };
+
+    // Listen to both beforeunload and pagehide for better browser compatibility
+    window.addEventListener('beforeunload', handleBeforeUnload);
+    window.addEventListener('pagehide', handleBeforeUnload);
+
+    return () => {
+      // Save one final time on cleanup
+      saveFiltersToSession();
+      window.removeEventListener('beforeunload', handleBeforeUnload);
+      window.removeEventListener('pagehide', handleBeforeUnload);
+    };
+  }, [saveFiltersToSession]);
 
   // Migrate localStorage data and load default preset on mount
   useEffect(() => {
@@ -888,12 +936,10 @@ function CRMBoard() {
       month: '',
     });
     setAdvancedFilterRules([]);
-    // Clear session storage when filters are explicitly cleared
-    try {
-      sessionStorage.removeItem(ACTIVE_FILTERS_SESSION_KEY);
-    } catch (error) {
-      console.error('Error clearing filters from sessionStorage:', error);
-    }
+    // NOTE: We DON'T remove from sessionStorage here
+    // The cleared state will be saved automatically by the useEffect
+    // This way, filters stay cleared for the session but can be restored
+    // by loading a preset or setting new filters
   };
 
   const handleApplyAdvancedFilters = (rules: FilterRule[]) => {
