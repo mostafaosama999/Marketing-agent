@@ -9,7 +9,15 @@
     "deploy": "firebase deploy --only functions",
     "logs": "firebase functions:log",
     "test:scraper": "npm run build && node lib/test/runScraperLocal.js",
-    "debug:scraper": "npm run build && node lib/test/debugScraper.js"
+    "test:ultralytics": "npm run build && node lib/test/testUltralyticsScraper.js",
+    "debug:scraper": "npm run build && node lib/test/debugScraper.js",
+    "test:thumbnails": "npm run build && node lib/test/testThumbnails.js",
+    "test:webflow": "npm run build && node lib/test/testWebflowSync.js",
+    "test:category": "npm run build && node lib/test/testCategoryDetection.js",
+    "update:categories": "npm run build && node lib/test/updateCsvCategories.js",
+    "list:sites": "npm run build && node lib/test/listWebflowSites.js",
+    "list:collections": "npm run build && node lib/test/listWebflowCollections.js",
+    "get:category": "npm run build && node lib/test/getCategoryId.js"
   },
   "engines": {
     "node": "20"

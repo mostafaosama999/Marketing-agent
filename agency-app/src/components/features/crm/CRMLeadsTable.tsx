@@ -27,6 +27,8 @@ import {
   LinkedIn as LinkedInIcon,
   Email as EmailIcon,
   AutoAwesome as ApolloIcon,
+  ContentCopy as CopyIcon,
+  Check as CheckIcon,
 } from '@mui/icons-material';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -39,6 +41,10 @@ import { getFieldDefinitions } from '../../../services/api/fieldDefinitionsServi
 import { updateLeadCustomField, updateLeadField, updateLeadLinkedInStatus, updateLeadEmailStatus } from '../../../services/api/leads';
 import { fetchEmail } from '../../../services/api/apolloService';
 import { useAuth } from '../../../contexts/AuthContext';
+import { copyHtmlToClipboard } from '../../../utils/htmlHelpers';
+import { replaceTemplateVariables } from '../../../services/api/templateVariablesService';
+import { getSettings } from '../../../services/api/settings';
+import { Company } from '../../../types/crm';
 
 interface CRMLeadsTableProps {
   leads: Lead[];
@@ -136,6 +142,12 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
   const [snackbarMessage, setSnackbarMessage] = useState('');
   const [snackbarSeverity, setSnackbarSeverity] = useState<'success' | 'error' | 'warning' | 'info'>('info');
 
+  // Copy message state
+  const [copiedLeadIds, setCopiedLeadIds] = useState<Set<string>>(new Set());
+  const [offerHeadline, setOfferHeadline] = useState<string>('');
+  const [offerTemplate, setOfferTemplate] = useState<string>('');
+  const [companies, setCompanies] = useState<Map<string, Company>>(new Map());
+
   // Fetch all field definitions on mount (dropdowns, dates, etc.)
   useEffect(() => {
     const fetchFieldDefinitions = async () => {
@@ -149,6 +161,21 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
     };
 
     fetchFieldDefinitions();
+  }, []);
+
+  // Fetch settings on mount
+  useEffect(() => {
+    const fetchAppSettings = async () => {
+      try {
+        const settings = await getSettings();
+        setOfferHeadline(settings.offerHeadline || '');
+        setOfferTemplate(settings.offerTemplate || '');
+      } catch (error) {
+        console.error('Error fetching settings:', error);
+      }
+    };
+
+    fetchAppSettings();
   }, []);
 
   // Toggle company collapse/expand
@@ -389,6 +416,63 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
     handleDatePickerClose();
   };
 
+  // Copy full message handler (headline + body)
+  const handleCopyFullMessage = async (lead: Lead) => {
+    try {
+      // Build lead data object for template replacement
+      const leadData = {
+        name: lead.name,
+        email: lead.email,
+        phone: lead.phone,
+        company: lead.company || lead.companyName,
+        companyName: lead.company || lead.companyName,
+        status: lead.status,
+        customFields: lead.customFields,
+        createdAt: lead.createdAt,
+        updatedAt: lead.updatedAt,
+        outreach: lead.outreach,
+      };
+
+      // Replace template variables in headline and body
+      const headlineHtml = offerHeadline
+        ? replaceTemplateVariables(offerHeadline, leadData, null)
+        : '';
+      const bodyHtml = offerTemplate
+        ? replaceTemplateVariables(offerTemplate, leadData, null)
+        : '';
+
+      // Merge headline and body with blank line between them
+      // Format: headline + <p></p> (blank line) + body
+      const mergedHtml = headlineHtml && bodyHtml
+        ? `${headlineHtml}<p></p>${bodyHtml}`
+        : headlineHtml || bodyHtml;
+
+      if (!mergedHtml) {
+        showSnackbar('No offer template configured. Please go to Settings to create one.', 'warning');
+        return;
+      }
+
+      // Copy HTML with formatting preserved
+      await copyHtmlToClipboard(mergedHtml);
+
+      // Show success feedback
+      setCopiedLeadIds(prev => new Set(prev).add(lead.id));
+      showSnackbar('Offer message copied to clipboard!', 'success');
+
+      // Reset after 2 seconds
+      setTimeout(() => {
+        setCopiedLeadIds(prev => {
+          const newSet = new Set(prev);
+          newSet.delete(lead.id);
+          return newSet;
+        });
+      }, 2000);
+    } catch (error) {
+      console.error('Failed to copy message:', error);
+      showSnackbar('Failed to copy message. Please try again.', 'error');
+    }
+  };
+
   // Apollo enrichment handler
   const handleApolloEnrichment = async (lead: Lead) => {
     if (!user) {
@@ -501,6 +585,10 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
         case 'status':
           aValue = a.status;
           bValue = b.status;
+          break;
+        case 'linkedin_profile_url':
+          aValue = a.outreach?.linkedIn?.profileUrl || a.customFields?.linkedinUrl;
+          bValue = b.outreach?.linkedIn?.profileUrl || b.customFields?.linkedinUrl;
           break;
         case 'linkedin_status':
           aValue = a.outreach?.linkedIn?.status;
@@ -725,6 +813,45 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
           </TableCell>
         );
 
+      case 'linkedin_profile_url': {
+        const profileUrl = lead.outreach?.linkedIn?.profileUrl || lead.customFields?.linkedinUrl;
+        // Check if empty, null, undefined, or "NA" (case-insensitive)
+        const isInvalid = !profileUrl ||
+                         profileUrl === '' ||
+                         profileUrl.trim().toUpperCase() === 'NA' ||
+                         profileUrl.trim().toUpperCase() === 'N/A';
+
+        if (isInvalid) {
+          return (
+            <TableCell key={columnId}>
+              <Typography variant="body2" sx={{ fontSize: '11px', lineHeight: 1.2, color: 'text.secondary' }}>-</Typography>
+            </TableCell>
+          );
+        }
+        return (
+          <TableCell key={columnId}>
+            <Link
+              href={profileUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              onClick={(e) => e.stopPropagation()}
+              sx={{
+                fontSize: '11px',
+                lineHeight: 1.2,
+                color: '#0077b5',
+                textDecoration: 'none',
+                fontWeight: 500,
+                '&:hover': {
+                  textDecoration: 'underline',
+                },
+              }}
+            >
+              View Profile
+            </Link>
+          </TableCell>
+        );
+      }
+
       case 'linkedin_status': {
         const status = lead.outreach?.linkedIn?.status;
         if (!status || status === 'not_sent') {
@@ -858,6 +985,28 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
                 },
               }}
             />
+          </TableCell>
+        );
+      }
+
+      case 'actions': {
+        const isCopied = copiedLeadIds.has(lead.id);
+        return (
+          <TableCell key={columnId} onClick={(e) => e.stopPropagation()}>
+            <IconButton
+              size="small"
+              onClick={() => handleCopyFullMessage(lead)}
+              sx={{
+                color: isCopied ? '#10b981' : '#667eea',
+                '&:hover': {
+                  color: isCopied ? '#10b981' : '#5568d3',
+                  bgcolor: 'rgba(102, 126, 234, 0.1)',
+                },
+              }}
+              title={isCopied ? 'Copied!' : 'Copy offer message'}
+            >
+              {isCopied ? <CheckIcon sx={{ fontSize: '16px' }} /> : <CopyIcon sx={{ fontSize: '16px' }} />}
+            </IconButton>
           </TableCell>
         );
       }

@@ -279,10 +279,12 @@ export class WebflowAPI {
         fieldData: {
           name: article.name,
           slug: article.slug,
-          'external-url': article.externalUrl,
-          'post-summary': article.description || '',
-          'created-on': article.createdOn || '',
-          'last-edited': article.lastEdited || '',
+          'blog-external-link': article.externalUrl,
+          'blog-main-image': article.imageUrl || '',
+          'category': article.category || 'Case Studies & Tutorials', // Auto-detected content category (PlainText)
+          'blog-category-name': '68ee616f267332a8b301ba59', // W&B category reference (Reference/ItemRef)
+          'publish-date': new Date().toISOString(),
+          // Note: blog-details is RichText - would need article.description in rich text format
           // You can add more fields as needed based on your Webflow collection schema
         },
         isDraft: true, // Always create as draft for review

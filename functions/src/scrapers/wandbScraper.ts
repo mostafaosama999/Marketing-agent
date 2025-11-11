@@ -5,10 +5,12 @@
 
 import * as puppeteer from 'puppeteer';
 import {BaseProfileScraper, ScrapedArticle, ScraperConfig} from './baseScraper';
+import {detectCategorySimple} from '../utils/categoryDetector';
 
 interface WandBArticleRow {
   title: string;
   url: string;
+  imageUrl?: string;
   description?: string;
   createdOn?: string;
   lastEdited?: string;
@@ -89,6 +91,88 @@ export class WandBScraper extends BaseProfileScraper {
     }
 
     return dateStr;
+  }
+
+  /**
+   * Extract thumbnail image from individual report page
+   */
+  private async extractThumbnailFromReportPage(
+    browser: puppeteer.Browser,
+    reportUrl: string,
+    articleTitle: string
+  ): Promise<string | undefined> {
+    let page: puppeteer.Page | null = null;
+
+    try {
+      page = await browser.newPage();
+      await page.setViewport({width: 1920, height: 1080});
+
+      console.log(`  → Loading ${articleTitle.substring(0, 50)}...`);
+
+      await page.goto(reportUrl, {
+        waitUntil: 'networkidle2',
+        timeout: 30000,
+      });
+
+      // Wait a bit for images to load
+      await new Promise(resolve => setTimeout(resolve, 1000));
+
+      // Extract thumbnail using multiple strategies
+      const imageUrl = await page.evaluate(() => {
+        // Strategy 1: Open Graph meta tag (most reliable)
+        const ogImage = document.querySelector('meta[property="og:image"]');
+        if (ogImage) {
+          const content = ogImage.getAttribute('content');
+          if (content) return content;
+        }
+
+        // Strategy 2: Twitter card image
+        const twitterImage = document.querySelector('meta[name="twitter:image"]');
+        if (twitterImage) {
+          const content = twitterImage.getAttribute('content');
+          if (content) return content;
+        }
+
+        // Strategy 3: First large image in main content area
+        const contentImages = document.querySelectorAll('main img, article img, [role="main"] img');
+        for (const img of Array.from(contentImages)) {
+          const htmlImg = img as HTMLImageElement;
+          // Check if image is large enough to be a featured image
+          if (htmlImg.naturalWidth > 400 || htmlImg.width > 400) {
+            return htmlImg.src;
+          }
+        }
+
+        // Strategy 4: Any img with 'cover' or 'featured' or 'thumbnail' in class/id
+        const featuredImg = document.querySelector(
+          'img[class*="cover"], img[class*="featured"], img[class*="thumbnail"], img[id*="cover"]'
+        );
+        if (featuredImg) {
+          return (featuredImg as HTMLImageElement).src;
+        }
+
+        return null;
+      });
+
+      if (imageUrl) {
+        console.log(`  ✓ Found thumbnail`);
+      } else {
+        console.log(`  ⚠ No thumbnail found`);
+      }
+
+      return imageUrl || undefined;
+    } catch (error) {
+      console.warn(`  ✗ Failed to extract thumbnail: ${(error as Error).message}`);
+      return undefined;
+    } finally {
+      if (page) {
+        try {
+          await page.close();
+        } catch (e) {
+          // Ignore close errors
+        }
+      }
+    }
   }
 
   /**
@@ -194,9 +278,37 @@ export class WandBScraper extends BaseProfileScraper {
 
       console.log(`[${this.getScraperName()}] Extracted ${articles.length} raw articles`);
 
-      // Close browser
+      // Close the list page - we're done with it
+      await page.close();
+
+      // Extract thumbnails from individual report pages
+      console.log(`\n[${this.getScraperName()}] 📸 Extracting thumbnails from individual pages...\n`);
+
+      for (let i = 0; i < articles.length; i++) {
+        const article = articles[i];
+
+        console.log(`[${i + 1}/${articles.length}]`, article.title.substring(0, 60));
+
+        // Extract thumbnail
+        article.imageUrl = await this.extractThumbnailFromReportPage(
+          browser,
+          article.url,
+          article.title
+        );
+
+        // Add delay between requests to avoid rate limiting
+        if (i < articles.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second delay
+        }
+      }
+
+      // Close browser after all thumbnails are extracted
       await browser.close();
       browser = null;
+
+      // Count successful thumbnail extractions
+      const thumbnailsFound = articles.filter(a => a.imageUrl).length;
+      console.log(`\n✅ Successfully extracted ${thumbnailsFound}/${articles.length} thumbnails\n`);
 
       // Transform to ScrapedArticle format
       const scrapedArticles: ScrapedArticle[] = articles.map((article) => {
@@ -204,13 +316,22 @@ export class WandBScraper extends BaseProfileScraper {
 
         this.recordSuccess();
 
+        // Auto-detect category based on article title and description
+        const detectedCategory = detectCategorySimple(
+          article.title,
+          article.description
+        );
+
         return {
           name: this.cleanText(article.title),
           slug: slug,
           externalUrl: article.url,
+          imageUrl: article.imageUrl || undefined,
           description: article.description ? this.cleanText(article.description) : undefined,
           createdOn: article.createdOn ? this.parseDate(article.createdOn) : undefined,
           lastEdited: article.lastEdited ? this.parseDate(article.lastEdited) : undefined,
+          category: detectedCategory, // Auto-detected content category
+          blogCategory: 'W&B', // Source platform
         };
       });
 

@@ -12,12 +12,9 @@ export interface CSVRow {
   Name: string;
   Slug: string;
   'Blog External Link': string;
-  'Created On'?: string;
-  'Last Edited'?: string;
-  Description?: string;
-  'Image URL'?: string;
-  Author?: string;
-  Tags?: string;
+  'Thumbnail Image'?: string;
+  Category?: string; // Auto-detected content category
+  'Blog Category'?: string; // Source platform (W&B, Medium, etc.)
 }
 
 export class CSVManager {
@@ -38,12 +35,9 @@ export class CSVManager {
       Name: article.name,
       Slug: article.slug,
       'Blog External Link': article.externalUrl,
-      'Created On': article.createdOn || '',
-      'Last Edited': article.lastEdited || '',
-      Description: article.description || '',
-      'Image URL': article.imageUrl || '',
-      Author: article.author || '',
-      Tags: article.tags?.join(', ') || '',
+      'Thumbnail Image': article.imageUrl || '',
+      Category: article.category || '',
+      'Blog Category': article.blogCategory || '',
     }));
   }
 
@@ -55,12 +49,9 @@ export class CSVManager {
       name: row.Name,
       slug: row.Slug,
       externalUrl: row['Blog External Link'],
-      createdOn: row['Created On'] || undefined,
-      lastEdited: row['Last Edited'] || undefined,
-      description: row.Description || undefined,
-      imageUrl: row['Image URL'] || undefined,
-      author: row.Author || undefined,
-      tags: row.Tags ? row.Tags.split(',').map(t => t.trim()).filter(Boolean) : undefined,
+      imageUrl: row['Thumbnail Image'] || undefined,
+      category: row.Category || undefined,
+      blogCategory: row['Blog Category'] || undefined,
     }));
   }
 

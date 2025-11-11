@@ -13,9 +13,7 @@ interface CSVRow {
   Name: string;
   Slug: string;
   'Blog External Link': string;
-  'Created On'?: string;
-  'Last Edited'?: string;
-  Description?: string;
+  'Thumbnail Image'?: string;
 }
 
 async function runLocalScraper() {
@@ -57,9 +55,7 @@ async function runLocalScraper() {
       Name: article.name,
       Slug: article.slug,
       'Blog External Link': article.externalUrl,
-      'Created On': article.createdOn || '',
-      'Last Edited': article.lastEdited || '',
-      Description: article.description || '',
+      'Thumbnail Image': article.imageUrl || '',
     }));
 
     const csv = Papa.unparse(csvRows, {

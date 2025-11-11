@@ -13,6 +13,8 @@ export interface ScrapedArticle {
   imageUrl?: string;
   author?: string;
   tags?: string[];
+  category?: string; // Auto-detected content category (AI, Cloud, DevTools, etc.)
+  blogCategory?: string; // Source platform (W&B, Medium, etc.)
 }
 
 export interface ScraperConfig {
