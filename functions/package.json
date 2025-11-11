@@ -20,7 +20,8 @@
     "list:sites": "npm run build && node lib/test/listWebflowSites.js",
     "list:collections": "npm run build && node lib/test/listWebflowCollections.js",
     "get:category": "npm run build && node lib/test/getCategoryId.js",
-    "test:sheets": "npm run build && node lib/scripts/testSheetsSync.js"
+    "test:sheets": "npm run build && node lib/scripts/testSheetsSync.js",
+    "test:single-url": "npm run build && node lib/scripts/testSingleUrl.js"
   },
   "engines": {
     "node": "20"

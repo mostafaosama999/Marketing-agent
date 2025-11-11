@@ -249,6 +249,39 @@ export class WebflowAPI {
   }
 
   /**
+   * Fetch all blog categories and create a name → ID mapping
+   * NEW METHOD - For dynamic category assignment from spreadsheet
+   */
+  async getCategoryMapping(): Promise<Map<string, string>> {
+    try {
+      // Blog Categories collection ID
+      const categoriesCollectionId = '68ee616f267332a8b301b95b';
+      console.log('🔍 Fetching blog categories from Webflow...');
+
+      const response = await this.api.get(
+        `/v2/collections/${categoriesCollectionId}/items`
+      );
+
+      const items = response.data?.items || [];
+      console.log(`📊 Found ${items.length} category items`);
+
+      // Create mapping: category name → item ID
+      const mapping = new Map<string, string>();
+      items.forEach((item: any) => {
+        const categoryName = item.fieldData.name;
+        const itemId = item.id;
+        mapping.set(categoryName, itemId);
+        console.log(`  ✓ ${categoryName} → ${itemId}`);
+      });
+
+      return mapping;
+    } catch (error) {
+      console.error('❌ Error fetching category mapping:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Check if an article exists by slug
    * NEW METHOD - For profile scraper deduplication
    */
@@ -271,9 +304,25 @@ export class WebflowAPI {
    * Create article post from ScrapedArticle data
    * NEW METHOD - Maps scraped data to Webflow fields
    */
-  async createArticlePost(article: ScrapedArticle): Promise<WebflowBlogPost> {
+  async createArticlePost(
+    article: ScrapedArticle,
+    categoryMapping?: Map<string, string>
+  ): Promise<WebflowBlogPost> {
     try {
       console.log(`🆕 Creating article post: ${article.name}`);
+
+      // Look up blog category ID from mapping
+      let blogCategoryId = '68ee616f267332a8b301ba59'; // Default to W&B
+      if (categoryMapping && article.blogCategory) {
+        const mappedId = categoryMapping.get(article.blogCategory);
+        if (mappedId) {
+          blogCategoryId = mappedId;
+          console.log(`  ✓ Using category "${article.blogCategory}" → ${mappedId}`);
+        } else {
+          console.warn(`  ⚠ Category "${article.blogCategory}" not found in mapping. Available categories: ${Array.from(categoryMapping.keys()).join(', ')}`);
+          console.warn(`  ⚠ Falling back to W&B category`);
+        }
+      }
 
       const postData = {
         fieldData: {
@@ -282,7 +331,7 @@ export class WebflowAPI {
           'blog-external-link': article.externalUrl,
           'blog-main-image': article.imageUrl || '',
           'category': article.category || 'Case Studies & Tutorials', // Auto-detected content category (PlainText)
-          'blog-category-name': '68ee616f267332a8b301ba59', // W&B category reference (Reference/ItemRef)
+          'blog-category-name': blogCategoryId, // Blog source category (Reference/ItemRef)
           'publish-date': new Date().toISOString(),
           // Note: blog-details is RichText - would need article.description in rich text format
           // You can add more fields as needed based on your Webflow collection schema

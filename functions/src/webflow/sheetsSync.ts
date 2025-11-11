@@ -307,6 +307,10 @@ export async function performSheetsSync(): Promise<SyncStats> {
     // Initialize Webflow client
     const webflowClient = new WebflowAPI();
 
+    // Fetch category mapping once for all articles
+    console.log("🏷️ Fetching blog category mapping from Webflow...");
+    const categoryMapping = await webflowClient.getCategoryMapping();
+
     // Process each URL
     for (let i = 0; i < inputRows.length; i++) {
       const row = inputRows[i];
@@ -356,7 +360,7 @@ export async function performSheetsSync(): Promise<SyncStats> {
           blogCategory: scrapedData.blogCategory,
         };
 
-        await webflowClient.createArticlePost(article);
+        await webflowClient.createArticlePost(article, categoryMapping);
         stats.webflowCreated++;
         console.log(`  ✓ Created Webflow post`);
       } catch (error) {

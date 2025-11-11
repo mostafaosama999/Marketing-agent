@@ -366,8 +366,48 @@ class LocalWebflowAPI {
     });
   }
 
-  async createArticlePost(article: any) {
+  async getCategoryMapping(): Promise<Map<string, string>> {
+    try {
+      const categoriesCollectionId = "68ee616f267332a8b301b95b";
+      console.log("🔍 Fetching blog categories from Webflow...");
+
+      const response = await this.api.get(
+        `/v2/collections/${categoriesCollectionId}/items`
+      );
+
+      const items = response.data?.items || [];
+      console.log(`📊 Found ${items.length} category items`);
+
+      const mapping = new Map<string, string>();
+      items.forEach((item: any) => {
+        const categoryName = item.fieldData.name;
+        const itemId = item.id;
+        mapping.set(categoryName, itemId);
+        console.log(`  ✓ ${categoryName} → ${itemId}`);
+      });
+
+      return mapping;
+    } catch (error) {
+      console.error("❌ Error fetching category mapping:", error);
+      throw error;
+    }
+  }
+
+  async createArticlePost(article: any, categoryMapping?: Map<string, string>) {
     console.log(`🆕 Creating article post: ${article.name}`);
+
+    // Look up blog category ID from mapping
+    let blogCategoryId = "68ee616f267332a8b301ba59"; // Default to W&B
+    if (categoryMapping && article.blogCategory) {
+      const mappedId = categoryMapping.get(article.blogCategory);
+      if (mappedId) {
+        blogCategoryId = mappedId;
+        console.log(`  ✓ Using category "${article.blogCategory}" → ${mappedId}`);
+      } else {
+        console.warn(`  ⚠ Category "${article.blogCategory}" not found in mapping. Available categories: ${Array.from(categoryMapping.keys()).join(", ")}`);
+        console.warn(`  ⚠ Falling back to W&B category`);
+      }
+    }
 
     const postData = {
       fieldData: {
@@ -376,7 +416,7 @@ class LocalWebflowAPI {
         "blog-external-link": article.externalUrl,
         "blog-main-image": article.imageUrl || "",
         category: article.category || "Case Studies & Tutorials",
-        "blog-category-name": "68ee616f267332a8b301ba59",
+        "blog-category-name": blogCategoryId,
         "publish-date": new Date().toISOString(),
       },
       isDraft: true,
@@ -439,6 +479,10 @@ async function runLocalTest() {
 
     const webflowClient = new LocalWebflowAPI();
 
+    // Fetch category mapping once for all articles
+    console.log("🏷️ Fetching blog category mapping from Webflow...");
+    const categoryMapping = await webflowClient.getCategoryMapping();
+
     for (let i = 0; i < inputRows.length; i++) {
       const row = inputRows[i];
 
@@ -475,7 +519,7 @@ async function runLocalTest() {
       }
 
       try {
-        await webflowClient.createArticlePost(scrapedData);
+        await webflowClient.createArticlePost(scrapedData, categoryMapping);
         stats.webflowCreated++;
         console.log(`  ✓ Created Webflow post`);
       } catch (error) {
