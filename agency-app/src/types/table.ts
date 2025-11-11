@@ -56,7 +56,7 @@ export const DEFAULT_WRITING_PROGRAM_TABLE_COLUMNS: TableColumnConfig[] = [
 // Backwards compatibility
 export const DEFAULT_TABLE_COLUMNS = DEFAULT_LEADS_TABLE_COLUMNS;
 
-export const TABLE_COLUMNS_STORAGE_KEY = 'crm_table_columns_visibility';
+export const TABLE_COLUMNS_STORAGE_KEY = 'crm_table_columns_v2';
 export const COMPANIES_TABLE_COLUMNS_STORAGE_KEY = 'companies_table_columns_visibility';
 export const WRITING_PROGRAM_TABLE_COLUMNS_STORAGE_KEY = 'writing_program_table_columns_visibility';
 
