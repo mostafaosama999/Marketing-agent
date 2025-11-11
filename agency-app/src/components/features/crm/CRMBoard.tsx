@@ -63,6 +63,9 @@ import {
   getDefaultPreset,
   migrateLocalStorageToFirestore,
 } from '../../../services/api/filterPresetsService';
+import { ReleaseNotesBanner } from './ReleaseNotesBanner';
+import { ReleaseNote, UserReleaseNoteState } from '../../../types/releaseNotes';
+import { getLatestReleaseNote, getUserReleaseState } from '../../../services/api/releaseNotesService';
 
 // Modern theme matching KanbanBoard
 const modernTheme = createTheme({
@@ -137,6 +140,10 @@ function CRMBoard() {
   // Table column visibility state
   const [tableColumns, setTableColumns] = useState<TableColumnConfig[]>(DEFAULT_TABLE_COLUMNS);
 
+  // Release notes state
+  const [latestRelease, setLatestRelease] = useState<ReleaseNote | null>(null);
+  const [userReleaseState, setUserReleaseState] = useState<UserReleaseNoteState | null>(null);
+
   // Get columns with counts from dynamic pipeline stages
   const getColumns = () => {
     return stages
@@ -169,6 +176,27 @@ function CRMBoard() {
 
     return () => unsubscribe();
   }, []);
+
+  // Load release notes
+  useEffect(() => {
+    const loadReleaseNotes = async () => {
+      if (!user) return;
+
+      try {
+        const [release, userState] = await Promise.all([
+          getLatestReleaseNote(),
+          getUserReleaseState(user.uid),
+        ]);
+
+        setLatestRelease(release);
+        setUserReleaseState(userState);
+      } catch (error) {
+        console.error('Error loading release notes:', error);
+      }
+    };
+
+    loadReleaseNotes();
+  }, [user]);
 
   // Reset columns when all leads are deleted
   useEffect(() => {
@@ -1011,6 +1039,15 @@ function CRMBoard() {
         overflow: 'hidden',
         p: 4,
       }}>
+        {/* Release Notes Banner */}
+        {user && (
+          <ReleaseNotesBanner
+            release={latestRelease}
+            userState={userReleaseState}
+            userId={user.uid}
+          />
+        )}
+
         {/* Header */}
         <Box sx={{
           background: 'rgba(255, 255, 255, 0.95)',

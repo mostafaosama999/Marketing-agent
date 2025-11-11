@@ -29,6 +29,7 @@ export {searchPeopleCloud} from "./apollo/searchPeople";
 
 // Export new profile scraper functions
 export {profileScraperSync} from "./webflow/profileSync";
+export {sheetsScraperSync} from "./webflow/sheetsSync";
 export {
   triggerProfileScraper,
   runScraperOnly,

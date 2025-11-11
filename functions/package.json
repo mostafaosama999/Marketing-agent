@@ -17,7 +17,8 @@
     "update:categories": "npm run build && node lib/test/updateCsvCategories.js",
     "list:sites": "npm run build && node lib/test/listWebflowSites.js",
     "list:collections": "npm run build && node lib/test/listWebflowCollections.js",
-    "get:category": "npm run build && node lib/test/getCategoryId.js"
+    "get:category": "npm run build && node lib/test/getCategoryId.js",
+    "test:sheets": "npm run build && node lib/scripts/testSheetsSync.js"
   },
   "engines": {
     "node": "20"
@@ -30,6 +31,7 @@
     "axios": "^1.6.8",
     "cheerio": "^1.0.0-rc.12",
     "cors": "^2.8.5",
+    "dotenv": "^17.2.3",
     "firebase-admin": "^12.1.0",
     "firebase-functions": "^5.0.0",
     "googleapis": "^134.0.0",

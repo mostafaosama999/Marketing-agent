@@ -35,7 +35,7 @@ export async function getGoogleDocsAuth() {
       scopes: [
         "https://www.googleapis.com/auth/documents",
         "https://www.googleapis.com/auth/drive",
-        "https://www.googleapis.com/auth/spreadsheets.readonly",
+        "https://www.googleapis.com/auth/spreadsheets", // Changed from readonly to read/write
       ],
     });
 

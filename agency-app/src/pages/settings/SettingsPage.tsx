@@ -42,6 +42,7 @@ import {
 } from '../../services/api/templateVariablesService';
 import TiptapRichTextEditor from '../../components/common/TiptapRichTextEditor';
 import { SafeHtmlRenderer, getHtmlCharCount, isHtmlEmpty } from '../../utils/htmlHelpers';
+import { ReleaseNotesTab } from '../../components/settings/ReleaseNotesTab';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -386,6 +387,7 @@ export const SettingsPage: React.FC = () => {
           <Tabs value={tabValue} onChange={handleTabChange}>
             <Tab label="Offer Template" />
             <Tab label="AI Prompts" />
+            <Tab label="Release Notes" />
             <Tab label="General" />
           </Tabs>
         </Box>
@@ -741,8 +743,13 @@ export const SettingsPage: React.FC = () => {
             </Box>
           </TabPanel>
 
-          {/* General Tab */}
+          {/* Release Notes Tab */}
           <TabPanel value={tabValue} index={2}>
+            <ReleaseNotesTab />
+          </TabPanel>
+
+          {/* General Tab */}
+          <TabPanel value={tabValue} index={3}>
             <Box
               sx={{
                 textAlign: 'center',

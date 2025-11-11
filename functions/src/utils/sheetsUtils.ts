@@ -60,6 +60,66 @@ export async function readSheetData(
 }
 
 /**
+ * Read data from a specific tab in Google Sheets
+ */
+export async function readFromTab(
+  sheetId: string,
+  tabName: string,
+  range: string = "A:Z"
+): Promise<SheetData> {
+  try {
+    const auth = await getGoogleSheetsAuth();
+    const sheets = google.sheets({version: "v4", auth: auth as any});
+
+    // Format: 'TabName'!A:Z
+    const fullRange = `'${tabName}'!${range}`;
+
+    const response = await sheets.spreadsheets.values.get({
+      spreadsheetId: sheetId,
+      range: fullRange,
+    });
+
+    return {
+      values: response.data.values || [],
+    };
+  } catch (error) {
+    console.error(`Error reading from tab "${tabName}":`, error);
+    throw new Error(`Failed to read from tab "${tabName}": ${error}`);
+  }
+}
+
+/**
+ * Append rows to a specific tab in Google Sheets
+ */
+export async function appendToTab(
+  sheetId: string,
+  tabName: string,
+  values: string[][]
+): Promise<void> {
+  try {
+    const auth = await getGoogleSheetsAuth();
+    const sheets = google.sheets({version: "v4", auth: auth as any});
+
+    // Format: 'TabName'!A:Z
+    const range = `'${tabName}'!A:Z`;
+
+    await sheets.spreadsheets.values.append({
+      spreadsheetId: sheetId,
+      range,
+      valueInputOption: "RAW",
+      requestBody: {
+        values,
+      },
+    });
+
+    console.log(`✅ Successfully appended ${values.length} row(s) to tab "${tabName}"`);
+  } catch (error) {
+    console.error(`Error appending to tab "${tabName}":`, error);
+    throw new Error(`Failed to append to tab "${tabName}": ${error}`);
+  }
+}
+
+/**
  * Analyze Program distribution (Column G)
  */
 export function analyzeProgramDistribution(data: string[][]): ProgramDistribution {
