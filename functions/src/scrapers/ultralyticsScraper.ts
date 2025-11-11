@@ -107,16 +107,75 @@ export class UltralyticsScraper extends BaseProfileScraper {
             const dateMatch = dateText.match(/(January|February|March|April|May|June|July|August|September|October|November|December)\s+\d{1,2},\s+\d{4}/);
             const date = dateMatch ? dateMatch[0] : '';
 
-            // Extract thumbnail/hero image
+            // Extract thumbnail/hero image with improved selection
             let imageUrl = '';
             const images = Array.from(document.querySelectorAll('img'));
+
+            // Score images based on quality indicators
+            interface ScoredImage {
+              url: string;
+              score: number;
+              width: number;
+              height: number;
+            }
+
+            const scoredImages: ScoredImage[] = [];
+
             for (const img of images) {
               const src = img.src || '';
-              // Look for CDN images (hero/thumbnail images)
-              if (src.includes('cdn.prod.website-files.com') && !src.includes('logo')) {
-                imageUrl = src;
-                break;
+
+              // Must be from CDN
+              if (!src.includes('cdn.prod.website-files.com')) continue;
+
+              // Skip unwanted image types
+              if (src.includes('logo') ||
+                  src.includes('icon') ||
+                  src.endsWith('.svg') ||
+                  src.includes('button') ||
+                  src.includes('close') ||
+                  src.includes('menu')) {
+                continue;
               }
+
+              let score = 0;
+
+              // High priority: thumbnail/hero keywords in filename
+              if (src.includes('thumbnail') || src.includes('Thumbnail')) score += 50;
+              if (src.includes('hero') || src.includes('Hero')) score += 50;
+              if (src.includes('featured') || src.includes('Featured')) score += 40;
+              if (src.includes('banner') || src.includes('Banner')) score += 40;
+              if (src.includes('cover') || src.includes('Cover')) score += 30;
+
+              // Prefer webp/jpg/png over other formats
+              if (src.endsWith('.webp') || src.endsWith('.jpg') || src.endsWith('.jpeg') || src.endsWith('.png')) {
+                score += 10;
+              }
+
+              // Get image dimensions
+              const width = img.naturalWidth || img.width || 0;
+              const height = img.naturalHeight || img.height || 0;
+
+              // Prefer larger images (typical thumbnail size > 400x200)
+              if (width > 600 && height > 300) score += 30;
+              else if (width > 400 && height > 200) score += 20;
+              else if (width > 200 && height > 100) score += 10;
+
+              // Check if image is in a hero/featured section
+              const parent = img.closest('[class*="hero"], [class*="featured"], [class*="banner"], [class*="thumbnail"]');
+              if (parent) score += 25;
+
+              scoredImages.push({
+                url: src,
+                score: score,
+                width: width,
+                height: height
+              });
+            }
+
+            // Sort by score (highest first) and select best match
+            if (scoredImages.length > 0) {
+              scoredImages.sort((a, b) => b.score - a.score);
+              imageUrl = scoredImages[0].url;
             }
 
             // Extract category tag

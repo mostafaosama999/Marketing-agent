@@ -24,6 +24,9 @@ import {
   InputLabel,
   Select,
   Grid,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from '@mui/material';
 import {
   Email as EmailIcon,
@@ -31,12 +34,19 @@ import {
   Delete as DeleteIcon,
   Archive as ArchiveIcon,
   Unarchive as UnarchiveIcon,
+  ExpandMore as ExpandMoreIcon,
 } from '@mui/icons-material';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { Lead, LeadFormData, LeadStatusChange } from '../../../types/lead';
 import { leadTimelineService } from '../../../services/api/leadSubcollections';
 import { useAuth } from '../../../contexts/AuthContext';
 import { usePipelineConfigContext } from '../../../contexts/PipelineConfigContext';
 import { fetchEmail } from '../../../services/api/apolloService';
+import { FieldDefinition } from '../../../types/fieldDefinitions';
+import { getFieldDefinitions } from '../../../services/api/fieldDefinitionsService';
+import { getLeadNameForApollo, validateNameForApollo } from '../../../utils/nameUtils';
 
 interface LeadDialogProps {
   open: boolean;
@@ -90,6 +100,10 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
   const [apolloLoading, setApolloLoading] = useState(false);
   const [apolloError, setApolloError] = useState<string | null>(null);
   const [apolloSuccess, setApolloSuccess] = useState<string | null>(null);
+
+  // Field definitions for custom fields
+  const [fieldDefinitions, setFieldDefinitions] = useState<FieldDefinition[]>([]);
+  const [loadingFields, setLoadingFields] = useState(false);
 
   // Form state
   const [formData, setFormData] = useState<LeadFormData>({
@@ -172,10 +186,39 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
     fetchActivity();
   }, [mode, lead, open]);
 
+  // Fetch field definitions when dialog opens
+  useEffect(() => {
+    const fetchFields = async () => {
+      if (open) {
+        setLoadingFields(true);
+        try {
+          const definitions = await getFieldDefinitions('lead');
+          setFieldDefinitions(definitions);
+        } catch (error) {
+          console.error('Error fetching field definitions:', error);
+        } finally {
+          setLoadingFields(false);
+        }
+      }
+    };
+
+    fetchFields();
+  }, [open]);
+
   const handleChange = (field: keyof LeadFormData, value: any) => {
     setFormData((prev) => ({
       ...prev,
       [field]: value,
+    }));
+  };
+
+  const handleCustomFieldChange = (fieldName: string, value: any) => {
+    setFormData((prev) => ({
+      ...prev,
+      customFields: {
+        ...prev.customFields,
+        [fieldName]: value,
+      },
     }));
   };
 
@@ -258,20 +301,19 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
     setApolloSuccess(null);
 
     // Validate required fields
-    if (!formData.name || !formData.company) {
-      setApolloError('Name and Company are required to fetch email from Apollo.io');
+    if (!formData.company) {
+      setApolloError('Company is required to fetch email from Apollo.io');
       return;
     }
 
-    // Parse name into first and last name
-    const nameParts = formData.name.trim().split(' ');
-    const firstName = nameParts[0] || '';
-    const lastName = nameParts.slice(1).join(' ') || nameParts[0]; // Fallback to first name if no last name
-
-    if (!firstName) {
-      setApolloError('Please provide a valid name');
+    // Validate and extract first/last name from formData
+    const validationError = validateNameForApollo(formData);
+    if (validationError) {
+      setApolloError(validationError);
       return;
     }
+
+    const { firstName, lastName } = getLeadNameForApollo(formData);
 
     setApolloLoading(true);
 
@@ -371,101 +413,358 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
         {/* Details Tab */}
         <TabPanel value={tabValue} index={0}>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-            {/* Name */}
-            <TextField
-              label="Name"
-              value={formData.name}
-              onChange={(e) => handleChange('name', e.target.value)}
-              required
-              fullWidth
-            />
+            {/* General Information Section */}
+            <Accordion defaultExpanded>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '16px' }}>
+                  General Information
+                </Typography>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {/* Name */}
+                  <TextField
+                    label="Name"
+                    value={formData.name}
+                    onChange={(e) => handleChange('name', e.target.value)}
+                    required
+                    fullWidth
+                  />
 
-            {/* Email */}
-            <Box>
-              <TextField
-                label="Email"
-                type="email"
-                value={formData.email}
-                onChange={(e) => handleChange('email', e.target.value)}
-                fullWidth
-                InputProps={{
-                  endAdornment: formData.email ? (
-                    <InputAdornment position="end">
-                      <EmailIcon color="action" />
-                    </InputAdornment>
-                  ) : undefined,
-                }}
-              />
+                  {/* Email */}
+                  <Box>
+                    <TextField
+                      label="Email"
+                      type="email"
+                      value={formData.email}
+                      onChange={(e) => handleChange('email', e.target.value)}
+                      fullWidth
+                      InputProps={{
+                        endAdornment: formData.email ? (
+                          <InputAdornment position="end">
+                            <EmailIcon color="action" />
+                          </InputAdornment>
+                        ) : undefined,
+                      }}
+                    />
 
-              {/* Apollo Email Fetch Button - Only show when email is empty */}
-              {!formData.email && (
-                <Button
-                  variant="outlined"
-                  size="small"
-                  onClick={handleFetchEmail}
-                  disabled={apolloLoading || !formData.name || !formData.company}
-                  startIcon={apolloLoading ? <CircularProgress size={16} /> : <EmailIcon />}
-                  sx={{
-                    mt: 1,
-                    textTransform: 'none',
-                    borderColor: '#2196f3',
-                    color: '#2196f3',
-                    '&:hover': {
-                      borderColor: '#1976d2',
-                      bgcolor: 'rgba(33, 150, 243, 0.04)',
-                    },
-                  }}
-                >
-                  {apolloLoading ? 'Fetching...' : 'Get email from Apollo.io (costs 1 credit)'}
-                </Button>
-              )}
+                    {/* Apollo Email Fetch Button - Only show when email is empty */}
+                    {!formData.email && (
+                      <Button
+                        variant="outlined"
+                        size="small"
+                        onClick={handleFetchEmail}
+                        disabled={apolloLoading || !formData.name || !formData.company}
+                        startIcon={apolloLoading ? <CircularProgress size={16} /> : <EmailIcon />}
+                        sx={{
+                          mt: 1,
+                          textTransform: 'none',
+                          borderColor: '#2196f3',
+                          color: '#2196f3',
+                          '&:hover': {
+                            borderColor: '#1976d2',
+                            bgcolor: 'rgba(33, 150, 243, 0.04)',
+                          },
+                        }}
+                      >
+                        {apolloLoading ? 'Fetching...' : 'Get email from Apollo.io (costs 1 credit)'}
+                      </Button>
+                    )}
 
-              {/* Success/Error Messages */}
-              {apolloSuccess && (
-                <Alert severity="success" sx={{ mt: 1 }} onClose={() => setApolloSuccess(null)}>
-                  {apolloSuccess}
-                </Alert>
-              )}
-              {apolloError && (
-                <Alert severity="error" sx={{ mt: 1 }} onClose={() => setApolloError(null)}>
-                  {apolloError}
-                </Alert>
-              )}
-            </Box>
+                    {/* Success/Error Messages */}
+                    {apolloSuccess && (
+                      <Alert severity="success" sx={{ mt: 1 }} onClose={() => setApolloSuccess(null)}>
+                        {apolloSuccess}
+                      </Alert>
+                    )}
+                    {apolloError && (
+                      <Alert severity="error" sx={{ mt: 1 }} onClose={() => setApolloError(null)}>
+                        {apolloError}
+                      </Alert>
+                    )}
+                  </Box>
 
-            {/* Phone */}
-            <TextField
-              label="Phone"
-              value={formData.phone}
-              onChange={(e) => handleChange('phone', e.target.value)}
-              fullWidth
-            />
+                  {/* Phone */}
+                  <TextField
+                    label="Phone"
+                    value={formData.phone}
+                    onChange={(e) => handleChange('phone', e.target.value)}
+                    fullWidth
+                  />
 
-            {/* Company */}
-            <TextField
-              label="Company"
-              value={formData.company}
-              onChange={(e) => handleChange('company', e.target.value)}
-              required
-              fullWidth
-              helperText="Will be auto-created if it doesn't exist"
-            />
+                  {/* Company */}
+                  <TextField
+                    label="Company"
+                    value={formData.company}
+                    onChange={(e) => handleChange('company', e.target.value)}
+                    required
+                    fullWidth
+                    helperText="Will be auto-created if it doesn't exist"
+                  />
 
-            {/* Status */}
-            <TextField
-              select
-              label="Status"
-              value={formData.status}
-              onChange={(e) => handleChange('status', e.target.value as any)}
-              required
-              fullWidth
-            >
-              {stages.map((stage) => (
-                <MenuItem key={stage.id} value={stage.id}>
-                  {stage.label}
-                </MenuItem>
-              ))}
-            </TextField>
+                  {/* Status */}
+                  <TextField
+                    select
+                    label="Status"
+                    value={formData.status}
+                    onChange={(e) => handleChange('status', e.target.value as any)}
+                    required
+                    fullWidth
+                  >
+                    {stages.map((stage) => (
+                      <MenuItem key={stage.id} value={stage.id}>
+                        {stage.label}
+                      </MenuItem>
+                    ))}
+                  </TextField>
+
+                  {/* General Custom Fields */}
+                  {fieldDefinitions
+                    .filter(def => def.section === 'general')
+                    .map(def => (
+                      <Box key={def.id}>
+                        {def.fieldType === 'text' && (
+                          <TextField
+                            label={def.label}
+                            value={formData.customFields?.[def.name] || ''}
+                            onChange={(e) => handleCustomFieldChange(def.name, e.target.value)}
+                            fullWidth
+                          />
+                        )}
+                        {def.fieldType === 'number' && (
+                          <TextField
+                            label={def.label}
+                            type="number"
+                            value={formData.customFields?.[def.name] || ''}
+                            onChange={(e) => handleCustomFieldChange(def.name, e.target.value)}
+                            fullWidth
+                          />
+                        )}
+                        {def.fieldType === 'date' && (
+                          <LocalizationProvider dateAdapter={AdapterDateFns}>
+                            <DatePicker
+                              label={def.label}
+                              value={formData.customFields?.[def.name] ? new Date(formData.customFields[def.name]) : null}
+                              onChange={(date) => handleCustomFieldChange(def.name, date?.toISOString())}
+                              slotProps={{
+                                textField: {
+                                  fullWidth: true,
+                                },
+                              }}
+                            />
+                          </LocalizationProvider>
+                        )}
+                        {def.fieldType === 'dropdown' && (
+                          <TextField
+                            select
+                            label={def.label}
+                            value={formData.customFields?.[def.name] || ''}
+                            onChange={(e) => handleCustomFieldChange(def.name, e.target.value)}
+                            fullWidth
+                          >
+                            <MenuItem value="">
+                              <em>None</em>
+                            </MenuItem>
+                            {def.options?.map(option => (
+                              <MenuItem key={option} value={option}>
+                                {option}
+                              </MenuItem>
+                            ))}
+                          </TextField>
+                        )}
+                      </Box>
+                    ))}
+                </Box>
+              </AccordionDetails>
+            </Accordion>
+
+            {/* LinkedIn Outreach Section */}
+            <Accordion defaultExpanded={mode === 'create'}>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <LinkedInIcon sx={{ color: '#0077b5' }} />
+                  <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '16px' }}>
+                    LinkedIn Outreach
+                  </Typography>
+                </Box>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {/* LinkedIn Profile URL */}
+                  <TextField
+                    label="LinkedIn Profile URL"
+                    value={linkedInProfileUrl}
+                    onChange={(e) => setLinkedInProfileUrl(e.target.value)}
+                    placeholder="https://linkedin.com/in/..."
+                    fullWidth
+                  />
+
+                  {/* LinkedIn Status */}
+                  <FormControl fullWidth>
+                    <InputLabel>LinkedIn Status</InputLabel>
+                    <Select
+                      value={linkedInStatus}
+                      onChange={(e) => setLinkedInStatus(e.target.value as any)}
+                      label="LinkedIn Status"
+                    >
+                      <MenuItem value="not_sent">Not Sent</MenuItem>
+                      <MenuItem value="sent">Sent</MenuItem>
+                      <MenuItem value="opened">Opened</MenuItem>
+                      <MenuItem value="replied">Replied</MenuItem>
+                      <MenuItem value="refused">Refused</MenuItem>
+                      <MenuItem value="no_response">No Response</MenuItem>
+                    </Select>
+                  </FormControl>
+
+                  {/* LinkedIn Custom Fields */}
+                  {fieldDefinitions
+                    .filter(def => def.section === 'linkedin')
+                    .map(def => (
+                      <Box key={def.id}>
+                        {def.fieldType === 'text' && (
+                          <TextField
+                            label={def.label}
+                            value={formData.customFields?.[def.name] || ''}
+                            onChange={(e) => handleCustomFieldChange(def.name, e.target.value)}
+                            fullWidth
+                          />
+                        )}
+                        {def.fieldType === 'number' && (
+                          <TextField
+                            label={def.label}
+                            type="number"
+                            value={formData.customFields?.[def.name] || ''}
+                            onChange={(e) => handleCustomFieldChange(def.name, e.target.value)}
+                            fullWidth
+                          />
+                        )}
+                        {def.fieldType === 'date' && (
+                          <LocalizationProvider dateAdapter={AdapterDateFns}>
+                            <DatePicker
+                              label={def.label}
+                              value={formData.customFields?.[def.name] ? new Date(formData.customFields[def.name]) : null}
+                              onChange={(date) => handleCustomFieldChange(def.name, date?.toISOString())}
+                              slotProps={{
+                                textField: {
+                                  fullWidth: true,
+                                },
+                              }}
+                            />
+                          </LocalizationProvider>
+                        )}
+                        {def.fieldType === 'dropdown' && (
+                          <TextField
+                            select
+                            label={def.label}
+                            value={formData.customFields?.[def.name] || ''}
+                            onChange={(e) => handleCustomFieldChange(def.name, e.target.value)}
+                            fullWidth
+                          >
+                            <MenuItem value="">
+                              <em>None</em>
+                            </MenuItem>
+                            {def.options?.map(option => (
+                              <MenuItem key={option} value={option}>
+                                {option}
+                              </MenuItem>
+                            ))}
+                          </TextField>
+                        )}
+                      </Box>
+                    ))}
+                </Box>
+              </AccordionDetails>
+            </Accordion>
+
+            {/* Email Outreach Section */}
+            <Accordion defaultExpanded={mode === 'create'}>
+              <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <EmailIcon sx={{ color: '#ea4335' }} />
+                  <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '16px' }}>
+                    Email Outreach
+                  </Typography>
+                </Box>
+              </AccordionSummary>
+              <AccordionDetails>
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {/* Email Outreach Status */}
+                  <FormControl fullWidth>
+                    <InputLabel>Email Outreach Status</InputLabel>
+                    <Select
+                      value={emailStatus}
+                      onChange={(e) => setEmailStatus(e.target.value as any)}
+                      label="Email Outreach Status"
+                    >
+                      <MenuItem value="not_sent">Not Sent</MenuItem>
+                      <MenuItem value="sent">Sent</MenuItem>
+                      <MenuItem value="opened">Opened</MenuItem>
+                      <MenuItem value="replied">Replied</MenuItem>
+                      <MenuItem value="bounced">Bounced</MenuItem>
+                      <MenuItem value="refused">Refused</MenuItem>
+                      <MenuItem value="no_response">No Response</MenuItem>
+                    </Select>
+                  </FormControl>
+
+                  {/* Email Custom Fields */}
+                  {fieldDefinitions
+                    .filter(def => def.section === 'email')
+                    .map(def => (
+                      <Box key={def.id}>
+                        {def.fieldType === 'text' && (
+                          <TextField
+                            label={def.label}
+                            value={formData.customFields?.[def.name] || ''}
+                            onChange={(e) => handleCustomFieldChange(def.name, e.target.value)}
+                            fullWidth
+                          />
+                        )}
+                        {def.fieldType === 'number' && (
+                          <TextField
+                            label={def.label}
+                            type="number"
+                            value={formData.customFields?.[def.name] || ''}
+                            onChange={(e) => handleCustomFieldChange(def.name, e.target.value)}
+                            fullWidth
+                          />
+                        )}
+                        {def.fieldType === 'date' && (
+                          <LocalizationProvider dateAdapter={AdapterDateFns}>
+                            <DatePicker
+                              label={def.label}
+                              value={formData.customFields?.[def.name] ? new Date(formData.customFields[def.name]) : null}
+                              onChange={(date) => handleCustomFieldChange(def.name, date?.toISOString())}
+                              slotProps={{
+                                textField: {
+                                  fullWidth: true,
+                                },
+                              }}
+                            />
+                          </LocalizationProvider>
+                        )}
+                        {def.fieldType === 'dropdown' && (
+                          <TextField
+                            select
+                            label={def.label}
+                            value={formData.customFields?.[def.name] || ''}
+                            onChange={(e) => handleCustomFieldChange(def.name, e.target.value)}
+                            fullWidth
+                          >
+                            <MenuItem value="">
+                              <em>None</em>
+                            </MenuItem>
+                            {def.options?.map(option => (
+                              <MenuItem key={option} value={option}>
+                                {option}
+                              </MenuItem>
+                            ))}
+                          </TextField>
+                        )}
+                      </Box>
+                    ))}
+                </Box>
+              </AccordionDetails>
+            </Accordion>
 
             {/* Time in Current State (Edit mode only) */}
             {mode === 'edit' && lead && (

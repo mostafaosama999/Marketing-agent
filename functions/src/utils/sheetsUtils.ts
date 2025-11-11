@@ -120,6 +120,43 @@ export async function appendToTab(
 }
 
 /**
+ * Update a specific cell in a Google Sheets tab
+ */
+export async function updateCell(
+  sheetId: string,
+  tabName: string,
+  rowIndex: number,
+  columnIndex: number,
+  value: string
+): Promise<void> {
+  try {
+    const auth = await getGoogleSheetsAuth();
+    const sheets = google.sheets({version: "v4", auth: auth as any});
+
+    // Convert column index to letter (0 = A, 1 = B, etc.)
+    const columnLetter = String.fromCharCode(65 + columnIndex);
+
+    // Row index in sheets is 1-based (header is row 1, data starts at row 2)
+    const sheetRow = rowIndex + 1;
+    const range = `'${tabName}'!${columnLetter}${sheetRow}`;
+
+    await sheets.spreadsheets.values.update({
+      spreadsheetId: sheetId,
+      range,
+      valueInputOption: "RAW",
+      requestBody: {
+        values: [[value]],
+      },
+    });
+
+    console.log(`✅ Updated ${range} to "${value}"`);
+  } catch (error) {
+    console.error(`Error updating cell ${tabName}:`, error);
+    throw new Error(`Failed to update cell: ${error}`);
+  }
+}
+
+/**
  * Analyze Program distribution (Column G)
  */
 export function analyzeProgramDistribution(data: string[][]): ProgramDistribution {

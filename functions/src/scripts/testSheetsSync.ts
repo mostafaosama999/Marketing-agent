@@ -156,8 +156,8 @@ async function updatePublishedStatus(
 /**
  * Parse Input tab data
  */
-function parseInputData(values: string[][]): InputRow[] {
-  if (values.length === 0) return [];
+function parseInputData(values: string[][]): { rows: InputRow[]; publishedColumnIndex: number } {
+  if (values.length === 0) return { rows: [], publishedColumnIndex: -1 };
 
   const headers = values[0].map((h) => h.toLowerCase().trim());
   const urlIndex = headers.findIndex((h) => h === "url");
@@ -181,7 +181,7 @@ function parseInputData(values: string[][]): InputRow[] {
     rows.push({url, published, category, rowIndex: i});
   }
 
-  return rows;
+  return { rows, publishedColumnIndex: publishedIndex };
 }
 
 /**
@@ -421,7 +421,7 @@ async function runLocalTest() {
     console.log(`\n📊 Reading from Google Sheet: ${sheetId}`);
 
     const inputData = await readFromTabLocal(sheetId, INPUT_TAB_NAME);
-    const inputRows = parseInputData(inputData.values);
+    const { rows: inputRows, publishedColumnIndex } = parseInputData(inputData.values);
 
     stats.totalUrls = inputRows.length;
     console.log(`📋 Found ${inputRows.length} URLs to process (filtered: Published ≠ "yes")`);
@@ -433,7 +433,7 @@ async function runLocalTest() {
 
     console.log("🌐 Launching Puppeteer browser...");
     browser = await puppeteer.launch({
-      headless: false, // Set to false to see browser (helpful for debugging!)
+      headless: true, // Headless mode for faster processing
       args: ["--no-sandbox", "--disable-setuid-sandbox"],
     });
 
@@ -464,6 +464,11 @@ async function runLocalTest() {
 
         await appendToTabLocal(sheetId, OUTPUT_TAB_NAME, [outputRow]);
         console.log(`  ✓ Appended to Output tab`);
+
+        // Mark as published in Input tab after successful write to Output
+        if (publishedColumnIndex !== -1) {
+          await updatePublishedStatus(sheetId, INPUT_TAB_NAME, row.rowIndex, publishedColumnIndex);
+        }
       } catch (error) {
         console.error(`  ✗ Failed to append to Output tab:`, error);
         stats.errors++;

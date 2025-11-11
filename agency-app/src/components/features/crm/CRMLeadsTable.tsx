@@ -44,7 +44,9 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { copyHtmlToClipboard } from '../../../utils/htmlHelpers';
 import { replaceTemplateVariables } from '../../../services/api/templateVariablesService';
 import { getSettings } from '../../../services/api/settings';
+import { getLeadNameForApollo, validateNameForApollo } from '../../../utils/nameUtils';
 import { Company } from '../../../types/crm';
+import { getCompany } from '../../../services/api/companies';
 
 interface CRMLeadsTableProps {
   leads: Lead[];
@@ -419,6 +421,12 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
   // Copy full message handler (headline + body)
   const handleCopyFullMessage = async (lead: Lead) => {
     try {
+      // Fetch company data if lead has companyId
+      let companyData: Company | null = null;
+      if (lead.companyId) {
+        companyData = await getCompany(lead.companyId);
+      }
+
       // Build lead data object for template replacement
       const leadData = {
         name: lead.name,
@@ -433,12 +441,12 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
         outreach: lead.outreach,
       };
 
-      // Replace template variables in headline and body
+      // Replace template variables in headline and body with company data
       const headlineHtml = offerHeadline
-        ? replaceTemplateVariables(offerHeadline, leadData, null)
+        ? replaceTemplateVariables(offerHeadline, leadData, companyData)
         : '';
       const bodyHtml = offerTemplate
-        ? replaceTemplateVariables(offerTemplate, leadData, null)
+        ? replaceTemplateVariables(offerTemplate, leadData, companyData)
         : '';
 
       // Merge headline and body with blank line between them
@@ -489,20 +497,14 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
     setEnrichingLeadIds(prev => new Set(prev).add(lead.id));
 
     try {
-      // Parse first name and last name from lead.name
-      const nameParts = lead.name.trim().split(' ');
-      const firstName = nameParts[0] || '';
-      const lastName = nameParts.slice(1).join(' ') || '';
-
-      if (!firstName) {
-        showSnackbar('Lead must have a valid name for Apollo enrichment', 'error');
+      // Validate and extract first/last name from lead
+      const validationError = validateNameForApollo(lead);
+      if (validationError) {
+        showSnackbar(validationError, 'warning');
         return;
       }
 
-      if (!lastName) {
-        showSnackbar('Lead must have both first and last name for Apollo enrichment', 'warning');
-        return;
-      }
+      const { firstName, lastName } = getLeadNameForApollo(lead);
 
       // Call Apollo API
       const result = await fetchEmail({
@@ -707,7 +709,7 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
         );
 
       case 'email': {
-        const hasEmail = lead.email && lead.email.trim() !== '';
+        const hasEmail = lead.email && lead.email.trim() !== '' && lead.email.trim() !== '-';
         const isEnriching = enrichingLeadIds.has(lead.id);
 
         return (

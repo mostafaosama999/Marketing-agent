@@ -5,7 +5,7 @@
 
 import * as functions from "firebase-functions/v2";
 import {defineString} from "firebase-functions/params";
-import {readFromTab, appendToTab, extractSheetId} from "../utils/sheetsUtils";
+import {readFromTab, appendToTab, updateCell, extractSheetId} from "../utils/sheetsUtils";
 import {WebflowAPI} from "../utils/webflowUtils";
 import {detectCategorySimple} from "../utils/categoryDetector";
 import * as puppeteer from "puppeteer";
@@ -48,9 +48,9 @@ interface SyncStats {
 /**
  * Parse Input tab data
  */
-function parseInputData(values: string[][]): InputRow[] {
+function parseInputData(values: string[][]): { rows: InputRow[]; publishedColumnIndex: number } {
   if (values.length === 0) {
-    return [];
+    return { rows: [], publishedColumnIndex: -1 };
   }
 
   const headers = values[0].map((h) => h.toLowerCase().trim());
@@ -84,26 +84,42 @@ function parseInputData(values: string[][]): InputRow[] {
     });
   }
 
-  return rows;
+  return { rows, publishedColumnIndex: publishedIndex };
 }
 
 /**
  * Extract title from page
+ * Priority: h1 in article/main > first h1 > og:title > title tag
  */
 async function extractTitle(page: puppeteer.Page): Promise<string> {
   return await page.evaluate(() => {
-    // Try multiple strategies
+    // Strategy 1: Try h1 in article/main content areas first (most reliable for article title)
+    const contentH1 = document.querySelector("article h1, main h1, [role=\"main\"] h1, .article h1, .content h1");
+    if (contentH1) {
+      const title = contentH1.textContent?.trim();
+      if (title && title.length > 0) return title;
+    }
+
+    // Strategy 2: Try first h1 anywhere on the page
+    const h1 = document.querySelector("h1");
+    if (h1) {
+      const title = h1.textContent?.trim();
+      if (title && title.length > 0) return title;
+    }
+
+    // Strategy 3: Try og:title meta tag (but might contain site name)
     const ogTitle = document.querySelector('meta[property="og:title"]');
     if (ogTitle) {
       const content = ogTitle.getAttribute("content");
-      if (content) return content;
+      if (content && content.length > 0) return content;
     }
 
-    const h1 = document.querySelector("h1");
-    if (h1) return h1.textContent?.trim() || "";
-
+    // Strategy 4: Last resort - title tag (often contains site name)
     const titleTag = document.querySelector("title");
-    if (titleTag) return titleTag.textContent?.trim() || "";
+    if (titleTag) {
+      const title = titleTag.textContent?.trim();
+      if (title && title.length > 0) return title;
+    }
 
     return "Untitled Article";
   });
@@ -266,7 +282,7 @@ export async function performSheetsSync(): Promise<SyncStats> {
 
     // Read Input tab
     const inputData = await readFromTab(sheetId, INPUT_TAB_NAME);
-    const inputRows = parseInputData(inputData.values);
+    const { rows: inputRows, publishedColumnIndex } = parseInputData(inputData.values);
 
     stats.totalUrls = inputRows.length;
     console.log(`📋 Found ${inputRows.length} URLs to process (filtered: Published ≠ "yes")`);
@@ -319,6 +335,11 @@ export async function performSheetsSync(): Promise<SyncStats> {
 
         await appendToTab(sheetId, OUTPUT_TAB_NAME, [outputRow]);
         console.log(`  ✓ Appended to Output tab`);
+
+        // Mark as published in Input tab after successful write to Output
+        if (publishedColumnIndex !== -1) {
+          await updateCell(sheetId, INPUT_TAB_NAME, row.rowIndex, publishedColumnIndex, "Yes");
+        }
       } catch (error) {
         console.error(`  ✗ Failed to append to Output tab:`, error);
         stats.errors++;

@@ -48,6 +48,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { usePipelineConfigContext } from '../../contexts/PipelineConfigContext';
 import { fetchEmail } from '../../services/api/apolloService';
 import { getCompany } from '../../services/api/companies';
+import { getLeadNameForApollo, validateNameForApollo } from '../../utils/nameUtils';
 import { Company } from '../../types/crm';
 import { getSettings } from '../../services/api/settings';
 import { replaceTemplateVariables } from '../../services/api/templateVariablesService';
@@ -427,20 +428,19 @@ export const LeadDetailPage: React.FC = () => {
     setApolloSuccess(null);
 
     // Validate required fields
-    if (!formData.name || !formData.company) {
-      setApolloError('Name and Company are required to fetch email from Apollo.io');
+    if (!formData.company) {
+      setApolloError('Company is required to fetch email from Apollo.io');
       return;
     }
 
-    // Parse name into first and last name
-    const nameParts = formData.name.trim().split(' ');
-    const firstName = nameParts[0] || '';
-    const lastName = nameParts.slice(1).join(' ') || nameParts[0]; // Fallback to first name if no last name
-
-    if (!firstName) {
-      setApolloError('Please provide a valid name');
+    // Validate and extract first/last name from formData
+    const validationError = validateNameForApollo(formData);
+    if (validationError) {
+      setApolloError(validationError);
       return;
     }
+
+    const { firstName, lastName } = getLeadNameForApollo(formData);
 
     setApolloLoading(true);
 

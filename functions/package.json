@@ -10,6 +10,7 @@
     "logs": "firebase functions:log",
     "test:scraper": "npm run build && node lib/test/runScraperLocal.js",
     "test:ultralytics": "npm run build && node lib/test/testUltralyticsScraper.js",
+    "test:ultralytics:single": "npm run build && node lib/test/testUltralyticsSingleUrl.js",
     "debug:scraper": "npm run build && node lib/test/debugScraper.js",
     "test:thumbnails": "npm run build && node lib/test/testThumbnails.js",
     "test:webflow": "npm run build && node lib/test/testWebflowSync.js",
