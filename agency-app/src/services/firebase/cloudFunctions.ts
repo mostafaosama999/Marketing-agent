@@ -342,3 +342,52 @@ export async function generateCompanyIdeas(
     throw new Error(error.message || 'Failed to generate ideas');
   }
 }
+
+// Find Competitors Types
+export interface FindCompetitorsRequest {
+  companyId: string;
+  companyName: string;
+  website?: string;
+  description?: string;
+  industry?: string;
+}
+
+export interface Competitor {
+  name: string;
+  website: string;
+  description: string;
+  companySize: string;
+  whyCompetitor: string;
+}
+
+export interface FindCompetitorsResponse {
+  competitors: Competitor[];
+  companyName: string;
+  analysisComplete: boolean;
+  costInfo?: {
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    inputCost: number;
+    outputCost: number;
+    totalCost: number;
+    model: string;
+  };
+}
+
+export async function findCompetitors(
+  request: FindCompetitorsRequest
+): Promise<FindCompetitorsResponse> {
+  try {
+    const findCompetitorsFunc = httpsCallable<
+      FindCompetitorsRequest,
+      FindCompetitorsResponse
+    >(functions, 'findCompetitors');
+
+    const result = await findCompetitorsFunc(request);
+    return result.data;
+  } catch (error: any) {
+    console.error('Error finding competitors:', error);
+    throw new Error(error.message || 'Failed to find competitors');
+  }
+}

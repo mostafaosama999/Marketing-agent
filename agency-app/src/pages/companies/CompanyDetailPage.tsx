@@ -36,6 +36,7 @@ import {
   Email as EmailIcon,
   Save as SaveIcon,
   Search as SearchIcon,
+  CompareArrows as CompareArrowsIcon,
 } from '@mui/icons-material';
 import { Company, CompanyFormData } from '../../types/crm';
 import {
@@ -61,6 +62,7 @@ import { OfferIdeasSection } from '../../components/features/companies/OfferIdea
 import { WebsiteFieldMappingDialog } from '../../components/features/companies/WebsiteFieldMappingDialog';
 import { WritingProgramUrlSelectionDialog } from '../../components/features/companies/WritingProgramUrlSelectionDialog';
 import { LeadDiscoveryDialog } from '../../components/features/companies/LeadDiscoveryDialog';
+import { CompetitorWorkflowDialog } from '../../components/features/companies/CompetitorWorkflowDialog';
 import {
   getCompanyWebsite,
   getWebsiteFieldMapping,
@@ -153,6 +155,9 @@ export const CompanyDetailPage: React.FC = () => {
 
   // Lead discovery dialog state
   const [leadDiscoveryDialogOpen, setLeadDiscoveryDialogOpen] = useState(false);
+
+  // Competitor workflow dialog state
+  const [competitorDialogOpen, setCompetitorDialogOpen] = useState(false);
 
   // Offer state
   const [offerText, setOfferText] = useState('');
@@ -1066,6 +1071,23 @@ export const CompanyDetailPage: React.FC = () => {
                       {saving ? <CircularProgress size={24} sx={{ color: 'white' }} /> : 'Save'}
                     </Button>
                   )}
+                  <Button
+                    startIcon={<CompareArrowsIcon />}
+                    variant="outlined"
+                    onClick={() => setCompetitorDialogOpen(true)}
+                    sx={{
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      borderColor: '#667eea',
+                      color: '#667eea',
+                      '&:hover': {
+                        borderColor: '#5568d3',
+                        bgcolor: 'rgba(102, 126, 234, 0.08)',
+                      },
+                    }}
+                  >
+                    Find Competitors
+                  </Button>
                   <IconButton
                     onClick={handleArchiveToggle}
                     sx={{
@@ -1827,6 +1849,15 @@ export const CompanyDetailPage: React.FC = () => {
             console.log(`Successfully imported ${count} leads`);
             // Leads will update automatically via real-time subscription
           }}
+        />
+      )}
+
+      {/* Competitor Workflow Dialog */}
+      {company && (
+        <CompetitorWorkflowDialog
+          open={competitorDialogOpen}
+          onClose={() => setCompetitorDialogOpen(false)}
+          company={company}
         />
       )}
 

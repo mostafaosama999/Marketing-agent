@@ -46,7 +46,8 @@ import { usePipelineConfigContext } from '../../../contexts/PipelineConfigContex
 import { fetchEmail } from '../../../services/api/apolloService';
 import { FieldDefinition } from '../../../types/fieldDefinitions';
 import { getFieldDefinitions } from '../../../services/api/fieldDefinitionsService';
-import { getLeadNameForApollo, validateNameForApollo } from '../../../utils/nameUtils';
+import { getLeadNameForApollo, validateNameForApollo, splitFullName } from '../../../utils/nameUtils';
+import { NameConfirmationDialog } from './NameConfirmationDialog';
 
 interface LeadDialogProps {
   open: boolean;
@@ -100,6 +101,11 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
   const [apolloLoading, setApolloLoading] = useState(false);
   const [apolloError, setApolloError] = useState<string | null>(null);
   const [apolloSuccess, setApolloSuccess] = useState<string | null>(null);
+
+  // Name confirmation dialog state
+  const [nameConfirmationOpen, setNameConfirmationOpen] = useState(false);
+  const [suggestedFirstName, setSuggestedFirstName] = useState('');
+  const [suggestedLastName, setSuggestedLastName] = useState('');
 
   // Field definitions for custom fields
   const [fieldDefinitions, setFieldDefinitions] = useState<FieldDefinition[]>([]);
@@ -306,16 +312,37 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
       return;
     }
 
-    // Validate and extract first/last name from formData
-    const validationError = validateNameForApollo(formData);
-    if (validationError) {
-      setApolloError(validationError);
+    // Check for full name and show confirmation dialog
+    const { firstName, lastName, needsConfirmation, missingFields } = getLeadNameForApollo(formData);
+
+    if (needsConfirmation) {
+      // Full name detected, show confirmation dialog
+      const { firstName: suggestedFirst, lastName: suggestedLast } = splitFullName(firstName);
+      setSuggestedFirstName(suggestedFirst);
+      setSuggestedLastName(suggestedLast);
+      setNameConfirmationOpen(true);
       return;
     }
 
-    const { firstName, lastName } = getLeadNameForApollo(formData);
+    // Validate name fields
+    if (missingFields.length > 0) {
+      const missingFieldsText = missingFields.join(' and ');
+      const tip = missingFields.includes('last name')
+        ? ` Tip: Add a 'last name' custom field to your leads via CSV import or lead details.`
+        : '';
+      setApolloError(`Apollo enrichment requires both first and last name. Missing: ${missingFieldsText}.${tip}`);
+      return;
+    }
 
+    // Perform enrichment
+    await performApolloEnrichment(firstName, lastName);
+  };
+
+  // Perform the actual Apollo enrichment
+  const performApolloEnrichment = async (firstName: string, lastName: string) => {
     setApolloLoading(true);
+    setApolloError(null);
+    setApolloSuccess(null);
 
     try {
       // Call Cloud Function (no API key needed - it's stored securely on the server)
@@ -334,7 +361,14 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
         }));
         setApolloSuccess(`Email found: ${result.email} (1 credit used)`);
       } else {
-        setApolloError(result.error || 'No email found for this person');
+        // Categorize errors for better display
+        if (result.error?.includes('Invalid Apollo API key')) {
+          setApolloError('Authentication error: Invalid Apollo API key. Please contact support.');
+        } else if (result.error?.includes('No match found')) {
+          setApolloError('No match found. Try adding a LinkedIn URL or verifying the company name for better results.');
+        } else {
+          setApolloError(result.error || 'No email found for this person');
+        }
       }
     } catch (error) {
       console.error('Error fetching email from Apollo:', error);
@@ -342,6 +376,19 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
     } finally {
       setApolloLoading(false);
     }
+  };
+
+  // Handle name confirmation dialog close
+  const handleNameConfirmationClose = () => {
+    setNameConfirmationOpen(false);
+    setSuggestedFirstName('');
+    setSuggestedLastName('');
+  };
+
+  // Handle name confirmed from dialog
+  const handleNameConfirmed = async (firstName: string, lastName: string) => {
+    setNameConfirmationOpen(false);
+    await performApolloEnrichment(firstName, lastName);
   };
 
   const handleDelete = async () => {
@@ -1032,6 +1079,15 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
           </Button>
         </Box>
       </DialogActions>
+
+      {/* Name Confirmation Dialog */}
+      <NameConfirmationDialog
+        open={nameConfirmationOpen}
+        onClose={handleNameConfirmationClose}
+        onConfirm={handleNameConfirmed}
+        suggestedFirstName={suggestedFirstName}
+        suggestedLastName={suggestedLastName}
+      />
     </Dialog>
   );
 };

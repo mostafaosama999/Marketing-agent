@@ -26,6 +26,7 @@ export {getLeadIdeas, updateIdeaStatus} from "./ideaGenerator/generateIdeas";
 export {fetchApolloEmail} from "./apollo/apolloProxy";
 export {enrichOrganizationCloud} from "./apollo/enrichOrganization";
 export {searchPeopleCloud} from "./apollo/searchPeople";
+export {findCompetitors} from "./competitors/findCompetitors";
 
 // Export new profile scraper functions
 export {profileScraperSync} from "./webflow/profileSync";
@@ -38,3 +39,6 @@ export {
   getScraperStatusInfo,
   runAllScrapersManual,
 } from "./webflow/manualTrigger";
+
+// Export analytics functions
+export {extractLinkedInAnalytics} from "./analytics/extractLinkedInAnalytics";

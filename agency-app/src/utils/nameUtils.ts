@@ -7,6 +7,7 @@ export interface NameParts {
   firstName: string;
   lastName: string;
   missingFields: string[]; // List of missing field names for error messages
+  needsConfirmation?: boolean; // Indicates if name was detected as full name and needs user confirmation
 }
 
 /**
@@ -49,6 +50,41 @@ function findCustomFieldValue(
 }
 
 /**
+ * Detects if a string appears to be a full name (first + last name)
+ * Returns true if the string contains at least 2 words
+ *
+ * @param name - Name string to check
+ * @returns true if appears to be a full name
+ */
+export function detectFullName(name: string): boolean {
+  if (!name || typeof name !== 'string') return false;
+  const trimmed = name.trim();
+  const parts = trimmed.split(/\s+/);
+  return parts.length >= 2 && parts.every(part => part.length >= 1);
+}
+
+/**
+ * Splits a full name into first and last name components
+ * Takes the first word as first name, everything else as last name
+ *
+ * @param name - Full name string to split
+ * @returns Object with firstName and lastName
+ */
+export function splitFullName(name: string): { firstName: string; lastName: string } {
+  const trimmed = name.trim();
+  const spaceIndex = trimmed.indexOf(' ');
+
+  if (spaceIndex === -1) {
+    return { firstName: trimmed, lastName: '' };
+  }
+
+  return {
+    firstName: trimmed.substring(0, spaceIndex).trim(),
+    lastName: trimmed.substring(spaceIndex + 1).trim(),
+  };
+}
+
+/**
  * Extracts first and last name from a Lead object for Apollo enrichment.
  *
  * Priority:
@@ -62,6 +98,7 @@ function findCustomFieldValue(
  */
 export function getLeadNameForApollo(lead: Lead | LeadFormData): NameParts {
   const missingFields: string[] = [];
+  let needsConfirmation = false;
 
   // Try to get first name from core 'name' field first
   let firstName = lead.name?.trim() || '';
@@ -72,13 +109,18 @@ export function getLeadNameForApollo(lead: Lead | LeadFormData): NameParts {
   }
 
   // Get last name from custom fields only (no fallback)
-  const lastName = findCustomFieldValue(lead.customFields, LAST_NAME_PATTERNS) || '';
+  let lastName = findCustomFieldValue(lead.customFields, LAST_NAME_PATTERNS) || '';
+
+  // Check if firstName contains a full name (e.g., "John Doe")
+  if (firstName && !lastName && detectFullName(firstName)) {
+    needsConfirmation = true;
+  }
 
   // Track missing fields for error messages
   if (!firstName) {
     missingFields.push('first name');
   }
-  if (!lastName) {
+  if (!lastName && !needsConfirmation) {
     missingFields.push('last name');
   }
 
@@ -86,6 +128,7 @@ export function getLeadNameForApollo(lead: Lead | LeadFormData): NameParts {
     firstName,
     lastName,
     missingFields,
+    needsConfirmation,
   };
 }
 

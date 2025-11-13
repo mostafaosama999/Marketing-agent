@@ -36,6 +36,7 @@ import {
   OpenInNew as OpenInNewIcon,
   Business as BusinessIcon,
   AutoAwesome as AutoAwesomeIcon,
+  CompareArrows as CompareArrowsIcon,
 } from '@mui/icons-material';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -54,6 +55,7 @@ interface CompanyTableProps {
   selectedCompanyIds?: string[];
   onSelectCompany?: (companyId: string) => void;
   onSelectAll?: (selected: boolean) => void;
+  onFindCompetitors?: (company: Company) => void;
 }
 
 type SortDirection = 'asc' | 'desc';
@@ -65,6 +67,7 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
   selectedCompanyIds = [],
   onSelectCompany,
   onSelectAll,
+  onFindCompetitors,
 }) => {
   // Filter to only show visible columns
   const displayColumns = visibleColumns.filter(col => col.visible);
@@ -997,6 +1000,27 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
                               ) : (
                                 <AutoAwesomeIcon sx={{ fontSize: '16px' }} />
                               )}
+                            </IconButton>
+                          </Tooltip>
+                        )}
+
+                        {/* Find Competitors Button */}
+                        {onFindCompetitors && (
+                          <Tooltip title="Find competitors">
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                onFindCompetitors(company);
+                              }}
+                              sx={{
+                                color: '#667eea',
+                                '&:hover': {
+                                  backgroundColor: 'rgba(102, 126, 234, 0.1)',
+                                },
+                              }}
+                            >
+                              <CompareArrowsIcon sx={{ fontSize: '16px' }} />
                             </IconButton>
                           </Tooltip>
                         )}

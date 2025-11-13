@@ -12,6 +12,7 @@ import TeamManagement from './pages/team/TeamManagement';
 import TeamMemberPerformance from './pages/team/TeamMemberPerformance';
 import ProjectMonitoring from './pages/analytics/ProjectMonitoring';
 import LeadAnalytics from './pages/analytics/LeadAnalytics';
+import OutboundAnalytics from './pages/analytics/OutboundAnalytics';
 import CompaniesPage from './pages/companies/CompaniesPage';
 import CompanyDetailPage from './pages/companies/CompanyDetailPage';
 import LeadDetailPage from './pages/leads/LeadDetailPage';
@@ -86,6 +87,7 @@ function AppContent() {
           <Route path="/team" element={<TeamManagement />} />
           <Route path="/team-member/:userId" element={<TeamMemberPerformance />} />
           <Route path="/analytics" element={<LeadAnalytics />} />
+          <Route path="/analytics/outbound" element={<OutboundAnalytics />} />
           <Route path="/monitoring" element={<ProjectMonitoring />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>

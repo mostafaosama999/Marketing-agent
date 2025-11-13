@@ -22,6 +22,7 @@ import {
   TrendingUp,
   Business,
   Settings,
+  Campaign,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLocation, Link } from 'react-router-dom';
@@ -46,7 +47,6 @@ const BrandText = styled(Typography)(({ theme }) => ({
   fontWeight: 700,
   letterSpacing: '-0.02em',
   color: 'white',
-  flexGrow: 1,
 }));
 
 const NavButton = styled(Button, {
@@ -221,11 +221,26 @@ const Navbar: React.FC = () => {
   return (
     <ModernAppBar position="static" elevation={0}>
       <ModernToolbar>
-        <BrandText variant="h6">
-          Agency Platform
-        </BrandText>
+        {/* Left Side - Brand and Outbound */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+          <BrandText variant="h6">
+            Agency Platform
+          </BrandText>
 
-        {/* Navigation Items */}
+          {/* Outbound Button - Left Side */}
+          <NavButton
+            isActive={location.pathname === '/analytics/outbound'}
+            startIcon={<Campaign />}
+            {...({ component: Link, to: '/analytics/outbound' } as any)}
+          >
+            OUTBOUND
+          </NavButton>
+        </Box>
+
+        {/* Spacer to push nav items to the right */}
+        <Box sx={{ flexGrow: 1 }} />
+
+        {/* Navigation Items - Right Side */}
         <NavContainer>
           {getNavItems().map((item) => {
             const Icon = item.icon;

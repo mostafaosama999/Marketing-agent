@@ -33,6 +33,7 @@ import {
 import { CompanyDialog } from '../../components/features/companies/CompanyDialog';
 import { CompanyTable } from '../../components/features/companies/CompanyTable';
 import { WritingProgramTable } from '../../components/features/companies/WritingProgramTable';
+import { CompetitorWorkflowDialog } from '../../components/features/companies/CompetitorWorkflowDialog';
 import { WritingProgramBulkActionsToolbar } from '../../components/features/companies/WritingProgramBulkActionsToolbar';
 import { BulkWritingProgramDialog } from '../../components/features/companies/BulkWritingProgramDialog';
 import { WritingProgramUrlSelectionDialog } from '../../components/features/companies/WritingProgramUrlSelectionDialog';
@@ -141,6 +142,10 @@ export const CompaniesPage: React.FC = () => {
 
   // Preset dialog state
   const [showSavePresetDialog, setShowSavePresetDialog] = useState(false);
+
+  // Competitor workflow dialog state
+  const [competitorDialogOpen, setCompetitorDialogOpen] = useState(false);
+  const [selectedCompanyForCompetitors, setSelectedCompanyForCompetitors] = useState<Company | null>(null);
 
   // Table column visibility state - DUAL STATE for both views
   const [allCompaniesColumns, setAllCompaniesColumns] = useState<TableColumnConfig[]>(DEFAULT_COMPANIES_TABLE_COLUMNS);
@@ -333,6 +338,11 @@ export const CompaniesPage: React.FC = () => {
 
   const handleViewCompany = (company: Company) => {
     navigate(`/companies/${company.id}`);
+  };
+
+  const handleFindCompetitors = (company: Company) => {
+    setSelectedCompanyForCompetitors(company);
+    setCompetitorDialogOpen(true);
   };
 
   const handleDialogClose = () => {
@@ -1072,6 +1082,7 @@ export const CompaniesPage: React.FC = () => {
                     handleSelectCompany(companyId, !isSelected);
                   }}
                   onSelectAll={handleSelectAll}
+                  onFindCompetitors={handleFindCompetitors}
                 />
               ) : (
                 <WritingProgramTable
@@ -1172,6 +1183,18 @@ export const CompaniesPage: React.FC = () => {
             companies={companies}
             onSave={handleWebsiteMappingSave}
           />
+
+          {/* Competitor Workflow Dialog */}
+          {selectedCompanyForCompetitors && (
+            <CompetitorWorkflowDialog
+              open={competitorDialogOpen}
+              onClose={() => {
+                setCompetitorDialogOpen(false);
+                setSelectedCompanyForCompetitors(null);
+              }}
+              company={selectedCompanyForCompetitors}
+            />
+          )}
         </>
       )}
 
