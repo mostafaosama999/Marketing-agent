@@ -169,7 +169,7 @@ const LinkedInManualSync: React.FC<LinkedInManualSyncProps> = ({
             </Typography>
             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mt: 2 }}>
               <Chip
-                label={`${result.data.postsExtracted} posts`}
+                label={`${result.data.postCount} posts`}
                 size="small"
                 color="primary"
               />

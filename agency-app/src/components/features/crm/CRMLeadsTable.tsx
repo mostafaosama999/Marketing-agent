@@ -47,6 +47,8 @@ import { getSettings } from '../../../services/api/settings';
 import { getLeadNameForApollo, validateNameForApollo } from '../../../utils/nameUtils';
 import { Company } from '../../../types/crm';
 import { getCompany } from '../../../services/api/companies';
+import { collection, getDocs } from 'firebase/firestore';
+import { db } from '../../../services/firebase/firestore';
 
 interface CRMLeadsTableProps {
   leads: Lead[];
@@ -70,8 +72,9 @@ const getStatusColor = (status: LeadStatus): string => {
     qualified: '#ff9800',
     contacted: '#2196f3',
     follow_up: '#9c27b0',
+    nurture: '#00bcd4',
     won: '#4caf50',
-    lost: '#607d8b',
+    lost: '#f44336',
   };
   return colors[status] || '#9e9e9e';
 };
@@ -155,10 +158,39 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
     const fetchFieldDefinitions = async () => {
       try {
         const definitions = await getFieldDefinitions('lead');
-        console.log('Loaded all field definitions:', definitions);
+        console.log('🔍 [CRMLeadsTable] Loaded field definitions:', definitions);
+
+        const linkedInFields = definitions.filter(def => def.section === 'linkedin');
+        console.log('🔍 [CRMLeadsTable] LinkedIn field definitions:', linkedInFields.map(f => ({
+          name: f.name,
+          label: f.label,
+          fieldType: f.fieldType,
+          hasOptions: !!f.options,
+          optionsCount: f.options?.length
+        })));
+
+        // Enhance "Who Applied" field with users from Firestore
+        const whoAppliedField = definitions.find(def => def.name === 'linkedin_who_applied');
+        if (whoAppliedField) {
+          try {
+            const usersSnapshot = await getDocs(collection(db, 'users'));
+            const userNames = usersSnapshot.docs
+              .map(doc => doc.data().displayName || doc.data().email)
+              .filter(name => name)
+              .sort();
+
+            // Only use real users from Firestore, ignore hardcoded options
+            whoAppliedField.options = userNames;
+
+            console.log('🔍 [CRMLeadsTable] Enhanced who_applied options:', userNames);
+          } catch (error) {
+            console.error('❌ [CRMLeadsTable] Error loading users for who_applied:', error);
+          }
+        }
+
         setFieldDefinitions(definitions);
       } catch (error) {
-        console.error('Error fetching field definitions:', error);
+        console.error('❌ [CRMLeadsTable] Error fetching field definitions:', error);
       }
     };
 
@@ -384,13 +416,6 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
 
           // Auto-set outreach status to 'sent' if this is a contact date field
           const contactType = isContactDateField(selectedDateFieldName);
-          console.log('🔍 Date field changed:', {
-            fieldName: selectedDateFieldName,
-            detectedType: contactType,
-            lead: selectedLeadForDate.name,
-            linkedInStatus: selectedLeadForDate.outreach?.linkedIn?.status,
-            emailStatus: selectedLeadForDate.outreach?.email?.status,
-          });
 
           if (contactType === 'linkedin') {
             const currentStatus = selectedLeadForDate.outreach?.linkedIn?.status || 'not_sent';
@@ -400,10 +425,6 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
             }
           } else if (contactType === 'email') {
             const currentStatus = selectedLeadForDate.outreach?.email?.status || 'not_sent';
-            console.log('📧 Attempting to update email status:', {
-              currentStatus,
-              willUpdate: currentStatus === 'not_sent',
-            });
             if (currentStatus === 'not_sent') {
               await updateLeadEmailStatus(selectedLeadForDate.id, 'sent');
               showSnackbar('Email status automatically set to "Sent"', 'success');
@@ -1022,30 +1043,40 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
           // Check if this is a dropdown field (check column.fieldType first, then fallback to fieldDefinitions)
           const isDropdown = column.fieldType === 'dropdown' || isDropdownField(column.fieldName);
 
+          // Debug logging for linkedin fields
+          if (column.fieldName.includes('linkedin_')) {
+            console.log(`🔍 [Render] Field: ${column.fieldName}`, {
+              columnFieldType: column.fieldType,
+              isDropdownFromFunc: isDropdownField(column.fieldName),
+              isDropdownFinal: isDropdown,
+              value: value,
+              columnId: columnId,
+              label: column.label
+            });
+          }
+
           if (isDropdown) {
-            // Empty dropdown - show placeholder
-            if (!value || value === '') {
-              return (
-                <TableCell key={columnId}>
-                  <Typography variant="body2" sx={{ fontSize: '11px', lineHeight: 1.2, color: 'text.secondary' }}>-</Typography>
-                </TableCell>
-              );
-            }
+            // All dropdown fields render as clickable chips, even when empty
+            const displayValue = value || '-';
 
             return (
               <TableCell key={columnId}>
                 <Chip
-                  label={String(value)}
+                  label={String(displayValue)}
                   size="small"
                   onClick={(e) => handleCustomFieldClick(e, lead, column.fieldName!)}
                   sx={{
                     fontSize: '10px',
                     height: '20px',
                     cursor: 'pointer',
-                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    background: (!value || value === '' || value === '-')
+                      ? 'linear-gradient(135deg, #94a3b8 0%, #64748b 100%)' // Gray for empty
+                      : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', // Purple for filled
                     color: 'white',
                     '&:hover': {
-                      background: 'linear-gradient(135deg, #5568d3 0%, #6b408e 100%)',
+                      background: (!value || value === '' || value === '-')
+                        ? 'linear-gradient(135deg, #64748b 0%, #475569 100%)' // Darker gray on hover
+                        : 'linear-gradient(135deg, #5568d3 0%, #6b408e 100%)', // Darker purple on hover
                     },
                   }}
                 />

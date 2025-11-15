@@ -1,7 +1,7 @@
 // CRM Lead management types
 
 // Lead status type (pipeline stages)
-export type LeadStatus = 'new_lead' | 'qualified' | 'contacted' | 'follow_up' | 'won' | 'lost';
+export type LeadStatus = 'new_lead' | 'qualified' | 'contacted' | 'follow_up' | 'nurture' | 'won' | 'lost';
 
 // Main Lead interface
 export interface Lead {
@@ -23,6 +23,7 @@ export interface Lead {
     qualified?: string;
     contacted?: string;
     follow_up?: string;
+    nurture?: string;
     won?: string;
     lost?: string;
   };
@@ -33,6 +34,7 @@ export interface Lead {
     qualified?: number;
     contacted?: number;
     follow_up?: number;
+    nurture?: number;
     won?: number;
     lost?: number;
   };
@@ -96,6 +98,7 @@ export interface LeadTimeline {
     qualified?: string;
     contacted?: string;
     follow_up?: string;
+    nurture?: string;
     won?: string;
     lost?: string;
   };
@@ -106,6 +109,7 @@ export interface LeadTimeline {
     qualified?: number;
     contacted?: number;
     follow_up?: number;
+    nurture?: number;
     won?: number;
     lost?: number;
   };

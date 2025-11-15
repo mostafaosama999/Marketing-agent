@@ -1,5 +1,5 @@
 // src/pages/analytics/OutboundAnalytics.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -8,86 +8,71 @@ import {
   Button,
   Alert,
   CircularProgress,
+  Table,
+  TableBody,
+  TableCell,
+  TableContainer,
+  TableHead,
+  TableRow,
+  Paper,
 } from '@mui/material';
 import {
   LinkedIn as LinkedInIcon,
-  Language as LanguageIcon,
   Sync as SyncIcon,
 } from '@mui/icons-material';
-import { LineChart } from '@mui/x-charts/LineChart';
-import { BarChart } from '@mui/x-charts/BarChart';
 import { useAuth } from '../../contexts/AuthContext';
 import LinkedInManualSync from '../../components/features/analytics/LinkedInManualSync';
+import WebsiteAnalytics from '../../components/features/analytics/WebsiteAnalytics';
 import {
-  getLinkedInSyncMetadata,
-  getLinkedInPosts,
-  getLinkedInAggregates,
-  LinkedInPost,
-  LinkedInAggregate,
+  getLinkedInAnalyticsData,
+  LinkedInAnalyticsData,
 } from '../../services/api/linkedinManualService';
 
 const OutboundAnalytics: React.FC = () => {
   const { user } = useAuth();
   const [syncDialogOpen, setSyncDialogOpen] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [lastSyncAt, setLastSyncAt] = useState<Date | null>(null);
-  const [posts, setPosts] = useState<LinkedInPost[]>([]);
-  const [aggregates, setAggregates] = useState<LinkedInAggregate[]>([]);
+  const [analyticsData, setAnalyticsData] = useState<LinkedInAnalyticsData | null>(null);
 
-  useEffect(() => {
-    loadLinkedInData();
-  }, [user]);
-
-  const loadLinkedInData = async () => {
+  const loadLinkedInData = useCallback(async () => {
     if (!user?.uid) return;
 
     try {
       setLoading(true);
 
-      // Load metadata
-      const metadata = await getLinkedInSyncMetadata(user.uid);
-      if (metadata?.lastSyncAt) {
-        setLastSyncAt(metadata.lastSyncAt.toDate());
-      }
-
-      // Load posts
-      const loadedPosts = await getLinkedInPosts(user.uid, 10);
-      setPosts(loadedPosts);
-
-      // Load aggregates for charts
-      const loadedAggregates = await getLinkedInAggregates(user.uid, 30);
-      setAggregates(loadedAggregates);
+      // Load all analytics data from parent document
+      const data = await getLinkedInAnalyticsData(user.uid);
+      setAnalyticsData(data);
     } catch (error) {
-      // Error handling
+      console.error('Failed to load LinkedIn analytics:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [user]);
+
+  useEffect(() => {
+    loadLinkedInData();
+  }, [loadLinkedInData]);
 
   const handleSyncSuccess = () => {
     loadLinkedInData();
   };
 
-  // Calculate metrics from most recent aggregate
-  const latestAggregate = aggregates.length > 0 ? aggregates[aggregates.length - 1] : null;
-  const totalImpressions = latestAggregate?.totalImpressions || 0;
-  const totalEngagement = latestAggregate?.totalEngagement || 0;
-  const postCount = latestAggregate?.postCount || 0;
-
-  // Prepare chart data
-  const trendData = aggregates.map((agg) => ({
-    date: agg.id || new Date(agg.extractedAt.toDate()).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-    impressions: agg.totalImpressions,
-    engagement: agg.totalEngagement,
-  }));
-
-  // Top posts data for bar chart
-  const topPostsData = posts.slice(0, 5).map((post) => ({
-    post: post.content.substring(0, 30) + '...',
-    impressions: post.impressions,
-  }));
+  // Extract data from analytics object
+  const posts = analyticsData?.posts || [];
+  const totalImpressions = analyticsData?.totalImpressions || 0;
+  const totalEngagement = analyticsData?.totalEngagement || 0;
+  const postCount = analyticsData?.postCount || 0;
+  const lastSyncAt = analyticsData?.extractedAt?.toDate() || null;
 
   const hasData = posts.length > 0;
+
+  // Calculate engagement rate for each post
+  const calculateEngagementRate = (post: any) => {
+    if (post.impressions === 0) return 0;
+    const totalEngagement = (post.likes || 0) + (post.comments || 0) + (post.shares || 0);
+    return ((totalEngagement / post.impressions) * 100).toFixed(2);
+  };
 
   return (
     <Box sx={{
@@ -106,10 +91,10 @@ const OutboundAnalytics: React.FC = () => {
             WebkitBackgroundClip: 'text',
             color: 'transparent',
           }}>
-            Outbound Analytics
+            Inbound Analytics
           </Typography>
           <Typography variant="body1" sx={{ color: '#64748b' }}>
-            Monitor your outbound marketing performance across LinkedIn and website
+            Monitor your inbound marketing performance across LinkedIn and website
           </Typography>
           {lastSyncAt && (
             <Typography variant="caption" sx={{ color: '#94a3b8', display: 'block', mt: 0.5 }}>
@@ -217,85 +202,76 @@ const OutboundAnalytics: React.FC = () => {
                 </Box>
               </Box>
 
-              {/* Engagement Trend Chart */}
-              {trendData.length > 1 && (
+              {/* Posts Table */}
+              {posts.length > 0 && (
                 <Box sx={{ mt: 4 }}>
                   <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
-                    Engagement Trend
+                    All Posts
                   </Typography>
-                  <Box sx={{ height: 400 }}>
-                    <LineChart
-                      dataset={trendData}
-                      xAxis={[{ dataKey: 'date', scaleType: 'point' }]}
-                      series={[
-                        {
-                          dataKey: 'impressions',
-                          label: 'Impressions',
-                          color: '#0077b5',
-                          curve: 'linear',
-                        },
-                        {
-                          dataKey: 'engagement',
-                          label: 'Engagement',
-                          color: '#667eea',
-                          curve: 'linear',
-                        },
-                      ]}
-                      margin={{ left: 80, right: 20, top: 20, bottom: 60 }}
-                      grid={{ vertical: true, horizontal: true }}
-                    />
-                  </Box>
-                </Box>
-              )}
-
-              {/* Top Posts Chart */}
-              {topPostsData.length > 0 && (
-                <Box sx={{ mt: 4 }}>
-                  <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
-                    Top Performing Posts
-                  </Typography>
-                  <Box sx={{ height: 400 }}>
-                    <BarChart
-                      dataset={topPostsData}
-                      xAxis={[{ dataKey: 'post', scaleType: 'band' }]}
-                      series={[
-                        {
-                          dataKey: 'impressions',
-                          label: 'Impressions',
-                          color: '#0077b5',
-                        },
-                      ]}
-                      margin={{ left: 80, right: 20, top: 20, bottom: 100 }}
-                      grid={{ vertical: true, horizontal: true }}
-                    />
-                  </Box>
+                  <TableContainer component={Paper} sx={{
+                    borderRadius: 2,
+                    boxShadow: '0 2px 8px rgba(0,0,0,0.1)',
+                  }}>
+                    <Table>
+                      <TableHead>
+                        <TableRow sx={{ background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)' }}>
+                          <TableCell sx={{ color: 'white', fontWeight: 600 }}>Post Content</TableCell>
+                          <TableCell align="right" sx={{ color: 'white', fontWeight: 600 }}>Impressions</TableCell>
+                          <TableCell align="right" sx={{ color: 'white', fontWeight: 600 }}>Likes</TableCell>
+                          <TableCell align="right" sx={{ color: 'white', fontWeight: 600 }}>Comments</TableCell>
+                          <TableCell align="right" sx={{ color: 'white', fontWeight: 600 }}>Shares</TableCell>
+                          <TableCell align="right" sx={{ color: 'white', fontWeight: 600 }}>Engagement Rate</TableCell>
+                          <TableCell sx={{ color: 'white', fontWeight: 600 }}>Posted</TableCell>
+                        </TableRow>
+                      </TableHead>
+                      <TableBody>
+                        {posts.map((post, index) => (
+                          <TableRow
+                            key={index}
+                            sx={{
+                              '&:nth-of-type(odd)': { background: '#f8fafc' },
+                              '&:hover': { background: '#f1f5f9' },
+                            }}
+                          >
+                            <TableCell sx={{ maxWidth: 400 }}>
+                              <Typography variant="body2" sx={{
+                                overflow: 'hidden',
+                                textOverflow: 'ellipsis',
+                                display: '-webkit-box',
+                                WebkitLineClamp: 2,
+                                WebkitBoxOrient: 'vertical',
+                              }}>
+                                {post.content}
+                              </Typography>
+                            </TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 600, color: '#0077b5' }}>
+                              {post.impressions.toLocaleString()}
+                            </TableCell>
+                            <TableCell align="right">{post.likes || 0}</TableCell>
+                            <TableCell align="right">{post.comments || 0}</TableCell>
+                            <TableCell align="right">{post.shares || 0}</TableCell>
+                            <TableCell align="right" sx={{ fontWeight: 600, color: '#667eea' }}>
+                              {calculateEngagementRate(post)}%
+                            </TableCell>
+                            <TableCell>
+                              <Typography variant="body2" sx={{ color: '#64748b' }}>
+                                {post.postedDate}
+                              </Typography>
+                            </TableCell>
+                          </TableRow>
+                        ))}
+                      </TableBody>
+                    </Table>
+                  </TableContainer>
                 </Box>
               )}
             </CardContent>
           </Card>
 
-          {/* Website Analytics Section (Placeholder) */}
-          <Card sx={{
-            borderRadius: 3,
-            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
-            background: 'rgba(255, 255, 255, 0.95)',
-            backdropFilter: 'blur(20px)',
-          }}>
-            <CardContent sx={{ p: 4 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', mb: 3 }}>
-                <LanguageIcon sx={{ fontSize: 32, color: '#667eea', mr: 2 }} />
-                <Typography variant="h6" sx={{ fontWeight: 600 }}>
-                  Website Analytics
-                </Typography>
-              </Box>
-
-              <Box sx={{ p: 6, background: '#f8fafc', borderRadius: 2, textAlign: 'center' }}>
-                <Typography variant="body1" sx={{ color: '#64748b' }}>
-                  Website analytics integration coming soon
-                </Typography>
-              </Box>
-            </CardContent>
-          </Card>
+          {/* Website Analytics Section */}
+          <Box sx={{ mt: 4 }}>
+            <WebsiteAnalytics />
+          </Box>
         </Box>
       )}
 

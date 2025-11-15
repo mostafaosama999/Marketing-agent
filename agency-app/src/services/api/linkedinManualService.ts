@@ -1,10 +1,5 @@
 // src/services/api/linkedinManualService.ts
 import {
-  collection,
-  getDocs,
-  query,
-  orderBy,
-  limit,
   Timestamp,
   doc,
   getDoc,
@@ -12,7 +7,6 @@ import {
 import { db } from '../firebase/firestore';
 import { httpsCallable, getFunctions } from 'firebase/functions';
 import app from '../firebase/firestore';
-import { useAuth } from '../../contexts/AuthContext';
 
 // Initialize Functions
 const functions = getFunctions(app);
@@ -28,34 +22,19 @@ export interface LinkedInPost {
   comments: number;
   shares: number;
   postedDate: string;
-  extractedAt: Timestamp;
-  period: string;
 }
 
 /**
- * LinkedIn Daily Aggregate
+ * LinkedIn Analytics Data (from parent document)
  */
-export interface LinkedInAggregate {
-  id?: string;
+export interface LinkedInAnalyticsData {
+  period: string;
+  posts: LinkedInPost[];
   totalImpressions: number;
   totalEngagement: number;
   postCount: number;
-  topPost: {
-    content: string;
-    impressions: number;
-  } | null;
-  period: string;
-  updatedAt: Timestamp;
   extractedAt: Timestamp;
-}
-
-/**
- * User metadata for LinkedIn sync
- */
-export interface LinkedInSyncMetadata {
-  lastSyncAt: Timestamp | null;
-  lastSyncPostCount: number;
-  lastSyncImpressions: number;
+  extractedBy: string;
 }
 
 /**
@@ -64,13 +43,13 @@ export interface LinkedInSyncMetadata {
 export interface ExtractionResult {
   success: boolean;
   data: {
-    postsExtracted: number;
+    postCount: number;
     totalImpressions: number;
     totalEngagement: number;
     period: string;
-    topPost: string;
+    topPost?: string;
   };
-  cost: number;
+  cost?: number;
 }
 
 /**
@@ -93,120 +72,61 @@ export async function extractLinkedInAnalytics(
 }
 
 /**
- * Get user's sync metadata (last sync time, etc.)
+ * Get user's LinkedIn analytics data (posts, impressions, engagement)
  */
-export async function getLinkedInSyncMetadata(
+export async function getLinkedInAnalyticsData(
   userId: string
-): Promise<LinkedInSyncMetadata | null> {
+): Promise<LinkedInAnalyticsData | null> {
   try {
-    const metaDoc = await getDoc(doc(db, 'linkedinAnalytics', userId));
+    const analyticsDoc = await getDoc(doc(db, 'linkedinAnalytics', userId));
 
-    if (!metaDoc.exists()) {
+    if (!analyticsDoc.exists()) {
       return null;
     }
 
-    return metaDoc.data() as LinkedInSyncMetadata;
+    return analyticsDoc.data() as LinkedInAnalyticsData;
   } catch (error) {
     throw error;
   }
 }
 
 /**
- * Get all extracted posts for a user
+ * Get all extracted posts for a user (from parent document)
  */
 export async function getLinkedInPosts(
-  userId: string,
-  limitCount: number = 20
+  userId: string
 ): Promise<LinkedInPost[]> {
   try {
-    const postsQuery = query(
-      collection(db, 'linkedinAnalytics', userId, 'posts'),
-      orderBy('impressions', 'desc'),
-      limit(limitCount)
-    );
+    const data = await getLinkedInAnalyticsData(userId);
+    if (!data) return [];
 
-    const snapshot = await getDocs(postsQuery);
-    return snapshot.docs.map((doc) => ({
-      id: doc.id,
-      ...doc.data(),
-    })) as LinkedInPost[];
+    // Sort posts by impressions (highest first)
+    return (data.posts || []).sort((a, b) => b.impressions - a.impressions);
   } catch (error) {
     throw error;
   }
 }
 
 /**
- * Get aggregates for trend visualization
- */
-export async function getLinkedInAggregates(
-  userId: string,
-  limitCount: number = 30
-): Promise<LinkedInAggregate[]> {
-  try {
-    const aggregatesQuery = query(
-      collection(db, 'linkedinAnalytics', userId, 'aggregates'),
-      orderBy('extractedAt', 'desc'),
-      limit(limitCount)
-    );
-
-    const snapshot = await getDocs(aggregatesQuery);
-    return snapshot.docs
-      .map((doc) => ({
-        id: doc.id,
-        ...doc.data(),
-      }))
-      .reverse() as LinkedInAggregate[]; // Oldest to newest for charts
-  } catch (error) {
-    throw error;
-  }
-}
-
-/**
- * Calculate total impressions across all syncs
+ * Calculate total impressions
  */
 export async function getTotalImpressions(userId: string): Promise<number> {
   try {
-    const aggregates = await getLinkedInAggregates(userId, 100);
-    if (aggregates.length === 0) return 0;
-
-    // Get the most recent aggregate
-    return aggregates[aggregates.length - 1]?.totalImpressions || 0;
+    const data = await getLinkedInAnalyticsData(userId);
+    return data?.totalImpressions || 0;
   } catch (error) {
     return 0;
   }
 }
 
 /**
- * Calculate total engagement across all syncs
+ * Calculate total engagement
  */
 export async function getTotalEngagement(userId: string): Promise<number> {
   try {
-    const aggregates = await getLinkedInAggregates(userId, 100);
-    if (aggregates.length === 0) return 0;
-
-    // Get the most recent aggregate
-    return aggregates[aggregates.length - 1]?.totalEngagement || 0;
+    const data = await getLinkedInAnalyticsData(userId);
+    return data?.totalEngagement || 0;
   } catch (error) {
     return 0;
-  }
-}
-
-/**
- * Get trend data for charts (last N syncs)
- */
-export async function getLinkedInTrendData(
-  userId: string,
-  days: number = 30
-): Promise<{ date: string; impressions: number; engagement: number }[]> {
-  try {
-    const aggregates = await getLinkedInAggregates(userId, days);
-
-    return aggregates.map((agg) => ({
-      date: agg.id || new Date(agg.extractedAt.toDate()).toLocaleDateString(),
-      impressions: agg.totalImpressions,
-      engagement: agg.totalEngagement,
-    }));
-  } catch (error) {
-    return [];
   }
 }

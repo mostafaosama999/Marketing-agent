@@ -52,7 +52,11 @@
     "eject": "react-scripts eject",
     "serve": "npx serve -s build -l 8080",
     "emulators": "firebase emulators:start --only functions",
-    "emulators:ui": "firebase emulators:start --only functions"
+    "emulators:ui": "firebase emulators:start --only functions",
+    "migrate:status-v2": "npx tsx scripts/migrate-status-v2.ts",
+    "migrate:status-v2:dry-run": "npx tsx scripts/migrate-status-v2.ts --dry-run",
+    "migrate:status-v2-client": "npx tsx scripts/migrate-status-v2-client.ts",
+    "migrate:status-v2-client:dry-run": "npx tsx scripts/migrate-status-v2-client.ts --dry-run"
   },
   "eslintConfig": {
     "extends": [
@@ -75,5 +79,10 @@
   "engines": {
     "node": "18.x",
     "npm": "9.x"
+  },
+  "devDependencies": {
+    "dotenv": "^17.2.3",
+    "firebase-admin": "^13.6.0",
+    "tsx": "^4.20.6"
   }
 }

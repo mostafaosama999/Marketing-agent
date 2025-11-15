@@ -181,8 +181,9 @@ export const DEFAULT_PIPELINE_STAGES: Omit<PipelineStage, 'id'>[] = [
   { label: 'Qualified', color: '#ff9800', order: 1, visible: true },
   { label: 'Contacted', color: '#2196f3', order: 2, visible: true },
   { label: 'Follow up', color: '#9c27b0', order: 3, visible: true },
-  { label: 'Won', color: '#4caf50', order: 4, visible: true },
-  { label: 'Lost', color: '#607d8b', order: 5, visible: true },
+  { label: 'Nurture', color: '#00bcd4', order: 4, visible: true },
+  { label: 'Won', color: '#4caf50', order: 5, visible: true },
+  { label: 'Refused', color: '#f44336', order: 6, visible: true },
 ];
 
 // CSV Import types
@@ -208,8 +209,9 @@ export const STATUS_TO_LEAD_STATUS: Record<string, LeadStatus> = {
   'Qualified': 'qualified',
   'Contacted': 'contacted',
   'Follow up': 'follow_up',
+  'Nurture': 'nurture',
   'Won': 'won',
-  'Lost': 'lost',
+  'Refused': 'lost',
 };
 
 // LeadStatus to display label mapping (default/fallback values)
@@ -219,8 +221,9 @@ export const LEAD_STATUS_TO_LABEL: Record<LeadStatus, string> = {
   'qualified': 'Qualified',
   'contacted': 'Contacted',
   'follow_up': 'Follow up',
+  'nurture': 'Nurture',
   'won': 'Won',
-  'lost': 'Lost',
+  'lost': 'Refused',
 };
 
 /**

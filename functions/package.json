@@ -28,6 +28,8 @@
   },
   "main": "lib/index.js",
   "dependencies": {
+    "@anthropic-ai/sdk": "^0.69.0",
+    "@google-analytics/data": "^5.2.1",
     "@google-cloud/storage": "^7.17.3",
     "@slack/web-api": "^7.10.0",
     "@types/papaparse": "^5.5.0",

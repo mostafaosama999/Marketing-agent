@@ -443,6 +443,7 @@ export async function createLeadsBatch(
 /**
  * Update an existing lead
  * If company name changes, updates company reference
+ * Auto-updates lead status to "Contacted" if outreach fields are modified
  */
 export async function updateLead(
   leadId: string,
@@ -463,6 +464,13 @@ export async function updateLead(
       ...updateData,
       updatedAt: serverTimestamp(),
     });
+
+    // Check if outreach fields were updated
+    const hasOutreachUpdate = (leadData as any).outreach !== undefined;
+    if (hasOutreachUpdate) {
+      // Auto-update lead status to "Contacted" if applicable
+      await autoUpdateLeadStatusFromOutreach(leadId);
+    }
   } catch (error) {
     console.error('Error updating lead:', error);
     throw error;
@@ -558,6 +566,7 @@ export async function updateLeadField(
 
 /**
  * Update LinkedIn outreach status for a lead
+ * Auto-updates lead status to "Contacted" if conditions are met
  * @param leadId - The ID of the lead to update
  * @param status - The new LinkedIn outreach status
  */
@@ -571,6 +580,9 @@ export async function updateLeadLinkedInStatus(
       'outreach.linkedIn.status': status,
       updatedAt: serverTimestamp(),
     });
+
+    // Auto-update lead status to "Contacted" if applicable
+    await autoUpdateLeadStatusFromOutreach(leadId);
   } catch (error) {
     console.error('Error updating lead LinkedIn status:', error);
     throw error;
@@ -579,6 +591,7 @@ export async function updateLeadLinkedInStatus(
 
 /**
  * Update email outreach status for a lead
+ * Auto-updates lead status to "Contacted" if conditions are met
  * @param leadId - The ID of the lead to update
  * @param status - The new email outreach status
  */
@@ -592,9 +605,115 @@ export async function updateLeadEmailStatus(
       'outreach.email.status': status,
       updatedAt: serverTimestamp(),
     });
+
+    // Auto-update lead status to "Contacted" if applicable
+    await autoUpdateLeadStatusFromOutreach(leadId);
   } catch (error) {
     console.error('Error updating lead email status:', error);
     throw error;
+  }
+}
+
+/**
+ * Check if a lead's outreach status or date should trigger auto-update to "Contacted"
+ * @param outreach - The outreach data from the lead
+ * @returns true if conditions are met for auto-update
+ */
+function shouldAutoUpdateToContacted(outreach: any): boolean {
+  if (!outreach) return false;
+
+  const triggerStatuses = ['sent', 'opened', 'replied'];
+
+  // Check LinkedIn status
+  const linkedInStatus = outreach.linkedIn?.status;
+  const linkedInDate = outreach.linkedIn?.sentAt;
+  const linkedInTrigger =
+    (linkedInStatus && triggerStatuses.includes(linkedInStatus)) ||
+    linkedInDate;
+
+  // Check email status
+  const emailStatus = outreach.email?.status;
+  const emailDate = outreach.email?.sentAt;
+  const emailTrigger =
+    (emailStatus && triggerStatuses.includes(emailStatus)) ||
+    emailDate;
+
+  return linkedInTrigger || emailTrigger;
+}
+
+/**
+ * Automatically update lead status to "Contacted" based on outreach activities
+ * Only updates if current status is "New Lead" or "Qualified"
+ * @param leadId - The ID of the lead to update
+ * @param userId - The user ID to record in timeline (use 'system' for automatic updates)
+ */
+export async function autoUpdateLeadStatusFromOutreach(
+  leadId: string,
+  userId: string = 'system'
+): Promise<void> {
+  try {
+    // Get current lead data
+    const lead = await getLead(leadId);
+    if (!lead) {
+      console.warn(`Auto-update skipped: Lead ${leadId} not found`);
+      return;
+    }
+
+    // Only auto-update from "new_lead" or "qualified" status
+    const allowedStatuses: LeadStatus[] = ['new_lead', 'qualified'];
+    if (!allowedStatuses.includes(lead.status)) {
+      console.log(
+        `Auto-update skipped: Lead ${leadId} status is "${lead.status}" (not new_lead or qualified)`
+      );
+      return;
+    }
+
+    // Check if outreach conditions are met
+    if (!shouldAutoUpdateToContacted(lead.outreach)) {
+      console.log(`Auto-update skipped: Lead ${leadId} outreach conditions not met`);
+      return;
+    }
+
+    // Determine reason for timeline
+    const reasons: string[] = [];
+    if (lead.outreach?.linkedIn?.status && ['sent', 'opened', 'replied'].includes(lead.outreach.linkedIn.status)) {
+      reasons.push(`LinkedIn ${lead.outreach.linkedIn.status}`);
+    }
+    if (lead.outreach?.email?.status && ['sent', 'opened', 'replied'].includes(lead.outreach.email.status)) {
+      reasons.push(`Email ${lead.outreach.email.status}`);
+    }
+    if (lead.outreach?.linkedIn?.sentAt && !reasons.some(r => r.startsWith('LinkedIn'))) {
+      reasons.push('LinkedIn date set');
+    }
+    if (lead.outreach?.email?.sentAt && !reasons.some(r => r.startsWith('Email'))) {
+      reasons.push('Email date set');
+    }
+
+    const reasonText = `Auto-updated to Contacted due to outreach: ${reasons.join(', ')}`;
+
+    console.log(`✨ Auto-updating lead ${leadId} from "${lead.status}" to "contacted": ${reasonText}`);
+
+    // Update main document status
+    const leadRef = doc(db, LEADS_COLLECTION, leadId);
+    await updateDoc(leadRef, {
+      status: 'contacted',
+      updatedAt: serverTimestamp(),
+    });
+
+    // Update timeline with automatic change flag
+    await leadTimelineService.updateLeadStatus(
+      leadId,
+      lead.status,
+      'contacted',
+      userId,
+      reasonText,
+      true // automaticChange flag
+    );
+
+    console.log(`✅ Lead ${leadId} auto-updated to "contacted" successfully`);
+  } catch (error) {
+    console.error(`Error auto-updating lead ${leadId} status:`, error);
+    // Don't throw - we don't want to block the main outreach update if auto-status fails
   }
 }
 

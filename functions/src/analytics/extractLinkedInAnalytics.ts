@@ -1,11 +1,7 @@
 // functions/src/analytics/extractLinkedInAnalytics.ts
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
-import Anthropic from "@anthropic-ai/sdk";
-
-const anthropic = new Anthropic({
-  apiKey: functions.config().anthropic?.api_key,
-});
+import OpenAI from "openai";
 
 interface ExtractedPost {
   content: string;
@@ -57,8 +53,12 @@ Return a JSON object with this exact structure:
 /**
  * Cloud Function to extract LinkedIn analytics from pasted page content
  */
-export const extractLinkedInAnalytics = functions.https.onCall(
-  async (data: { pastedContent: string }, context) => {
+export const extractLinkedInAnalytics = functions
+  .runWith({
+    timeoutSeconds: 60,
+    memory: "512MB",
+  })
+  .https.onCall(async (data: { pastedContent: string }, context) => {
     // Require authentication
     if (!context.auth) {
       throw new functions.https.HttpsError(
@@ -74,7 +74,7 @@ export const extractLinkedInAnalytics = functions.https.onCall(
     if (!pastedContent || pastedContent.trim().length < 100) {
       throw new functions.https.HttpsError(
         "invalid-argument",
-        "Pasted content is too short or empty. Please paste the full LinkedIn analytics page."
+        "Pasted content is too short. Please paste the LinkedIn analytics page content."
       );
     }
 
@@ -89,36 +89,45 @@ export const extractLinkedInAnalytics = functions.https.onCall(
       console.log(`Extracting LinkedIn analytics for user ${userId}`);
       console.log(`Content length: ${pastedContent.length} characters`);
 
-      // Call Claude API for extraction
-      const message = await anthropic.messages.create({
-        model: "claude-3-5-sonnet-20241022",
-        max_tokens: 4096,
+      // Get OpenAI API key
+      const openaiApiKey = functions.config().openai?.key || process.env.OPENAI_API_KEY;
+      if (!openaiApiKey) {
+        throw new functions.https.HttpsError(
+          "failed-precondition",
+          "OpenAI API key not configured"
+        );
+      }
+
+      // Initialize OpenAI client
+      const openai = new OpenAI({ apiKey: openaiApiKey });
+
+      // Call OpenAI API for extraction
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4-turbo-preview",
+        response_format: { type: "json_object" },
         temperature: 0, // Deterministic for data extraction
         messages: [
           {
-            role: "user",
-            content: `${EXTRACTION_PROMPT}\n\nText to extract from:\n\n${pastedContent}`,
+            role: "system",
+            content: EXTRACTION_PROMPT
           },
+          {
+            role: "user",
+            content: `Extract LinkedIn post analytics from this content:\n\n${pastedContent}`
+          }
         ],
       });
 
-      // Parse Claude's response
-      const responseText = message.content[0].type === "text"
-        ? message.content[0].text
-        : "";
+      // Parse OpenAI's response
+      const responseText = completion.choices[0]?.message?.content || "";
+      console.log("OpenAI response:", responseText);
 
-      console.log("Claude response:", responseText);
-
-      // Extract JSON from response (handle potential markdown code blocks)
+      // Parse JSON response
       let extractedData: ExtractionResult;
       try {
-        // Remove markdown code blocks if present
-        const jsonMatch = responseText.match(/```(?:json)?\s*(\{[\s\S]*\})\s*```/);
-        const jsonText = jsonMatch ? jsonMatch[1] : responseText;
-
-        extractedData = JSON.parse(jsonText.trim());
+        extractedData = JSON.parse(responseText);
       } catch (parseError) {
-        console.error("Failed to parse Claude response:", responseText);
+        console.error("Failed to parse OpenAI response:", responseText);
         throw new functions.https.HttpsError(
           "internal",
           "Failed to parse extracted data. Please try again or contact support."
@@ -127,20 +136,14 @@ export const extractLinkedInAnalytics = functions.https.onCall(
 
       // Validate extracted data
       if (!extractedData.posts || !Array.isArray(extractedData.posts)) {
+        console.error("Invalid extracted data structure:", extractedData);
         throw new functions.https.HttpsError(
           "internal",
-          "No posts found in extracted data. Please ensure you copied the full analytics page."
+          "Extracted data has invalid structure. Please try again."
         );
       }
 
-      if (extractedData.posts.length === 0) {
-        throw new functions.https.HttpsError(
-          "invalid-argument",
-          "No posts with impression data found. Please paste content from LinkedIn's 'Top performing posts' section."
-        );
-      }
-
-      // Calculate aggregates
+      // Calculate totals
       const totalImpressions = extractedData.posts.reduce(
         (sum, post) => sum + (post.impressions || 0),
         0
@@ -150,97 +153,35 @@ export const extractLinkedInAnalytics = functions.https.onCall(
         0
       );
 
-      extractedData.totalImpressions = totalImpressions;
-      extractedData.totalEngagement = totalEngagement;
-
       // Save to Firestore
-      const db = admin.firestore();
-      const batch = db.batch();
-      const timestamp = admin.firestore.FieldValue.serverTimestamp();
-      const extractedAt = new Date();
+      const analyticsRef = admin.firestore()
+        .collection("linkedinAnalytics")
+        .doc(userId);
 
-      // Save individual posts
-      const postsRef = db.collection("linkedinAnalytics")
-        .doc(userId)
-        .collection("posts");
-
-      for (const post of extractedData.posts) {
-        const postRef = postsRef.doc(); // Auto-generate ID
-        batch.set(postRef, {
-          ...post,
-          extractedAt: timestamp,
-          period: extractedData.period || "Past 7 days",
-        });
-      }
-
-      // Save aggregate data
-      const aggregateRef = db.collection("linkedinAnalytics")
-        .doc(userId)
-        .collection("aggregates")
-        .doc(extractedAt.toISOString().split('T')[0]); // Date-based ID (YYYY-MM-DD)
-
-      batch.set(aggregateRef, {
+      await analyticsRef.set({
+        period: extractedData.period || "Past 28 days",
+        posts: extractedData.posts,
         totalImpressions,
         totalEngagement,
         postCount: extractedData.posts.length,
-        topPost: extractedData.posts[0] || null, // First post (highest impressions)
-        period: extractedData.period || "Past 7 days",
-        updatedAt: timestamp,
-        extractedAt: timestamp,
+        extractedAt: admin.firestore.FieldValue.serverTimestamp(),
+        extractedBy: userId,
       });
 
-      // Update user's last sync timestamp
-      const userMetaRef = db.collection("linkedinAnalytics").doc(userId);
-      batch.set(
-        userMetaRef,
-        {
-          lastSyncAt: timestamp,
-          lastSyncPostCount: extractedData.posts.length,
-          lastSyncImpressions: totalImpressions,
-        },
-        { merge: true }
-      );
-
-      await batch.commit();
-
-      console.log(`Successfully extracted ${extractedData.posts.length} posts for user ${userId}`);
-
-      // Track API cost
-      const inputTokens = message.usage.input_tokens;
-      const outputTokens = message.usage.output_tokens;
-      const estimatedCost = (inputTokens * 0.003 / 1000) + (outputTokens * 0.015 / 1000);
-
-      await db.collection("userCostTracking").doc(userId).set(
-        {
-          totalCosts: {
-            anthropic: admin.firestore.FieldValue.increment(estimatedCost),
-            total: admin.firestore.FieldValue.increment(estimatedCost),
-          },
-          costsByMonth: {
-            [new Date().toISOString().substring(0, 7)]: {
-              anthropic: admin.firestore.FieldValue.increment(estimatedCost),
-            },
-          },
-        },
-        { merge: true }
-      );
+      console.log(`✅ Extracted ${extractedData.posts.length} posts for user ${userId}`);
+      console.log(`Total impressions: ${totalImpressions}, Total engagement: ${totalEngagement}`);
 
       return {
         success: true,
-        data: {
-          postsExtracted: extractedData.posts.length,
-          totalImpressions,
-          totalEngagement,
-          period: extractedData.period,
-          topPost: extractedData.posts[0]?.content?.substring(0, 50) + "...",
-        },
-        cost: estimatedCost,
+        postCount: extractedData.posts.length,
+        totalImpressions,
+        totalEngagement,
+        period: extractedData.period,
       };
-
     } catch (error: any) {
-      console.error("Error extracting LinkedIn analytics:", error);
+      console.error("Failed to extract LinkedIn analytics:", error);
 
-      // Re-throw HttpsError as-is
+      // Re-throw HttpsErrors as-is
       if (error instanceof functions.https.HttpsError) {
         throw error;
       }
@@ -251,5 +192,4 @@ export const extractLinkedInAnalytics = functions.https.onCall(
         `Failed to extract analytics: ${error.message || "Unknown error"}`
       );
     }
-  }
-);
+  });

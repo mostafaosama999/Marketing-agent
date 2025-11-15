@@ -90,3 +90,17 @@ export type {
   SavePresetRequest,
   PresetListItem
 } from './filter';
+
+// Google Analytics types
+export type {
+  TrafficSourceType,
+  GAMetrics,
+  GATrafficSource,
+  GATopPage,
+  GAConfig,
+  GASyncResult,
+  GADateRange,
+  GAMetricsSummary,
+  GATrafficSourceSummary,
+  GAChartDataPoint
+} from './googleAnalytics';

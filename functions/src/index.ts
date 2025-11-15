@@ -30,7 +30,7 @@ export {findCompetitors} from "./competitors/findCompetitors";
 
 // Export new profile scraper functions
 export {profileScraperSync} from "./webflow/profileSync";
-export {sheetsScraperSync} from "./webflow/sheetsSync";
+export {sheetsScraperSync, triggerSheetsScraper} from "./webflow/sheetsSync";
 export {
   triggerProfileScraper,
   runScraperOnly,
@@ -42,3 +42,4 @@ export {
 
 // Export analytics functions
 export {extractLinkedInAnalytics} from "./analytics/extractLinkedInAnalytics";
+export {syncGoogleAnalytics, scheduledGoogleAnalyticsSync} from "./analytics/syncGoogleAnalytics";

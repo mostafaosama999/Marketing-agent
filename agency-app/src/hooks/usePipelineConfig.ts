@@ -81,8 +81,9 @@ export function usePipelineConfig(): UsePipelineConfigReturn {
         qualified: 'Qualified',
         contacted: 'Contacted',
         follow_up: 'Follow up',
+        nurture: 'Nurture',
         won: 'Won',
-        lost: 'Lost',
+        lost: 'Refused',
       };
     }
     return stagesToLabelMap(config.stages);

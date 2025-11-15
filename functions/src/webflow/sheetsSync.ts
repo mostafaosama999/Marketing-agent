@@ -3,17 +3,14 @@
  * Reads URLs from Google Sheets "Input" tab, scrapes them, and writes results to "Output" tab
  */
 
-import * as functions from "firebase-functions/v2";
-import {defineString} from "firebase-functions/params";
+import * as functions from "firebase-functions";
 import {readFromTab, appendToTab, updateCell, extractSheetId} from "../utils/sheetsUtils";
 import {WebflowAPI} from "../utils/webflowUtils";
 import {detectCategorySimple} from "../utils/categoryDetector";
 import * as puppeteer from "puppeteer";
 
 // Configuration
-const GOOGLE_SHEET_URL = defineString("SHEETS_SCRAPER_URL", {
-  default: "https://docs.google.com/spreadsheets/d/1rMbsnVq8K0n8LpyA3la9-Kri8ZsgsLL0IB6UMciahE8/edit?gid=342086020#gid=342086020",
-});
+const GOOGLE_SHEET_URL = "https://docs.google.com/spreadsheets/d/1rMbsnVq8K0n8LpyA3la9-Kri8ZsgsLL0IB6UMciahE8/edit?gid=342086020#gid=342086020";
 
 const INPUT_TAB_NAME = "Input";
 const OUTPUT_TAB_NAME = "Output";
@@ -276,7 +273,7 @@ export async function performSheetsSync(): Promise<SyncStats> {
     console.log(`⏰ Execution started at: ${new Date().toISOString()}`);
 
     // Extract sheet ID
-    const sheetUrl = GOOGLE_SHEET_URL.value();
+    const sheetUrl = GOOGLE_SHEET_URL;
     const sheetId = extractSheetId(sheetUrl);
     console.log(`📊 Reading from Google Sheet: ${sheetId}`);
 
@@ -405,19 +402,47 @@ export async function performSheetsSync(): Promise<SyncStats> {
 /**
  * Scheduled Cloud Function - Runs daily at 9 AM UTC
  */
-export const sheetsScraperSync = functions.scheduler.onSchedule(
-  {
-    schedule: "0 9 * * *", // Daily at 9 AM UTC
+export const sheetsScraperSync = functions
+  .runWith({
     timeoutSeconds: 540, // 9 minutes
-    memory: "2GiB",
-    region: "us-central1",
-  },
-  async () => {
+    memory: "2GB",
+  })
+  .pubsub
+  .schedule("0 9 * * *") // Daily at 9 AM UTC
+  .timeZone("UTC")
+  .onRun(async (context) => {
     try {
       await performSheetsSync();
     } catch (error) {
       console.error("Scheduled sync failed:", error);
       throw error;
     }
-  }
-);
+  });
+
+/**
+ * Manual trigger for Sheets Scraper Sync
+ * Can be called directly for testing
+ */
+export const triggerSheetsScraper = functions
+  .runWith({
+    timeoutSeconds: 540,
+    memory: "2GB",
+  })
+  .https
+  .onCall(async (data, context) => {
+    // Auth check
+    if (!context.auth) {
+      throw new functions.https.HttpsError("unauthenticated", "Must be authenticated");
+    }
+
+    try {
+      const stats = await performSheetsSync();
+      return {
+        success: true,
+        stats,
+      };
+    } catch (error) {
+      console.error("Manual sheets sync failed:", error);
+      throw new functions.https.HttpsError("internal", (error as Error).message);
+    }
+  });

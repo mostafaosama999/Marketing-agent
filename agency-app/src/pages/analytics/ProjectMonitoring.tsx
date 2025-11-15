@@ -57,8 +57,9 @@ const STATUS_LABELS: Record<LeadStatus, string> = {
   qualified: 'Qualified',
   contacted: 'Contacted',
   follow_up: 'Follow Up',
+  nurture: 'Nurture',
   won: 'Won',
-  lost: 'Lost',
+  lost: 'Refused',
 };
 
 const ProjectMonitoring: React.FC = () => {

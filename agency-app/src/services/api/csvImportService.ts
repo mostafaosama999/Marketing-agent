@@ -4,7 +4,7 @@
 import Papa from 'papaparse';
 import { CSVRow, FieldMapping, FieldSection, EntityType } from '../../types/crm';
 import { LeadFormData, LeadStatus } from '../../types/lead';
-import { createLeadsBatch } from './leads';
+import { createLeadsBatch, autoUpdateLeadStatusFromOutreach } from './leads';
 import { getAllLeadsMap, checkDuplicateFromMap } from './deduplicationService';
 import { getOrCreateCompaniesBatch, updateCompany } from './companies';
 import {
@@ -1164,13 +1164,31 @@ export async function importLeadsFromCSV(
 
   // 5. Batch create all leads (with progress updates)
   try {
-    await createLeadsBatch(validLeadsData, userId, companyIdMap);
+    const leadIds = await createLeadsBatch(validLeadsData, userId, companyIdMap);
     result.successful = validLeadsData.length;
 
     // Final progress update
     if (onProgress) {
       onProgress(filledData.length, filledData.length);
     }
+
+    // 6. Auto-update lead statuses based on outreach data (CSV imports)
+    // Run in parallel for performance, but don't block on errors
+    const autoUpdatePromises = leadIds.map(async (leadId, index) => {
+      const leadData = validLeadsData[index];
+      // Only auto-update if lead has outreach data
+      if ((leadData as any).outreach) {
+        try {
+          await autoUpdateLeadStatusFromOutreach(leadId, userId);
+        } catch (error) {
+          console.warn(`Auto-status update failed for lead ${leadId}:`, error);
+          // Don't fail the import if auto-update fails
+        }
+      }
+    });
+
+    await Promise.all(autoUpdatePromises);
+    console.log(`✅ CSV Import: Auto-status updates completed for ${leadIds.length} leads`);
   } catch (error) {
     console.error('Error in batch lead creation:', error);
     result.failed += validLeadsData.length;

@@ -30,8 +30,9 @@ const STATUS_LABELS: Record<LeadStatus, string> = {
   qualified: 'Qualified',
   contacted: 'Contacted',
   follow_up: 'Follow up',
+  nurture: 'Nurture',
   won: 'Won',
-  lost: 'Lost',
+  lost: 'Refused',
 };
 
 export const ActiveFiltersBar: React.FC<ActiveFiltersBarProps> = ({

@@ -92,7 +92,8 @@ export const leadTimelineService = {
     fromStatus: LeadStatus,
     toStatus: LeadStatus,
     userId: string,
-    notes?: string
+    notes?: string,
+    automaticChange: boolean = false
   ): Promise<void> {
     try {
       const timelineRef = doc(
@@ -140,7 +141,7 @@ export const leadTimelineService = {
         changedBy: userId,
         changedAt: now,
         ...(notes && { notes }),
-        automaticChange: false,
+        automaticChange,
       };
 
       // Update timeline document

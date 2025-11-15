@@ -42,19 +42,24 @@ const STATUS_CONFIG: Record<LeadStatus, { label: string; icon: string; color: st
     icon: '🔄',
     color: '#9c27b0',
   },
+  nurture: {
+    label: 'Nurture',
+    icon: '🌱',
+    color: '#00bcd4',
+  },
   won: {
     label: 'Won',
     icon: '✅',
     color: '#4caf50',
   },
   lost: {
-    label: 'Lost',
+    label: 'Refused',
     icon: '❌',
-    color: '#607d8b',
+    color: '#f44336',
   },
 };
 
-const ALL_STATUSES: LeadStatus[] = ['new_lead', 'qualified', 'contacted', 'follow_up', 'won', 'lost'];
+const ALL_STATUSES: LeadStatus[] = ['new_lead', 'qualified', 'contacted', 'follow_up', 'nurture', 'won', 'lost'];
 
 export const StatusFilter: React.FC<StatusFilterProps> = ({
   selectedStatuses,

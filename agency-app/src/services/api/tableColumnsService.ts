@@ -105,6 +105,15 @@ export async function buildLeadsTableColumns(leads: Lead[]): Promise<TableColumn
 
     // Fetch ALL field definitions (not just dropdowns) to get section and type info
     const fieldDefinitions = await getFieldDefinitions('lead');
+    console.log('🔍 [tableColumnsService] Fetched field definitions:', fieldDefinitions.length);
+
+    const linkedInDefs = fieldDefinitions.filter(def => def.section === 'linkedin');
+    console.log('🔍 [tableColumnsService] LinkedIn definitions:', linkedInDefs.map(d => ({
+      name: d.name,
+      label: d.label,
+      fieldType: d.fieldType
+    })));
+
     const fieldDefMap = new Map(fieldDefinitions.map(def => [def.name, def]));
 
     // Create column configs for each custom field
@@ -128,6 +137,17 @@ export async function buildLeadsTableColumns(leads: Lead[]): Promise<TableColumn
         const fieldType: 'dropdown' | 'text' = fieldDef?.fieldType === 'dropdown' ? 'dropdown' : 'text';
         // Auto-detect section from field name if not set in field definition
         const section: FieldSection | undefined = fieldDef?.section || getSectionFromFieldName(fieldName);
+
+        // Debug logging for linkedin fields
+        if (fieldName.includes('linkedin_')) {
+          console.log(`🔍 [tableColumnsService] Building column for ${fieldName}:`, {
+            hasFieldDef: !!fieldDef,
+            fieldDefType: fieldDef?.fieldType,
+            computedFieldType: fieldType,
+            section: section,
+            label: label
+          });
+        }
 
         return {
           id: `custom_${fieldName}`,
