@@ -221,19 +221,28 @@ const Navbar: React.FC = () => {
   return (
     <ModernAppBar position="static" elevation={0}>
       <ModernToolbar>
-        {/* Left Side - Brand and Inbound */}
+        {/* Left Side - Brand and Inbound Tabs */}
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
           <BrandText variant="h6">
             Agency Platform
           </BrandText>
 
-          {/* Inbound Button - Left Side */}
+          {/* Inbound Analytics Button - Left Side */}
           <NavButton
             isActive={location.pathname === '/analytics/outbound'}
             startIcon={<Campaign />}
             {...({ component: Link, to: '/analytics/outbound' } as any)}
           >
-            INBOUND
+            INBOUND ANALYTICS
+          </NavButton>
+
+          {/* Inbound Generation Button - Left Side */}
+          <NavButton
+            isActive={location.pathname === '/inbound-generation'}
+            startIcon={<Campaign />}
+            {...({ component: Link, to: '/inbound-generation' } as any)}
+          >
+            INBOUND GENERATION
           </NavButton>
         </Box>
 

@@ -415,71 +415,6 @@ const LeadAnalytics: React.FC = () => {
     }));
   }, [leads, outreachDayRange]);
 
-  // LinkedIn response trends over time (sent, replies, response rate)
-  const linkedInResponseData = useMemo(() => {
-    // Determine cutoff date based on selected range
-    const cutoffDate = outreachDayRange === 'all'
-      ? new Date('2000-01-01')
-      : (() => {
-          const date = new Date();
-          date.setDate(date.getDate() - outreachDayRange);
-          date.setHours(0, 0, 0, 0);
-          return date;
-        })();
-
-    // Get earliest date for "all time" mode
-    let earliestDate = new Date();
-    if (outreachDayRange === 'all') {
-      leads.forEach(lead => {
-        const linkedInDate = getLinkedInDate(lead);
-        if (linkedInDate && linkedInDate < earliestDate) {
-          earliestDate = linkedInDate;
-        }
-      });
-    }
-
-    // Generate date range
-    const startDate = outreachDayRange === 'all' ? earliestDate : cutoffDate;
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const dates: string[] = [];
-    const current = new Date(startDate);
-
-    while (current <= today) {
-      dates.push(getDateString(current));
-      current.setDate(current.getDate() + 1);
-    }
-
-    // Aggregate data by day
-    const dailyLinkedInSent: { [date: string]: number } = {};
-    const dailyLinkedInReplies: { [date: string]: number } = {};
-
-    leads.forEach(lead => {
-      const linkedInDate = getLinkedInDate(lead);
-      if (linkedInDate && linkedInDate >= cutoffDate) {
-        const dateStr = getDateString(linkedInDate);
-        dailyLinkedInSent[dateStr] = (dailyLinkedInSent[dateStr] || 0) + 1;
-
-        if (hasLinkedInResponse(lead)) {
-          dailyLinkedInReplies[dateStr] = (dailyLinkedInReplies[dateStr] || 0) + 1;
-        }
-      }
-    });
-
-    return dates.map(date => {
-      const sent = dailyLinkedInSent[date] || 0;
-      const replies = dailyLinkedInReplies[date] || 0;
-      const responseRate = sent > 0 ? parseFloat(((replies / sent) * 100).toFixed(1)) : 0;
-
-      return {
-        label: formatDateLabel(date),
-        sent,
-        replies,
-        responseRate,
-      };
-    });
-  }, [leads, outreachDayRange]);
-
   return (
     <ThemeProvider theme={modernTheme}>
       <Box sx={{
@@ -854,58 +789,6 @@ const LeadAnalytics: React.FC = () => {
                           dataKey: 'email',
                           label: 'Email',
                           color: '#ea4335',
-                          curve: 'monotoneX',
-                        },
-                      ]}
-                      margin={{ left: 60, right: 20, top: 20, bottom: 60 }}
-                      grid={{ vertical: true, horizontal: true }}
-                    />
-                  </Box>
-                </CardContent>
-              </Card>
-            )}
-
-            {/* LinkedIn Response Trends Over Time Chart */}
-            {linkedInResponseData.length > 0 && (
-              <Card sx={{
-                background: 'rgba(255, 255, 255, 0.9)',
-                borderRadius: 3,
-                backdropFilter: 'blur(20px)',
-                border: '1px solid rgba(226, 232, 240, 0.5)',
-                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08)',
-                mb: 4,
-              }}>
-                <CardContent sx={{ p: 4 }}>
-                  <Typography variant="h5" sx={{
-                    fontWeight: 700,
-                    mb: 1,
-                    background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)',
-                    backgroundClip: 'text',
-                    WebkitBackgroundClip: 'text',
-                    color: 'transparent',
-                  }}>
-                    LinkedIn Response Trends
-                  </Typography>
-                  <Typography variant="body2" sx={{ color: '#64748b', mb: 4 }}>
-                    LinkedIn outreach sent vs responses{outreachDayRange === 'all' ? ' (all time)' : ` over the last ${outreachDayRange} days`}
-                  </Typography>
-
-                  <Box sx={{ height: 400 }}>
-                    <LineChart
-                      dataset={linkedInResponseData}
-                      xAxis={[{ dataKey: 'label', scaleType: 'point' }]}
-                      yAxis={[{ label: 'Count' }]}
-                      series={[
-                        {
-                          dataKey: 'sent',
-                          label: 'LinkedIn Sent',
-                          color: '#0077b5',
-                          curve: 'monotoneX',
-                        },
-                        {
-                          dataKey: 'replies',
-                          label: 'Replies',
-                          color: '#4caf50',
                           curve: 'monotoneX',
                         },
                       ]}

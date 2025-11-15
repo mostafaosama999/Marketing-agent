@@ -1,5 +1,5 @@
 // src/pages/analytics/OutboundAnalytics.tsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Box,
   Typography,
@@ -20,6 +20,7 @@ import {
   LinkedIn as LinkedInIcon,
   Sync as SyncIcon,
 } from '@mui/icons-material';
+import { LineChart } from '@mui/x-charts/LineChart';
 import { useAuth } from '../../contexts/AuthContext';
 import LinkedInManualSync from '../../components/features/analytics/LinkedInManualSync';
 import WebsiteAnalytics from '../../components/features/analytics/WebsiteAnalytics';
@@ -66,6 +67,89 @@ const OutboundAnalytics: React.FC = () => {
   const lastSyncAt = analyticsData?.extractedAt?.toDate() || null;
 
   const hasData = posts.length > 0;
+
+  // Helper function to parse relative date and convert to absolute date
+  const parseRelativeDate = (relativeDate: string, extractedAt: Date): Date => {
+    const match = relativeDate.match(/^(\d+)([wdhm])$/);
+    if (!match) return extractedAt;
+
+    const value = parseInt(match[1]);
+    const unit = match[2];
+    const date = new Date(extractedAt);
+
+    switch (unit) {
+      case 'w': // weeks
+        date.setDate(date.getDate() - value * 7);
+        break;
+      case 'd': // days
+        date.setDate(date.getDate() - value);
+        break;
+      case 'h': // hours
+        date.setHours(date.getHours() - value);
+        break;
+      case 'm': // minutes
+        date.setMinutes(date.getMinutes() - value);
+        break;
+    }
+
+    return date;
+  };
+
+  // Format date for chart display
+  const formatChartDate = (date: Date): string => {
+    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+    return `${monthNames[date.getMonth()]} ${date.getDate()}`;
+  };
+
+  // Calculate chart data from posts
+  const chartData = useMemo(() => {
+    if (!posts.length || !lastSyncAt) return [];
+
+    // Convert posts to absolute dates and create data points
+    const dataPoints = posts.map(post => {
+      const postDate = parseRelativeDate(post.postedDate, lastSyncAt);
+      const engagement = (post.likes || 0) + (post.comments || 0) + (post.shares || 0);
+
+      return {
+        date: postDate.toISOString().split('T')[0], // YYYY-MM-DD for grouping
+        displayDate: formatChartDate(postDate),
+        impressions: post.impressions || 0,
+        engagement,
+        timestamp: postDate.getTime(),
+      };
+    });
+
+    // Sort by date chronologically
+    dataPoints.sort((a, b) => a.timestamp - b.timestamp);
+
+    // Group by date and aggregate
+    const groupedData: { [date: string]: { impressions: number; engagement: number; count: number; displayDate: string } } = {};
+
+    dataPoints.forEach(point => {
+      if (!groupedData[point.date]) {
+        groupedData[point.date] = {
+          impressions: 0,
+          engagement: 0,
+          count: 0,
+          displayDate: point.displayDate,
+        };
+      }
+      groupedData[point.date].impressions += point.impressions;
+      groupedData[point.date].engagement += point.engagement;
+      groupedData[point.date].count += 1;
+    });
+
+    // Convert to array format for LineChart
+    return Object.entries(groupedData)
+      .map(([date, data]) => ({
+        label: data.displayDate,
+        impressions: data.impressions,
+        engagement: data.engagement,
+        posts: data.count,
+        date, // Keep for sorting
+      }))
+      .sort((a, b) => a.date.localeCompare(b.date));
+  }, [posts, lastSyncAt]);
 
   // Calculate engagement rate for each post
   const calculateEngagementRate = (post: any) => {
@@ -201,6 +285,59 @@ const OutboundAnalytics: React.FC = () => {
                   </Typography>
                 </Box>
               </Box>
+
+              {/* LinkedIn Performance Chart */}
+              {chartData.length > 0 && (
+                <Box sx={{ mt: 4 }}>
+                  <Card sx={{
+                    borderRadius: 3,
+                    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
+                    background: 'rgba(255, 255, 255, 0.95)',
+                    backdropFilter: 'blur(20px)',
+                    border: '1px solid rgba(226, 232, 240, 0.5)',
+                  }}>
+                    <CardContent sx={{ p: 4 }}>
+                      <Typography variant="h5" sx={{
+                        fontWeight: 700,
+                        mb: 1,
+                        background: 'linear-gradient(135deg, #1e293b 0%, #334155 100%)',
+                        backgroundClip: 'text',
+                        WebkitBackgroundClip: 'text',
+                        color: 'transparent',
+                      }}>
+                        LinkedIn Performance Over Time
+                      </Typography>
+                      <Typography variant="body2" sx={{ color: '#64748b', mb: 4 }}>
+                        Post engagement and reach trends
+                      </Typography>
+
+                      <Box sx={{ height: 400 }}>
+                        <LineChart
+                          dataset={chartData}
+                          xAxis={[{ dataKey: 'label', scaleType: 'point' }]}
+                          yAxis={[{ label: 'Count' }]}
+                          series={[
+                            {
+                              dataKey: 'impressions',
+                              label: 'Impressions',
+                              color: '#0077b5',
+                              curve: 'monotoneX',
+                            },
+                            {
+                              dataKey: 'engagement',
+                              label: 'Engagement',
+                              color: '#4caf50',
+                              curve: 'monotoneX',
+                            },
+                          ]}
+                          margin={{ left: 70, right: 20, top: 20, bottom: 60 }}
+                          grid={{ vertical: true, horizontal: true }}
+                        />
+                      </Box>
+                    </CardContent>
+                  </Card>
+                </Box>
+              )}
 
               {/* Posts Table */}
               {posts.length > 0 && (
