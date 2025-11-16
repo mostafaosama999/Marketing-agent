@@ -292,11 +292,11 @@ export const syncGoogleAnalytics = functions
       );
     }
 
-    const userId = context.auth.uid;
+    const userId = 'global'; // Use global config instead of per-user
     const daysToSync = data.daysToSync || 30; // Default to last 30 days
 
     try {
-      console.log(`Starting Google Analytics sync for user ${userId}, ${daysToSync} days`);
+      console.log(`Starting Google Analytics sync for global config, ${daysToSync} days`);
 
       // Get GA4 property ID from user config
       const configDoc = await admin.firestore()

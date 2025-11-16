@@ -18,7 +18,6 @@ import {
   extractTokenUsage,
   calculateCost,
   logApiCost,
-  CostInfo,
 } from '../utils/costTracker';
 import {
   getAnalyticsAnalysisPrompt,
@@ -208,11 +207,11 @@ export const generatePostIdeas = functions
 
         // Calculate additional metrics
         const totalImpressions = linkedInPosts.reduce(
-          (sum, post) => sum + (post.impressions || 0),
+          (sum: number, post: any) => sum + (post.impressions || 0),
           0
         );
         const totalEngagement = linkedInPosts.reduce(
-          (sum, post) =>
+          (sum: number, post: any) =>
             sum + (post.likes || 0) + (post.comments || 0) + (post.shares || 0),
           0
         );

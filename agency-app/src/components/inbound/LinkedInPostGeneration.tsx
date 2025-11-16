@@ -11,10 +11,8 @@ import {
   Alert,
   Snackbar,
   Chip,
-  Grid,
 } from '@mui/material';
 import {
-  AutoAwesome as AutoAwesomeIcon,
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
   Lightbulb as LightbulbIcon,
@@ -353,18 +351,17 @@ const LinkedInPostGeneration: React.FC<LinkedInPostGenerationProps> = ({
             Select a Post Idea to Generate Full Post
           </Typography>
 
-          <Grid container spacing={2}>
+          <Box sx={{display: 'flex', flexDirection: 'column', gap: 2}}>
             {currentSession.ideas.map((idea, index) => (
-              <Grid item xs={12} key={idea.id}>
-                <PostIdeaCard
-                  idea={idea}
-                  index={index}
-                  onSelect={handleSelectIdea}
-                  generating={generatingPost}
-                />
-              </Grid>
+              <PostIdeaCard
+                key={idea.id}
+                idea={idea}
+                index={index}
+                onSelect={handleSelectIdea}
+                generating={generatingPost}
+              />
             ))}
-          </Grid>
+          </Box>
         </Box>
       )}
 
