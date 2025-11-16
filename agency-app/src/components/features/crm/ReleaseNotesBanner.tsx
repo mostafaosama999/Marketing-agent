@@ -237,6 +237,7 @@ export const ReleaseNotesBanner: React.FC<ReleaseNotesBannerProps> = ({
                 mb: 1.5,
                 lineHeight: 1.5,
                 fontSize: '13px',
+                whiteSpace: 'pre-line',
               }}
             >
               {release.description}
