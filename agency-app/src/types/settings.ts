@@ -23,6 +23,19 @@ export interface AppSettings {
 
   // LinkedIn Post Generation Configuration
   linkedInPostPrompt?: string;
+  linkedInCondensedInsightsPrompt?: string;
+
+  // Post Ideas System Configuration (5 prompts)
+  postIdeasPrompts?: {
+    analyticsAnalysis?: string;
+    newsletterTrends?: string;
+    competitorInsights?: string;
+    ideasGeneration?: string;
+    fullPostGeneration?: string;
+  };
+
+  // DALL-E Image Generation Configuration
+  dalleImageStylePrompt?: string;
 
   // Metadata
   updatedAt: Date;
@@ -40,6 +53,9 @@ export interface UpdateSettingsRequest {
   aiTrendsPrompt?: string;
   aiTrendsDefaultEmailCount?: number;
   linkedInPostPrompt?: string;
+  linkedInCondensedInsightsPrompt?: string;
+  postIdeasPrompts?: AppSettings['postIdeasPrompts'];
+  dalleImageStylePrompt?: string;
 }
 
 /**

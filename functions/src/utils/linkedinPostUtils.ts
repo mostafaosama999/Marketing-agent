@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import * as functions from "firebase-functions";
 import { ExtractedContent } from "./contentExtractionUtils";
-import { LINKEDIN_POST_CONDENSED_INSIGHTS, LINKEDIN_POST_SYSTEM_PROMPT } from "../prompts";
+import { LINKEDIN_POST_CONDENSED_INSIGHTS, LINKEDIN_POST_SYSTEM_PROMPT, DEFAULT_CONDENSED_INSIGHTS_PROMPT } from "../prompts";
 import { extractTokenUsage, calculateCost, CostInfo } from "./costTracker";
 
 export interface LinkedInPost {
@@ -34,15 +34,17 @@ function getOpenAI(): OpenAI {
 /**
  * Generate LinkedIn posts from extracted content using the specified prompt
  */
-export async function generateLinkedInPosts(extractedContent: ExtractedContent): Promise<LinkedInPostGeneration> {
+export async function generateLinkedInPosts(extractedContent: ExtractedContent, customPrompt?: string): Promise<LinkedInPostGeneration> {
   try {
     console.log(`🤖 Generating LinkedIn posts for: ${extractedContent.title}`);
     console.log(`📝 Content length: ${extractedContent.content.length} characters, ${extractedContent.wordCount} words`);
 
-    // Build prompt using centralized template
-    const prompt = LINKEDIN_POST_CONDENSED_INSIGHTS({
-      content: extractedContent.content,
-    });
+    // Build prompt using custom prompt or default template
+    const prompt = customPrompt
+      ? `${extractedContent.content}\n\n${customPrompt}`
+      : LINKEDIN_POST_CONDENSED_INSIGHTS({
+          content: extractedContent.content,
+        });
 
     // Make the OpenAI API call
     const openai = getOpenAI();

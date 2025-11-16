@@ -44,6 +44,15 @@ import {
 import TiptapRichTextEditor from '../../components/common/TiptapRichTextEditor';
 import { SafeHtmlRenderer, getHtmlCharCount, isHtmlEmpty } from '../../utils/htmlHelpers';
 import { ReleaseNotesTab } from '../../components/settings/ReleaseNotesTab';
+import {
+  DEFAULT_ANALYTICS_ANALYSIS_PROMPT,
+  DEFAULT_NEWSLETTER_TRENDS_PROMPT,
+  DEFAULT_COMPETITOR_INSIGHTS_PROMPT,
+  DEFAULT_POST_IDEAS_PROMPT,
+  DEFAULT_FULL_POST_PROMPT,
+  DEFAULT_DALLE_IMAGE_PROMPT,
+} from '../../prompts/postIdeasPrompt';
+import { DEFAULT_CONDENSED_INSIGHTS_PROMPT } from '../../prompts/linkedinPosts';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -85,6 +94,17 @@ export const SettingsPage: React.FC = () => {
 
   // LinkedIn Post Generation settings
   const [linkedInPostPrompt, setLinkedInPostPrompt] = useState('');
+  const [linkedInCondensedInsightsPrompt, setLinkedInCondensedInsightsPrompt] = useState('');
+
+  // Post Ideas System prompts (5 prompts)
+  const [analyticsAnalysisPrompt, setAnalyticsAnalysisPrompt] = useState('');
+  const [newsletterTrendsPrompt, setNewsletterTrendsPrompt] = useState('');
+  const [competitorInsightsPrompt, setCompetitorInsightsPrompt] = useState('');
+  const [ideasGenerationPrompt, setIdeasGenerationPrompt] = useState('');
+  const [fullPostGenerationPrompt, setFullPostGenerationPrompt] = useState('');
+
+  // DALL-E Image Generation settings
+  const [dalleImageStylePrompt, setDalleImageStylePrompt] = useState('');
 
   // Custom prompts state (loaded from localStorage)
   const [customPrompts, setCustomPrompts] = useState<Record<string, PromptMetadata>>({});
@@ -106,6 +126,13 @@ export const SettingsPage: React.FC = () => {
         setAiTrendsPrompt(data.aiTrendsPrompt || '');
         setAiTrendsEmailCount(data.aiTrendsDefaultEmailCount || 50);
         setLinkedInPostPrompt(data.linkedInPostPrompt || '');
+        setLinkedInCondensedInsightsPrompt(data.linkedInCondensedInsightsPrompt || '');
+        setAnalyticsAnalysisPrompt(data.postIdeasPrompts?.analyticsAnalysis || '');
+        setNewsletterTrendsPrompt(data.postIdeasPrompts?.newsletterTrends || '');
+        setCompetitorInsightsPrompt(data.postIdeasPrompts?.competitorInsights || '');
+        setIdeasGenerationPrompt(data.postIdeasPrompts?.ideasGeneration || '');
+        setFullPostGenerationPrompt(data.postIdeasPrompts?.fullPostGeneration || '');
+        setDalleImageStylePrompt(data.dalleImageStylePrompt || '');
       } catch (err) {
         console.error('Error loading settings:', err);
         setError('Failed to load settings');
@@ -124,6 +151,13 @@ export const SettingsPage: React.FC = () => {
       setAiTrendsPrompt(updatedSettings.aiTrendsPrompt || '');
       setAiTrendsEmailCount(updatedSettings.aiTrendsDefaultEmailCount || 50);
       setLinkedInPostPrompt(updatedSettings.linkedInPostPrompt || '');
+      setLinkedInCondensedInsightsPrompt(updatedSettings.linkedInCondensedInsightsPrompt || '');
+      setAnalyticsAnalysisPrompt(updatedSettings.postIdeasPrompts?.analyticsAnalysis || '');
+      setNewsletterTrendsPrompt(updatedSettings.postIdeasPrompts?.newsletterTrends || '');
+      setCompetitorInsightsPrompt(updatedSettings.postIdeasPrompts?.competitorInsights || '');
+      setIdeasGenerationPrompt(updatedSettings.postIdeasPrompts?.ideasGeneration || '');
+      setFullPostGenerationPrompt(updatedSettings.postIdeasPrompts?.fullPostGeneration || '');
+      setDalleImageStylePrompt(updatedSettings.dalleImageStylePrompt || '');
     });
 
     return () => unsubscribe();
@@ -319,6 +353,37 @@ Return a JSON object with this exact structure:
     setLinkedInPostPrompt(defaultPrompt);
   };
 
+  const handleSaveContentGenerationSettings = async () => {
+    if (!user) return;
+
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      await updateSettings({
+        linkedInCondensedInsightsPrompt,
+        postIdeasPrompts: {
+          analyticsAnalysis: analyticsAnalysisPrompt,
+          newsletterTrends: newsletterTrendsPrompt,
+          competitorInsights: competitorInsightsPrompt,
+          ideasGeneration: ideasGenerationPrompt,
+          fullPostGeneration: fullPostGenerationPrompt,
+        },
+        dalleImageStylePrompt,
+      }, user.uid);
+      setSuccess('Content Generation settings saved successfully!');
+
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      console.error('Error saving Content Generation settings:', err);
+      setError(err.message || 'Failed to save Content Generation settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
   // Handle copy to clipboard with feedback
   const handleInsertVariable = (variable: string) => {
     setOfferTemplate((prev) => prev + variable);
@@ -511,6 +576,7 @@ Return a JSON object with this exact structure:
             <Tab label="AI Prompts" />
             <Tab label="Release Notes" />
             <Tab label="General" />
+            <Tab label="Content Generation" />
           </Tabs>
         </Box>
 
@@ -1065,6 +1131,218 @@ Return a JSON object with this exact structure:
                     </Button>
                   </Box>
                 </Paper>
+              </Box>
+            </Box>
+          </TabPanel>
+
+          {/* Content Generation Tab */}
+          <TabPanel value={tabValue} index={4}>
+            <Box>
+              <Typography variant="h5" sx={{ fontWeight: 700, mb: 1 }}>
+                Content Generation Prompts
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#64748b', mb: 4 }}>
+                Customize AI prompts for LinkedIn post ideas generation, condensed insights, and image generation
+              </Typography>
+
+              {/* LinkedIn Condensed Insights */}
+              <Paper sx={{ p: 3, mb: 4, borderRadius: 2, border: '1px solid #e2e8f0' }}>
+                <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
+                  LinkedIn Condensed Insights
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#64748b', mb: 3 }}>
+                  Generates 2 LinkedIn posts from technical articles using condensed insights technique
+                </Typography>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={10}
+                  value={linkedInCondensedInsightsPrompt}
+                  onChange={(e) => setLinkedInCondensedInsightsPrompt(e.target.value)}
+                  placeholder={DEFAULT_CONDENSED_INSIGHTS_PROMPT}
+                  sx={{ '& .MuiOutlinedInput-root': { fontFamily: 'monospace', fontSize: '0.875rem' } }}
+                />
+                <Button
+                  size="small"
+                  onClick={() => setLinkedInCondensedInsightsPrompt(DEFAULT_CONDENSED_INSIGHTS_PROMPT)}
+                  sx={{ mt: 2, color: '#667eea', textTransform: 'none' }}
+                >
+                  Reset to Default
+                </Button>
+              </Paper>
+
+              {/* Post Ideas System */}
+              <Paper sx={{ p: 3, mb: 4, borderRadius: 2, border: '1px solid #e2e8f0' }}>
+                <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
+                  Post Ideas System (5 Prompts)
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#64748b', mb: 3 }}>
+                  Strategic LinkedIn content planning system with multiple analysis steps
+                </Typography>
+
+                <Box sx={{ mb: 3 }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                    1. Analytics Analysis
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={8}
+                    value={analyticsAnalysisPrompt}
+                    onChange={(e) => setAnalyticsAnalysisPrompt(e.target.value)}
+                    placeholder={DEFAULT_ANALYTICS_ANALYSIS_PROMPT}
+                    sx={{ '& .MuiOutlinedInput-root': { fontFamily: 'monospace', fontSize: '0.875rem' } }}
+                  />
+                  <Button
+                    size="small"
+                    onClick={() => setAnalyticsAnalysisPrompt(DEFAULT_ANALYTICS_ANALYSIS_PROMPT)}
+                    sx={{ mt: 1, color: '#667eea', textTransform: 'none' }}
+                  >
+                    Reset
+                  </Button>
+                </Box>
+
+                <Divider sx={{ my: 3 }} />
+
+                <Box sx={{ mb: 3 }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                    2. Newsletter Trends Extraction
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={8}
+                    value={newsletterTrendsPrompt}
+                    onChange={(e) => setNewsletterTrendsPrompt(e.target.value)}
+                    placeholder={DEFAULT_NEWSLETTER_TRENDS_PROMPT}
+                    sx={{ '& .MuiOutlinedInput-root': { fontFamily: 'monospace', fontSize: '0.875rem' } }}
+                  />
+                  <Button
+                    size="small"
+                    onClick={() => setNewsletterTrendsPrompt(DEFAULT_NEWSLETTER_TRENDS_PROMPT)}
+                    sx={{ mt: 1, color: '#667eea', textTransform: 'none' }}
+                  >
+                    Reset
+                  </Button>
+                </Box>
+
+                <Divider sx={{ my: 3 }} />
+
+                <Box sx={{ mb: 3 }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                    3. Competitor Insights
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={8}
+                    value={competitorInsightsPrompt}
+                    onChange={(e) => setCompetitorInsightsPrompt(e.target.value)}
+                    placeholder={DEFAULT_COMPETITOR_INSIGHTS_PROMPT}
+                    sx={{ '& .MuiOutlinedInput-root': { fontFamily: 'monospace', fontSize: '0.875rem' } }}
+                  />
+                  <Button
+                    size="small"
+                    onClick={() => setCompetitorInsightsPrompt(DEFAULT_COMPETITOR_INSIGHTS_PROMPT)}
+                    sx={{ mt: 1, color: '#667eea', textTransform: 'none' }}
+                  >
+                    Reset
+                  </Button>
+                </Box>
+
+                <Divider sx={{ my: 3 }} />
+
+                <Box sx={{ mb: 3 }}>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                    4. Post Ideas Generation
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={10}
+                    value={ideasGenerationPrompt}
+                    onChange={(e) => setIdeasGenerationPrompt(e.target.value)}
+                    placeholder={DEFAULT_POST_IDEAS_PROMPT}
+                    sx={{ '& .MuiOutlinedInput-root': { fontFamily: 'monospace', fontSize: '0.875rem' } }}
+                  />
+                  <Button
+                    size="small"
+                    onClick={() => setIdeasGenerationPrompt(DEFAULT_POST_IDEAS_PROMPT)}
+                    sx={{ mt: 1, color: '#667eea', textTransform: 'none' }}
+                  >
+                    Reset
+                  </Button>
+                </Box>
+
+                <Divider sx={{ my: 3 }} />
+
+                <Box>
+                  <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                    5. Full Post Writing
+                  </Typography>
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={10}
+                    value={fullPostGenerationPrompt}
+                    onChange={(e) => setFullPostGenerationPrompt(e.target.value)}
+                    placeholder={DEFAULT_FULL_POST_PROMPT}
+                    sx={{ '& .MuiOutlinedInput-root': { fontFamily: 'monospace', fontSize: '0.875rem' } }}
+                  />
+                  <Button
+                    size="small"
+                    onClick={() => setFullPostGenerationPrompt(DEFAULT_FULL_POST_PROMPT)}
+                    sx={{ mt: 1, color: '#667eea', textTransform: 'none' }}
+                  >
+                    Reset
+                  </Button>
+                </Box>
+              </Paper>
+
+              {/* DALL-E Image Generation */}
+              <Paper sx={{ p: 3, mb: 4, borderRadius: 2, border: '1px solid #e2e8f0' }}>
+                <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
+                  DALL-E Image Generation
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#64748b', mb: 3 }}>
+                  Customize visual style for AI-generated LinkedIn images
+                </Typography>
+                <TextField
+                  fullWidth
+                  multiline
+                  rows={8}
+                  value={dalleImageStylePrompt}
+                  onChange={(e) => setDalleImageStylePrompt(e.target.value)}
+                  placeholder={DEFAULT_DALLE_IMAGE_PROMPT}
+                  sx={{ '& .MuiOutlinedInput-root': { fontFamily: 'monospace', fontSize: '0.875rem' } }}
+                />
+                <Button
+                  size="small"
+                  onClick={() => setDalleImageStylePrompt(DEFAULT_DALLE_IMAGE_PROMPT)}
+                  sx={{ mt: 2, color: '#667eea', textTransform: 'none' }}
+                >
+                  Reset to Default
+                </Button>
+              </Paper>
+
+              {/* Save Button */}
+              <Box sx={{ display: 'flex', justifyContent: 'flex-end' }}>
+                <Button
+                  variant="contained"
+                  onClick={handleSaveContentGenerationSettings}
+                  disabled={saving}
+                  startIcon={saving ? <CircularProgress size={20} /> : <SaveIcon />}
+                  sx={{
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    color: 'white',
+                    fontWeight: 600,
+                    px: 3,
+                    '&:hover': { background: 'linear-gradient(135deg, #5568d3 0%, #653a8b 100%)' },
+                    '&:disabled': { background: '#e2e8f0', color: '#94a3b8' },
+                  }}
+                >
+                  {saving ? 'Saving...' : 'Save Content Generation Settings'}
+                </Button>
               </Box>
             </Box>
           </TabPanel>

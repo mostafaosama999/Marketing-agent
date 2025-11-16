@@ -53,19 +53,30 @@ COMPETITOR INSIGHTS:
 - Tone: ${competitorSummary.toneAndStyle || 'Professional and engaging'}
 - Hashtag Strategy: ${competitorSummary.hashtagStrategy?.join(', ') || 'N/A'}
 
-POST REQUIREMENTS:
-1. Word count: 180-220 words (STRICT)
-2. Tone: Professional yet engaging, thought-leadership style
-3. Structure:
-   - Hook: Attention-grabbing opening (1-2 sentences)
-   - Context: Explain the AI trend and why it matters (2-3 sentences)
-   - Leadership Insight: Strategic implications for business leaders (2-3 sentences)
-   - Call-to-Action: Thought-provoking question or actionable takeaway (1-2 sentences)
-4. Include 3-5 relevant hashtags at the end
-5. Use line breaks for readability
-6. Incorporate insights from competitor patterns
-7. Avoid buzzwords and overhype
-8. Focus on actionable insights
+CRITICAL REQUIREMENTS (IN ORDER OF PRIORITY):
+
+1. **WORD COUNT - ABSOLUTE REQUIREMENT**:
+   - Your post MUST be 180-220 words
+   - This is NON-NEGOTIABLE. Posts shorter than 170 words will be rejected.
+   - Allocate words strategically:
+     * Hook/Opening: 25-35 words (attention-grabbing, compelling start)
+     * Context/Explanation: 70-90 words (detailed explanation of AI trend, why it matters, specific examples)
+     * Leadership Insight: 50-70 words (strategic implications, business impact, actionable perspectives)
+     * Call-to-Action: 25-35 words (thought-provoking question or clear takeaway)
+   - Write with SUBSTANCE and DEPTH. Provide specific insights, examples, or frameworks.
+   - DO NOT write brief, superficial posts. Add details, context, and strategic thinking.
+
+2. **Tone & Voice**:
+   - Professional yet engaging, thought-leadership style
+   - Match competitor tone: ${competitorSummary.toneAndStyle || 'Professional and engaging'}
+   - Avoid buzzwords and overhype
+   - Focus on actionable insights
+
+3. **Structure & Formatting**:
+   - Use line breaks for readability
+   - Incorporate insights from competitor patterns: ${competitorSummary.engagementPatterns?.join(', ') || 'N/A'}
+
+4. **Hashtags**: Include 3-5 relevant hashtags at the end, similar to: ${competitorSummary.hashtagStrategy?.join(', ') || '#AI #Leadership #Innovation'}
 
 Return a JSON object with this exact structure:
 {

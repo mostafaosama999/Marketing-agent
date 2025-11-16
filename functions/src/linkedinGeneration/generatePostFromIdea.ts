@@ -16,7 +16,12 @@ import {
   CostInfo,
   DALLE_PRICING,
 } from '../utils/costTracker';
-import {getFullPostPrompt, getMemeImagePrompt} from '../prompts/postIdeasPrompt';
+import {
+  getFullPostPrompt,
+  getMemeImagePrompt,
+  DEFAULT_FULL_POST_PROMPT,
+  DEFAULT_DALLE_IMAGE_PROMPT,
+} from '../prompts/postIdeasPrompt';
 
 /**
  * Clean JSON response from OpenAI
@@ -87,6 +92,16 @@ export const generatePostFromIdea = functions
         console.log(
           `🚀 Starting post generation from idea: ${ideaId} (session: ${sessionId})`
         );
+
+        // Fetch settings for custom prompts
+        const settingsDoc = await db
+          .collection('settings')
+          .doc('app-settings')
+          .get();
+
+        const settings = settingsDoc.exists ? settingsDoc.data() : {};
+        const customPrompts = settings?.postIdeasPrompts || {};
+        const customDallePrompt = settings?.dalleImageStylePrompt;
 
         // 3. Create job document immediately
         const jobRef = db
@@ -221,43 +236,99 @@ async function processPostGeneration(
       },
     });
 
-    const postPrompt = getFullPostPrompt(
-      selectedIdea,
-      session.analyticsInsights,
-      selectedTrend
-    );
+    // Use custom prompt or default
+    const postPrompt = customPrompts.fullPostGeneration
+      ? customPrompts.fullPostGeneration
+      : getFullPostPrompt(
+          selectedIdea,
+          session.analyticsInsights,
+          selectedTrend
+        );
 
-    const postCompletion = await openai.chat.completions.create({
-      model: 'gpt-4-turbo',
-      response_format: {type: 'json_object'},
-      temperature: 0.7,
-      max_tokens: 2000,
-      messages: [
-        {
-          role: 'system',
-          content:
-            'You are an expert LinkedIn content creator specializing in thought leadership posts for CEOs and business leaders.',
-        },
-        {role: 'user', content: postPrompt},
-      ],
-    });
+    let postData;
+    let wordCount = 0;
+    let attempts = 0;
+    const maxAttempts = 2;
+    const minWordCount = 130; // Minimum acceptable word count
+    let lastCompletion;
+    let totalPostCost = 0;
 
-    const postContent = postCompletion.choices[0]?.message?.content;
-    if (!postContent) {
-      throw new Error('Failed to generate LinkedIn post');
+    // Retry loop for word count validation
+    while (attempts < maxAttempts) {
+      attempts++;
+
+      const postCompletion = await openai.chat.completions.create({
+        model: 'gpt-4-turbo',
+        response_format: {type: 'json_object'},
+        temperature: 0.5, // Lower temperature for better instruction adherence
+        max_tokens: 2000,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are an expert LinkedIn content creator specializing in thought leadership posts for CEOs and business leaders. You write detailed, substantive posts that are ALWAYS 140-220 words long with depth and insights.',
+          },
+          {
+            role: 'user',
+            content:
+              attempts === 1
+                ? postPrompt
+                : `${postPrompt}\n\nIMPORTANT: Your previous attempt was only ${wordCount} words. You MUST write at least ${minWordCount} words. Add more depth, examples, insights, and strategic implications. Be thorough and substantive.`,
+          },
+        ],
+      });
+
+      lastCompletion = postCompletion;
+
+      // Track cost for each attempt
+      const attemptTokens = extractTokenUsage(postCompletion);
+      if (attemptTokens) {
+        const attemptCost = calculateCost(attemptTokens, 'gpt-4-turbo');
+        totalPostCost += attemptCost.totalCost;
+      }
+
+      const postContent = postCompletion.choices[0]?.message?.content;
+      if (!postContent) {
+        throw new Error('Failed to generate LinkedIn post');
+      }
+
+      postData = JSON.parse(cleanJsonResponse(postContent));
+      wordCount = postData.content.split(/\s+/).length;
+
+      console.log(
+        `✍️  Post generation attempt ${attempts}: ${wordCount} words`
+      );
+
+      // Check if word count meets minimum
+      if (wordCount >= minWordCount) {
+        console.log(`✓ Word count acceptable: ${wordCount} words`);
+        break;
+      }
+
+      if (attempts < maxAttempts) {
+        console.log(
+          `⚠️  Post too short (${wordCount} words < ${minWordCount}), retrying...`
+        );
+      } else {
+        console.log(
+          `⚠️  Final attempt still short (${wordCount} words), proceeding anyway`
+        );
+      }
     }
 
-    const postData = JSON.parse(cleanJsonResponse(postContent));
-    const wordCount = postData.content.split(/\s+/).length;
+    // Use total cost from all attempts
+    const postCost = totalPostCost;
+    console.log(
+      `💰 Post generation cost (${attempts} attempt${attempts > 1 ? 's' : ''}): $${postCost.toFixed(4)}`
+    );
 
-    // Calculate post cost
-    const postTokens = extractTokenUsage(postCompletion);
-    let postCost = 0;
+    // Calculate post cost info for logging (use last completion for token details)
+    const postTokens = extractTokenUsage(lastCompletion);
     let postCostInfo: CostInfo | null = null;
     if (postTokens) {
       postCostInfo = calculateCost(postTokens, 'gpt-4-turbo');
-      postCost = postCostInfo.totalCost;
-      console.log(`💰 Post generation cost: $${postCost.toFixed(4)}`);
+      // Use total cost instead of last attempt cost
+      postCostInfo.totalCost = totalPostCost;
     }
 
     await updateJobProgress(db, userId, jobId, {
@@ -279,7 +350,8 @@ async function processPostGeneration(
       },
     });
 
-    const imagePrompt = getMemeImagePrompt(selectedIdea);
+    // Use custom DALL-E prompt or default
+    const imagePrompt = customDallePrompt || getMemeImagePrompt(selectedIdea);
     console.log('🎨 DALL-E Prompt:', imagePrompt);
 
     let imageUrl: string | undefined;

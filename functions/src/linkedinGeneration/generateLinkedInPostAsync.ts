@@ -313,44 +313,98 @@ async function processLinkedInGeneration(
 
     const postPrompt = getLinkedInPostPrompt(aiTrend, competitorSummary || {});
 
-    const postCompletion = await openai.chat.completions.create({
-      model: 'gpt-4-turbo',
-      response_format: {type: 'json_object'},
-      temperature: 0.7,
-      max_tokens: 2000,
-      messages: [
-        {
-          role: 'system',
-          content:
-            'You are an expert LinkedIn content creator specializing in thought leadership posts for CEOs and business leaders.',
-        },
-        {role: 'user', content: postPrompt},
-      ],
-    });
+    let postData: PostGenerationResponse | undefined;
+    let wordCount = 0;
+    let attempts = 0;
+    const maxAttempts = 2;
+    const minWordCount = 170; // Minimum acceptable word count
+    let lastCompletion;
+    let totalPostCost = 0;
 
-    const postContent = postCompletion.choices[0]?.message?.content;
-    if (!postContent) {
-      throw new Error('Failed to generate LinkedIn post');
+    // Retry loop for word count validation
+    while (attempts < maxAttempts) {
+      attempts++;
+
+      const postCompletion = await openai.chat.completions.create({
+        model: 'gpt-4-turbo',
+        response_format: {type: 'json_object'},
+        temperature: 0.5, // Lower temperature for better instruction adherence
+        max_tokens: 2000,
+        messages: [
+          {
+            role: 'system',
+            content:
+              'You are an expert LinkedIn content creator specializing in thought leadership posts for CEOs and business leaders. You write detailed, substantive posts that are ALWAYS 180-220 words long with depth and insights.',
+          },
+          {
+            role: 'user',
+            content:
+              attempts === 1
+                ? postPrompt
+                : `${postPrompt}\n\nIMPORTANT: Your previous attempt was only ${wordCount} words. You MUST write at least ${minWordCount} words. Add more depth, examples, insights, and strategic implications. Be thorough and substantive.`,
+          },
+        ],
+      });
+
+      lastCompletion = postCompletion;
+
+      // Track cost for each attempt
+      const attemptTokens = extractTokenUsage(postCompletion);
+      if (attemptTokens) {
+        const attemptCost = calculateCost(attemptTokens, 'gpt-4-turbo');
+        totalPostCost += attemptCost.totalCost;
+      }
+
+      const postContent = postCompletion.choices[0]?.message?.content;
+      if (!postContent) {
+        throw new Error('Failed to generate LinkedIn post');
+      }
+
+      // Parse post response
+      const cleanedPostContent = postContent
+        .replace(/```json\n?/g, '')
+        .replace(/```\n?/g, '')
+        .trim();
+      const parsedData = JSON.parse(cleanedPostContent) as PostGenerationResponse;
+      postData = parsedData;
+
+      // Calculate word count
+      wordCount = parsedData.content.split(/\s+/).length;
+
+      console.log(
+        `✍️  Post generation attempt ${attempts}: ${wordCount} words`
+      );
+
+      // Check if word count meets minimum
+      if (wordCount >= minWordCount) {
+        console.log(`✓ Word count acceptable: ${wordCount} words`);
+        break;
+      }
+
+      if (attempts < maxAttempts) {
+        console.log(
+          `⚠️  Post too short (${wordCount} words < ${minWordCount}), retrying...`
+        );
+      } else {
+        console.log(
+          `⚠️  Final attempt still short (${wordCount} words), proceeding anyway`
+        );
+      }
     }
 
-    // Parse post response
-    const cleanedPostContent = postContent
-      .replace(/```json\n?/g, '')
-      .replace(/```\n?/g, '')
-      .trim();
-    const postData: PostGenerationResponse = JSON.parse(cleanedPostContent);
+    // Use total cost from all attempts
+    const postCost = totalPostCost;
+    console.log(
+      `💰 Post generation cost (${attempts} attempt${attempts > 1 ? 's' : ''}): $${postCost.toFixed(4)}`
+    );
 
-    // Calculate word count
-    const wordCount = postData.content.split(/\s+/).length;
-
-    // Calculate post generation cost
-    const postTokenUsage = extractTokenUsage(postCompletion);
-    let postCost = 0;
+    // Calculate post cost info for logging (use last completion for token details)
+    const postTokenUsage = extractTokenUsage(lastCompletion);
     let postCostInfo: CostInfo | null = null;
     if (postTokenUsage) {
       postCostInfo = calculateCost(postTokenUsage, 'gpt-4-turbo');
-      postCost = postCostInfo.totalCost;
-      console.log(`Post generation cost: $${postCost.toFixed(4)}`);
+      // Use total cost instead of last attempt cost
+      postCostInfo.totalCost = totalPostCost;
     }
 
     await updateJobProgress(db, userId, jobId, {
@@ -412,6 +466,10 @@ async function processLinkedInGeneration(
 
     // STAGE 5: Save results and log costs (95-100%)
     const totalCost = summaryCost + postCost + imageCost;
+
+    if (!postData) {
+      throw new Error('Post data was not generated');
+    }
 
     await updateJobProgress(db, userId, jobId, {
       status: 'completed',

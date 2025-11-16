@@ -24,6 +24,10 @@ import {
   getNewsletterTrendsPrompt,
   getCompetitorInsightsPrompt,
   getPostIdeasPrompt,
+  DEFAULT_ANALYTICS_ANALYSIS_PROMPT,
+  DEFAULT_NEWSLETTER_TRENDS_PROMPT,
+  DEFAULT_COMPETITOR_INSIGHTS_PROMPT,
+  DEFAULT_POST_IDEAS_PROMPT,
 } from '../prompts/postIdeasPrompt';
 
 /**
@@ -63,6 +67,21 @@ export const generatePostIdeas = functions
 
       try {
         console.log(`🚀 Starting post ideas generation for user: ${userId}`);
+
+        // ==========================================
+        // STAGE 0: Fetch Settings for Custom Prompts
+        // ==========================================
+
+        console.log('⚙️ Stage 0: Fetching settings...');
+        const settingsDoc = await db
+          .collection('settings')
+          .doc('app-settings')
+          .get();
+
+        const settings = settingsDoc.exists ? settingsDoc.data() : {};
+        const customPrompts = settings?.postIdeasPrompts || {};
+
+        console.log('✓ Settings loaded');
 
         // ==========================================
         // STAGE 1: Fetch All 3 Data Sources
@@ -163,7 +182,10 @@ export const generatePostIdeas = functions
 
         console.log('🔍 Stage 2: Analyzing LinkedIn analytics...');
 
-        const analyticsPrompt = getAnalyticsAnalysisPrompt(linkedInPosts);
+        // Use custom prompt or default
+        const analyticsPrompt = customPrompts.analyticsAnalysis
+          ? customPrompts.analyticsAnalysis
+          : getAnalyticsAnalysisPrompt(linkedInPosts);
 
         const analyticsCompletion = await openai.chat.completions.create({
           model: 'gpt-4-turbo',
@@ -239,7 +261,10 @@ export const generatePostIdeas = functions
 
         console.log('📰 Stage 3: Analyzing newsletter trends...');
 
-        const newsletterPrompt = getNewsletterTrendsPrompt(newsletterEmails);
+        // Use custom prompt or default
+        const newsletterPrompt = customPrompts.newsletterTrends
+          ? customPrompts.newsletterTrends
+          : getNewsletterTrendsPrompt(newsletterEmails);
 
         const newsletterCompletion = await openai.chat.completions.create({
           model: 'gpt-4-turbo',
@@ -291,8 +316,10 @@ export const generatePostIdeas = functions
 
         console.log('🏢 Stage 4: Analyzing competitor posts...');
 
-        const competitorPrompt =
-          getCompetitorInsightsPrompt(competitorPosts);
+        // Use custom prompt or default
+        const competitorPrompt = customPrompts.competitorInsights
+          ? customPrompts.competitorInsights
+          : getCompetitorInsightsPrompt(competitorPosts);
 
         const competitorCompletion = await openai.chat.completions.create({
           model: 'gpt-4-turbo',
@@ -342,11 +369,14 @@ export const generatePostIdeas = functions
 
         console.log('💡 Stage 5: Generating 5 post ideas...');
 
-        const ideasPrompt = getPostIdeasPrompt(
-          analyticsInsights,
-          newsletterResponse.trends,
-          competitorResponse
-        );
+        // Use custom prompt or default
+        const ideasPrompt = customPrompts.ideasGeneration
+          ? customPrompts.ideasGeneration
+          : getPostIdeasPrompt(
+              analyticsInsights,
+              newsletterResponse.trends,
+              competitorResponse
+            );
 
         const ideasCompletion = await openai.chat.completions.create({
           model: 'gpt-4-turbo',
