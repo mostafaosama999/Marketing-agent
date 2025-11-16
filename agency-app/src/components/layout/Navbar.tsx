@@ -243,6 +243,18 @@ const Navbar: React.FC = () => {
             {...({ component: Link, to: '/inbound-generation' } as any)}
           >
             INBOUND GENERATION
+            <Chip
+              label="BETA"
+              size="small"
+              sx={{
+                ml: 1,
+                height: '18px',
+                fontSize: '0.65rem',
+                fontWeight: 700,
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                color: 'white',
+              }}
+            />
           </NavButton>
         </Box>
 

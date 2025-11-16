@@ -1,6 +1,7 @@
 // functions/src/analytics/extractLinkedInAnalytics.ts
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
+import {FieldValue} from "firebase-admin/firestore";
 import OpenAI from "openai";
 import { extractTokenUsage, calculateCost, logApiCost, CostInfo } from "../utils/costTracker";
 
@@ -173,12 +174,19 @@ export const extractLinkedInAnalytics = functions
         totalImpressions,
         totalEngagement,
         postCount: extractedData.posts.length,
-        extractedAt: admin.firestore.FieldValue.serverTimestamp(),
+        extractedAt: FieldValue.serverTimestamp(),
         extractedBy: userId,
       });
 
       console.log(`✅ Extracted ${extractedData.posts.length} posts for user ${userId}`);
       console.log(`Total impressions: ${totalImpressions}, Total engagement: ${totalEngagement}`);
+
+      // Find top post by impressions
+      const topPost = extractedData.posts.length > 0
+        ? extractedData.posts.reduce((prev, current) =>
+            (current.impressions > prev.impressions) ? current : prev
+          ).content.substring(0, 100) + (extractedData.posts[0].content.length > 100 ? '...' : '')
+        : undefined;
 
       // Log API cost
       if (costInfo) {
@@ -199,11 +207,14 @@ export const extractLinkedInAnalytics = functions
 
       return {
         success: true,
-        postCount: extractedData.posts.length,
-        totalImpressions,
-        totalEngagement,
-        period: extractedData.period,
-        costInfo: costInfo || undefined,
+        data: {
+          postCount: extractedData.posts.length,
+          totalImpressions,
+          totalEngagement,
+          period: extractedData.period,
+          topPost,
+        },
+        cost: costInfo?.totalCost,
       };
     } catch (error: any) {
       console.error("Failed to extract LinkedIn analytics:", error);
