@@ -130,40 +130,31 @@ export const extractCompetitorPosts = functions
         throw new functions.https.HttpsError('internal', 'Could not extract competitor name from content');
       }
 
-      // Auto-create or find competitor profile
+      // Extract competitor info (no DB calls yet - deferred for speed)
       const competitorName = extractedData.competitorName;
       const linkedInUrl = extractedData.competitorLinkedInUrl || '';
+      const now = Timestamp.now();
 
-      // Check if competitor already exists by name
+      // Check if competitor already exists by name (AFTER OpenAI call for speed)
       const competitorsQuery = await db
         .collection('competitors')
         .where('active', '==', true)
         .get();
 
+      let needsCompetitorCreation = true;
       for (const doc of competitorsQuery.docs) {
         const data = doc.data();
         if (data.name.toLowerCase() === competitorName.toLowerCase()) {
           competitorId = doc.id;
+          needsCompetitorCreation = false;
           break;
         }
       }
 
-      // Create new competitor if doesn't exist
-      if (!competitorId) {
-        const competitorRef = await db.collection('competitors').add({
-          name: competitorName,
-          linkedInUrl: linkedInUrl,
-          profileUrl: linkedInUrl,
-          notes: 'Auto-created from LinkedIn sync',
-          addedAt: Timestamp.now(),
-          addedBy: userId,
-          active: true,
-        });
-
+      // Pre-generate competitor ID if needed (use .set() in batch instead of .add()+.update())
+      if (needsCompetitorCreation) {
+        const competitorRef = db.collection('competitors').doc();
         competitorId = competitorRef.id;
-
-        // Update with its own ID
-        await competitorRef.update({ id: competitorId });
       }
 
       // Safety check
@@ -171,11 +162,10 @@ export const extractCompetitorPosts = functions
         throw new functions.https.HttpsError('internal', 'Failed to create or find competitor');
       }
 
-      // Type assertion - competitorId is guaranteed to be string after the check above
+      // Type assertion
       const validCompetitorId: string = competitorId;
 
       // Prepare posts for Firestore
-      const now = Timestamp.now();
       const postsWithMetadata = extractedData.posts.map((post, index) => ({
         id: `${validCompetitorId}_${now.toMillis()}_${index}`,
         competitorId: validCompetitorId,
@@ -185,8 +175,23 @@ export const extractCompetitorPosts = functions
         extractedBy: userId,
       }));
 
-      // Save to Firestore in batch (flattened structure for speed)
+      // Single batch for ALL writes (competitor + posts + metadata)
       const batch = db.batch();
+
+      // Create competitor in batch if needed
+      if (needsCompetitorCreation) {
+        const competitorRef = db.collection('competitors').doc(validCompetitorId);
+        batch.set(competitorRef, {
+          id: validCompetitorId,
+          name: competitorName,
+          linkedInUrl: linkedInUrl,
+          profileUrl: linkedInUrl,
+          notes: 'Auto-created from LinkedIn sync',
+          addedAt: now,
+          addedBy: userId,
+          active: true,
+        });
+      }
 
       // Save each post to the flattened competitorPosts collection
       postsWithMetadata.forEach((post) => {

@@ -63,16 +63,13 @@ export async function getCompetitorPosts(
 ): Promise<CompetitorPost[]> {
   try {
     const db = getFirestore();
-    const postsRef = collection(
-      db,
-      COMPETITOR_POSTS_COLLECTION,
-      userId,
-      'competitors',
-      competitorId,
-      'posts'
-    );
+    const postsRef = collection(db, COMPETITOR_POSTS_COLLECTION);
 
-    let q = query(postsRef, orderBy('extractedAt', 'desc'));
+    let q = query(
+      postsRef,
+      where('competitorId', '==', competitorId),
+      orderBy('extractedAt', 'desc')
+    );
 
     if (limitCount) {
       q = query(q, limit(limitCount));
@@ -98,16 +95,13 @@ export function subscribeToCompetitorPosts(
 ): Unsubscribe {
   try {
     const db = getFirestore();
-    const postsRef = collection(
-      db,
-      COMPETITOR_POSTS_COLLECTION,
-      userId,
-      'competitors',
-      competitorId,
-      'posts'
-    );
+    const postsRef = collection(db, COMPETITOR_POSTS_COLLECTION);
 
-    let q = query(postsRef, orderBy('extractedAt', 'desc'));
+    let q = query(
+      postsRef,
+      where('competitorId', '==', competitorId),
+      orderBy('extractedAt', 'desc')
+    );
 
     if (limitCount) {
       q = query(q, limit(limitCount));
@@ -144,9 +138,7 @@ export async function getCompetitorSyncMetadata(
     const metadataRef = doc(
       db,
       SYNC_METADATA_COLLECTION,
-      userId,
-      'competitors',
-      competitorId
+      `${userId}_${competitorId}`
     );
 
     const metadataSnap = await getDoc(metadataRef);
@@ -175,9 +167,7 @@ export function subscribeToSyncMetadata(
     const metadataRef = doc(
       db,
       SYNC_METADATA_COLLECTION,
-      userId,
-      'competitors',
-      competitorId
+      `${userId}_${competitorId}`
     );
 
     return onSnapshot(
@@ -293,34 +283,17 @@ export async function compareCompetitors(
 export async function getAllCompetitorPosts(userId: string): Promise<CompetitorPost[]> {
   try {
     const db = getFirestore();
-    // This is a bit complex as we need to query across subcollections
-    // We'll need to get all competitor IDs first, then fetch their posts
-    const userPostsRef = collection(db, COMPETITOR_POSTS_COLLECTION, userId, 'competitors');
-    const competitorsSnap = await getDocs(userPostsRef);
+    const postsRef = collection(db, COMPETITOR_POSTS_COLLECTION);
 
-    const allPosts: CompetitorPost[] = [];
+    // Query all posts extracted by this user
+    const q = query(
+      postsRef,
+      where('extractedBy', '==', userId),
+      orderBy('extractedAt', 'desc')
+    );
 
-    for (const competitorDoc of competitorsSnap.docs) {
-      const postsRef = collection(
-        db,
-        COMPETITOR_POSTS_COLLECTION,
-        userId,
-        'competitors',
-        competitorDoc.id,
-        'posts'
-      );
-
-      const postsSnap = await getDocs(postsRef);
-      const posts = postsSnap.docs.map(doc => doc.data() as CompetitorPost);
-      allPosts.push(...posts);
-    }
-
-    // Sort by extracted date (most recent first)
-    return allPosts.sort((a, b) => {
-      const aTime = a.extractedAt instanceof Timestamp ? a.extractedAt.toMillis() : 0;
-      const bTime = b.extractedAt instanceof Timestamp ? b.extractedAt.toMillis() : 0;
-      return bTime - aTime;
-    });
+    const querySnapshot = await getDocs(q);
+    return querySnapshot.docs.map(doc => doc.data() as CompetitorPost);
   } catch (error) {
     console.error('Error getting all competitor posts:', error);
     throw new Error('Failed to get all competitor posts');
@@ -336,19 +309,14 @@ export async function deleteCompetitorPosts(
 ): Promise<void> {
   try {
     const db = getFirestore();
-    const postsRef = collection(
-      db,
-      COMPETITOR_POSTS_COLLECTION,
-      userId,
-      'competitors',
-      competitorId,
-      'posts'
-    );
+    const postsRef = collection(db, COMPETITOR_POSTS_COLLECTION);
 
-    const postsSnap = await getDocs(postsRef);
+    // Query posts for this competitor
+    const q = query(postsRef, where('competitorId', '==', competitorId));
+    const postsSnap = await getDocs(q);
 
     // Delete in batches of 500 (Firestore limit)
-    const batch = writeBatch(db);
+    let batch = writeBatch(db);
     let count = 0;
 
     for (const postDoc of postsSnap.docs) {
@@ -357,25 +325,23 @@ export async function deleteCompetitorPosts(
 
       if (count >= 500) {
         await batch.commit();
+        batch = writeBatch(db);
         count = 0;
       }
-    }
-
-    if (count > 0) {
-      await batch.commit();
     }
 
     // Also delete sync metadata
     const metadataRef = doc(
       db,
       SYNC_METADATA_COLLECTION,
-      userId,
-      'competitors',
-      competitorId
+      `${userId}_${competitorId}`
     );
+    batch.delete(metadataRef);
 
-    await batch.delete(metadataRef);
-    await batch.commit();
+    // Commit any remaining deletes
+    if (count > 0 || true) {
+      await batch.commit();
+    }
   } catch (error) {
     console.error('Error deleting competitor posts:', error);
     throw new Error('Failed to delete competitor posts');

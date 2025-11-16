@@ -3,14 +3,10 @@ import React, {useState, useEffect} from 'react';
 import {
   Box,
   Typography,
-  Fab,
   CircularProgress,
   Alert,
   Snackbar,
-  Card,
-  CardContent,
   Chip,
-  Divider,
   Button,
   SpeedDial,
   SpeedDialAction,
@@ -19,6 +15,9 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
 } from '@mui/material';
 import {
   AutoAwesome as AutoAwesomeIcon,
@@ -30,6 +29,7 @@ import {
   CloudSync as CloudSyncIcon,
   Psychology as PsychologyIcon,
   History as HistoryIcon,
+  ExpandMore as ExpandMoreIcon,
 } from '@mui/icons-material';
 import EmailsList from '../../components/inbound/EmailsList';
 import GmailConnectionBanner from '../../components/inbound/GmailConnectionBanner';
@@ -75,6 +75,27 @@ const InboundGeneration: React.FC = () => {
   const [generatingTrends, setGeneratingTrends] = useState(false);
   const [trendsHistoryOpen, setTrendsHistoryOpen] = useState(false);
   const [trendsEmailCount, setTrendsEmailCount] = useState<number>(50);
+
+  // Accordion expansion state
+  const [expandedAccordions, setExpandedAccordions] = useState<{
+    emails: boolean;
+    competitors: boolean;
+    aiTrends: boolean;
+  }>({
+    emails: false,
+    competitors: false,
+    aiTrends: false,
+  });
+
+  const handleAccordionChange = (panel: 'emails' | 'competitors' | 'aiTrends') => (
+    event: React.SyntheticEvent,
+    isExpanded: boolean
+  ) => {
+    setExpandedAccordions(prev => ({
+      ...prev,
+      [panel]: isExpanded,
+    }));
+  };
 
   // Subscribe to emails
   useEffect(() => {
@@ -202,306 +223,389 @@ const InboundGeneration: React.FC = () => {
           </Typography>
         </Box>
         <Typography variant="body1" sx={{ color: '#64748b' }}>
-          AI-powered LinkedIn post suggestions from your newsletter emails
+          AI-powered LinkedIn post suggestions from your newsletter emails, competitor content, and AI trends
         </Typography>
       </Box>
 
       {/* Gmail Connection Banner */}
       <GmailConnectionBanner />
 
-      {/* Sync Status Card */}
-      {syncMetadata && (
-        <Card sx={{
-          borderRadius: 3,
-          boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
-          background: 'rgba(255, 255, 255, 0.95)',
-          backdropFilter: 'blur(20px)',
-          mb: 3,
+      {/* Context Sources Section - Collapsible Metadata */}
+      <Box sx={{ mb: 4 }}>
+        <Typography variant="h6" sx={{
+          mb: 2,
+          fontWeight: 600,
+          color: '#334155',
         }}>
-          <CardContent sx={{ p: 3 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                {syncMetadata.lastSyncSuccess ? (
-                  <CheckCircleIcon sx={{ color: '#10b981', fontSize: 20 }} />
-                ) : (
-                  <ErrorIcon sx={{ color: '#ef4444', fontSize: 20 }} />
-                )}
-                <Typography variant="body2" sx={{ color: '#64748b' }}>
-                  Last sync: {formatLastSyncTime(syncMetadata.lastSync)}
-                </Typography>
-              </Box>
+          Content Sources
+        </Typography>
+        <Typography variant="body2" sx={{ mb: 3, color: '#64748b' }}>
+          Expand each section to view and manage your content sources for LinkedIn post generation
+        </Typography>
 
-              <Chip
-                label={`${syncMetadata.lastSyncEmailsStored} new / ${syncMetadata.lastSyncEmailsFetched} total`}
-                size="small"
+        {/* Newsletter Emails Accordion */}
+        <Accordion
+          expanded={expandedAccordions.emails}
+          onChange={handleAccordionChange('emails')}
+          sx={{
+            borderRadius: 3,
+            mb: 2,
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
+            background: 'rgba(255, 255, 255, 0.95)',
+            backdropFilter: 'blur(20px)',
+            '&:before': { display: 'none' },
+          }}
+        >
+          <AccordionSummary
+            expandIcon={<ExpandMoreIcon sx={{ color: '#667eea' }} />}
+            sx={{
+              '& .MuiAccordionSummary-content': {
+                display: 'flex',
+                alignItems: 'center',
+                gap: 2,
+              },
+            }}
+          >
+            <EmailIcon sx={{ fontSize: 28, color: '#667eea' }} />
+            <Box sx={{ flex: 1 }}>
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                Newsletter Emails
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#64748b' }}>
+                {emails.length} emails synced
+                {syncMetadata && ` • Last sync: ${formatLastSyncTime(syncMetadata.lastSync)}`}
+              </Typography>
+            </Box>
+            {!expandedAccordions.emails && (
+              <Box sx={{ display: 'flex', gap: 1, mr: 2 }}>
+                <Chip
+                  label={`${emails.length} emails`}
+                  size="small"
+                  sx={{
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    color: 'white',
+                    fontWeight: 600,
+                  }}
+                />
+              </Box>
+            )}
+          </AccordionSummary>
+          <AccordionDetails sx={{ pt: 0 }}>
+            {/* Sync Status */}
+            {syncMetadata && (
+              <Box sx={{
+                mb: 3,
+                p: 2,
+                borderRadius: 2,
+                backgroundColor: '#f8fafc',
+              }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexWrap: 'wrap' }}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    {syncMetadata.lastSyncSuccess ? (
+                      <CheckCircleIcon sx={{ color: '#10b981', fontSize: 20 }} />
+                    ) : (
+                      <ErrorIcon sx={{ color: '#ef4444', fontSize: 20 }} />
+                    )}
+                    <Typography variant="body2" sx={{ color: '#64748b' }}>
+                      Last sync: {formatLastSyncTime(syncMetadata.lastSync)}
+                    </Typography>
+                  </Box>
+                  <Chip
+                    label={`${syncMetadata.lastSyncEmailsStored} new / ${syncMetadata.lastSyncEmailsFetched} total`}
+                    size="small"
+                    sx={{
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      color: 'white',
+                      fontWeight: 600,
+                    }}
+                  />
+                  {syncMetadata.lastSyncType && (
+                    <Chip
+                      label={syncMetadata.lastSyncType === 'manual' ? 'Manual Sync' : 'Scheduled Sync'}
+                      size="small"
+                      sx={{
+                        backgroundColor: '#e2e8f0',
+                        color: '#64748b',
+                        fontWeight: 600,
+                      }}
+                    />
+                  )}
+                  {syncMetadata.lastSyncErrors.length > 0 && (
+                    <Typography variant="caption" sx={{ color: '#ef4444', ml: 'auto' }}>
+                      {syncMetadata.lastSyncErrors[0]}
+                    </Typography>
+                  )}
+                </Box>
+              </Box>
+            )}
+
+            {/* Controls */}
+            <Box sx={{ display: 'flex', gap: 2, mb: 3, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <FormControl size="small" sx={{ minWidth: 120 }}>
+                <InputLabel>Days Back</InputLabel>
+                <Select
+                  value={daysBack}
+                  label="Days Back"
+                  onChange={(e) => setDaysBack(Number(e.target.value))}
+                  sx={{
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#e2e8f0',
+                    },
+                    '&:hover .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#667eea',
+                    },
+                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#667eea',
+                    },
+                  }}
+                >
+                  <MenuItem value={3}>Last 3 days</MenuItem>
+                  <MenuItem value={7}>Last 7 days</MenuItem>
+                  <MenuItem value={14}>Last 14 days</MenuItem>
+                  <MenuItem value={30}>Last 30 days</MenuItem>
+                </Select>
+              </FormControl>
+              <FormControl size="small" sx={{ minWidth: 120 }}>
+                <InputLabel>Email Count</InputLabel>
+                <Select
+                  value={emailCount}
+                  label="Email Count"
+                  onChange={(e) => setEmailCount(Number(e.target.value))}
+                  sx={{
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#e2e8f0',
+                    },
+                    '&:hover .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#667eea',
+                    },
+                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#667eea',
+                    },
+                  }}
+                >
+                  <MenuItem value={10}>Last 10</MenuItem>
+                  <MenuItem value={50}>Last 50</MenuItem>
+                  <MenuItem value={100}>Last 100</MenuItem>
+                </Select>
+              </FormControl>
+              <Button
+                variant="contained"
+                startIcon={syncing ? <CircularProgress size={20} sx={{ color: 'white' }} /> : <SyncIcon />}
+                onClick={handleManualSync}
+                disabled={syncing}
                 sx={{
                   background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                   color: 'white',
                   fontWeight: 600,
-                }}
-              />
-
-              {syncMetadata.lastSyncType && (
-                <Chip
-                  label={syncMetadata.lastSyncType === 'manual' ? 'Manual Sync' : 'Scheduled Sync'}
-                  size="small"
-                  sx={{
-                    backgroundColor: '#f1f5f9',
-                    color: '#64748b',
-                    fontWeight: 600,
-                  }}
-                />
-              )}
-
-              {syncMetadata.lastSyncErrors.length > 0 && (
-                <Typography variant="caption" sx={{ color: '#ef4444', ml: 'auto' }}>
-                  {syncMetadata.lastSyncErrors[0]}
-                </Typography>
-              )}
-            </Box>
-          </CardContent>
-        </Card>
-      )}
-
-      {/* Gmail Section */}
-      <Card sx={{
-        borderRadius: 3,
-        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
-        background: 'rgba(255, 255, 255, 0.95)',
-        backdropFilter: 'blur(20px)',
-        mb: 4,
-        p: 3,
-      }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <EmailIcon sx={{ fontSize: 32, color: '#667eea' }} />
-            <Typography variant="h5" sx={{ fontWeight: 700 }}>
-              Newsletter Emails
-            </Typography>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <FormControl size="small" sx={{ minWidth: 120 }}>
-              <InputLabel>Days Back</InputLabel>
-              <Select
-                value={daysBack}
-                label="Days Back"
-                onChange={(e) => setDaysBack(Number(e.target.value))}
-                sx={{
-                  '& .MuiOutlinedInput-notchedOutline': {
-                    borderColor: '#e2e8f0',
+                  textTransform: 'none',
+                  px: 3,
+                  borderRadius: 2,
+                  '&:hover': {
+                    background: 'linear-gradient(135deg, #5568d3 0%, #653a8b 100%)',
                   },
-                  '&:hover .MuiOutlinedInput-notchedOutline': {
-                    borderColor: '#667eea',
-                  },
-                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                    borderColor: '#667eea',
+                  '&:disabled': {
+                    background: '#e2e8f0',
+                    color: '#94a3b8',
                   },
                 }}
               >
-                <MenuItem value={3}>Last 3 days</MenuItem>
-                <MenuItem value={7}>Last 7 days</MenuItem>
-                <MenuItem value={14}>Last 14 days</MenuItem>
-                <MenuItem value={30}>Last 30 days</MenuItem>
-              </Select>
-            </FormControl>
-            <FormControl size="small" sx={{ minWidth: 120 }}>
-              <InputLabel>Email Count</InputLabel>
-              <Select
-                value={emailCount}
-                label="Email Count"
-                onChange={(e) => setEmailCount(Number(e.target.value))}
-                sx={{
-                  '& .MuiOutlinedInput-notchedOutline': {
-                    borderColor: '#e2e8f0',
-                  },
-                  '&:hover .MuiOutlinedInput-notchedOutline': {
-                    borderColor: '#667eea',
-                  },
-                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                    borderColor: '#667eea',
-                  },
-                }}
-              >
-                <MenuItem value={10}>Last 10</MenuItem>
-                <MenuItem value={50}>Last 50</MenuItem>
-                <MenuItem value={100}>Last 100</MenuItem>
-              </Select>
-            </FormControl>
-            <Button
-              variant="contained"
-              startIcon={syncing ? <CircularProgress size={20} sx={{ color: 'white' }} /> : <SyncIcon />}
-              onClick={handleManualSync}
-              disabled={syncing}
-              sx={{
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                color: 'white',
-                fontWeight: 600,
-                textTransform: 'none',
-                px: 3,
-                py: 1.5,
-                borderRadius: 2,
-                '&:hover': {
-                  background: 'linear-gradient(135deg, #5568d3 0%, #653a8b 100%)',
-                },
-                '&:disabled': {
-                  background: '#e2e8f0',
-                  color: '#94a3b8',
-                },
-              }}
-            >
-              {syncing ? 'Syncing...' : 'Sync Gmail'}
-            </Button>
-          </Box>
-        </Box>
-        <EmailsList emails={emails} loading={loading} />
-      </Card>
-
-      {/* Divider */}
-      <Divider sx={{ my: 4 }}>
-        <Chip label="Competitor Content Tracking" sx={{
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          color: 'white',
-          fontWeight: 600,
-        }} />
-      </Divider>
-
-      {/* Competitor Content Section */}
-      <Card sx={{
-        borderRadius: 3,
-        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
-        background: 'rgba(255, 255, 255, 0.95)',
-        backdropFilter: 'blur(20px)',
-        mb: 3,
-        p: 3,
-      }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <TrendingIcon sx={{ fontSize: 32, color: '#667eea' }} />
-            <Box>
-              <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                Competitor Content
-              </Typography>
-              <Typography variant="body2" sx={{ color: '#64748b', mt: 0.5 }}>
-                Track and analyze competitor LinkedIn posts for content inspiration
-              </Typography>
+                {syncing ? 'Syncing...' : 'Sync Gmail'}
+              </Button>
             </Box>
-          </Box>
-          <Button
-            variant="contained"
-            startIcon={<CloudSyncIcon />}
-            onClick={() => setSyncDialogOpen(true)}
+
+            {/* Emails List */}
+            <EmailsList emails={emails} loading={loading} />
+          </AccordionDetails>
+        </Accordion>
+
+        {/* Competitor Content Accordion */}
+        <Accordion
+          expanded={expandedAccordions.competitors}
+          onChange={handleAccordionChange('competitors')}
+          sx={{
+            borderRadius: 3,
+            mb: 2,
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
+            background: 'rgba(255, 255, 255, 0.95)',
+            backdropFilter: 'blur(20px)',
+            '&:before': { display: 'none' },
+          }}
+        >
+          <AccordionSummary
+            expandIcon={<ExpandMoreIcon sx={{ color: '#667eea' }} />}
             sx={{
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              '&:hover': {
-                background: 'linear-gradient(135deg, #5568d3 0%, #653a8b 100%)',
+              '& .MuiAccordionSummary-content': {
+                display: 'flex',
+                alignItems: 'center',
+                gap: 2,
               },
             }}
           >
-            Sync Competitor Posts
-          </Button>
-        </Box>
-
-        {/* Competitor Content View */}
-        <CompetitorContentView />
-      </Card>
-
-      {/* Divider */}
-      <Divider sx={{ my: 4 }}>
-        <Chip label="AI Trends Analysis" sx={{
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          color: 'white',
-          fontWeight: 600,
-        }} />
-      </Divider>
-
-      {/* AI Trends Section */}
-      <Card sx={{
-        borderRadius: 3,
-        boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
-        background: 'rgba(255, 255, 255, 0.95)',
-        backdropFilter: 'blur(20px)',
-        mb: 3,
-        p: 3,
-      }}>
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <PsychologyIcon sx={{ fontSize: 32, color: '#667eea' }} />
-            <Box>
-              <Typography variant="h5" sx={{ fontWeight: 700 }}>
-                AI Trends for Leadership Posts
+            <TrendingIcon sx={{ fontSize: 28, color: '#667eea' }} />
+            <Box sx={{ flex: 1 }}>
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                Competitor Content
               </Typography>
-              <Typography variant="body2" sx={{ color: '#64748b', mt: 0.5 }}>
-                Analyze newsletter emails to identify AI trends suitable for LinkedIn leadership content
+              <Typography variant="body2" sx={{ color: '#64748b' }}>
+                Track and analyze competitor LinkedIn posts
               </Typography>
             </Box>
-          </Box>
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-            <FormControl size="small" sx={{ minWidth: 120 }}>
-              <InputLabel>Analyze Emails</InputLabel>
-              <Select
-                value={trendsEmailCount}
-                label="Analyze Emails"
-                onChange={(e) => setTrendsEmailCount(Number(e.target.value))}
+            {!expandedAccordions.competitors && (
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={<CloudSyncIcon />}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setSyncDialogOpen(true);
+                }}
                 sx={{
-                  '& .MuiOutlinedInput-notchedOutline': {
-                    borderColor: '#e2e8f0',
-                  },
-                  '&:hover .MuiOutlinedInput-notchedOutline': {
-                    borderColor: '#667eea',
-                  },
-                  '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-                    borderColor: '#667eea',
+                  mr: 2,
+                  borderColor: '#667eea',
+                  color: '#667eea',
+                  '&:hover': {
+                    borderColor: '#5568d3',
+                    backgroundColor: '#ede9fe',
                   },
                 }}
               >
-                <MenuItem value={10}>Last 10</MenuItem>
-                <MenuItem value={30}>Last 30</MenuItem>
-                <MenuItem value={50}>Last 50</MenuItem>
-                <MenuItem value={100}>Last 100</MenuItem>
-              </Select>
-            </FormControl>
-            <Button
-              variant="outlined"
-              startIcon={<HistoryIcon />}
-              onClick={() => setTrendsHistoryOpen(true)}
-              disabled={aiTrendsSessions.length === 0}
-              sx={{
-                borderColor: '#667eea',
-                color: '#667eea',
-                '&:hover': {
-                  borderColor: '#5568d3',
-                  backgroundColor: '#ede9fe',
-                },
-              }}
-            >
-              History
-            </Button>
-            <Button
-              variant="contained"
-              startIcon={generatingTrends ? <CircularProgress size={20} sx={{ color: 'white' }} /> : <PsychologyIcon />}
-              onClick={handleGenerateTrends}
-              disabled={generatingTrends || emails.length === 0}
-              sx={{
-                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                color: 'white',
-                '&:hover': {
-                  background: 'linear-gradient(135deg, #5568d3 0%, #653a8b 100%)',
-                },
-                '&:disabled': {
-                  background: '#e2e8f0',
-                  color: '#94a3b8',
-                },
-              }}
-            >
-              {generatingTrends ? 'Analyzing...' : 'Generate AI Trends'}
-            </Button>
-          </Box>
-        </Box>
+                Sync Posts
+              </Button>
+            )}
+          </AccordionSummary>
+          <AccordionDetails sx={{ pt: 0 }}>
+            <Box sx={{ mb: 3, display: 'flex', justifyContent: 'flex-end' }}>
+              <Button
+                variant="contained"
+                startIcon={<CloudSyncIcon />}
+                onClick={() => setSyncDialogOpen(true)}
+                sx={{
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white',
+                  '&:hover': {
+                    background: 'linear-gradient(135deg, #5568d3 0%, #653a8b 100%)',
+                  },
+                }}
+              >
+                Sync Competitor Posts
+              </Button>
+            </Box>
+            <CompetitorContentView />
+          </AccordionDetails>
+        </Accordion>
 
-        {/* AI Trends List */}
-        <AITrendsList trends={aiTrends} loading={generatingTrends} />
-      </Card>
+        {/* AI Trends Accordion */}
+        <Accordion
+          expanded={expandedAccordions.aiTrends}
+          onChange={handleAccordionChange('aiTrends')}
+          sx={{
+            borderRadius: 3,
+            mb: 2,
+            boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
+            background: 'rgba(255, 255, 255, 0.95)',
+            backdropFilter: 'blur(20px)',
+            '&:before': { display: 'none' },
+          }}
+        >
+          <AccordionSummary
+            expandIcon={<ExpandMoreIcon sx={{ color: '#667eea' }} />}
+            sx={{
+              '& .MuiAccordionSummary-content': {
+                display: 'flex',
+                alignItems: 'center',
+                gap: 2,
+              },
+            }}
+          >
+            <PsychologyIcon sx={{ fontSize: 28, color: '#667eea' }} />
+            <Box sx={{ flex: 1 }}>
+              <Typography variant="h6" sx={{ fontWeight: 600 }}>
+                AI Trends Analysis
+              </Typography>
+              <Typography variant="body2" sx={{ color: '#64748b' }}>
+                {aiTrends.length} trends identified for leadership posts
+              </Typography>
+            </Box>
+            {!expandedAccordions.aiTrends && (
+              <Box sx={{ display: 'flex', gap: 1, mr: 2 }}>
+                <Chip
+                  label={`${aiTrends.length} trends`}
+                  size="small"
+                  sx={{
+                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    color: 'white',
+                    fontWeight: 600,
+                  }}
+                />
+              </Box>
+            )}
+          </AccordionSummary>
+          <AccordionDetails sx={{ pt: 0 }}>
+            <Box sx={{ mb: 3, display: 'flex', gap: 2, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              <FormControl size="small" sx={{ minWidth: 120 }}>
+                <InputLabel>Analyze Emails</InputLabel>
+                <Select
+                  value={trendsEmailCount}
+                  label="Analyze Emails"
+                  onChange={(e) => setTrendsEmailCount(Number(e.target.value))}
+                  sx={{
+                    '& .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#e2e8f0',
+                    },
+                    '&:hover .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#667eea',
+                    },
+                    '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                      borderColor: '#667eea',
+                    },
+                  }}
+                >
+                  <MenuItem value={10}>Last 10</MenuItem>
+                  <MenuItem value={30}>Last 30</MenuItem>
+                  <MenuItem value={50}>Last 50</MenuItem>
+                  <MenuItem value={100}>Last 100</MenuItem>
+                </Select>
+              </FormControl>
+              <Button
+                variant="outlined"
+                startIcon={<HistoryIcon />}
+                onClick={() => setTrendsHistoryOpen(true)}
+                disabled={aiTrendsSessions.length === 0}
+                sx={{
+                  borderColor: '#667eea',
+                  color: '#667eea',
+                  '&:hover': {
+                    borderColor: '#5568d3',
+                    backgroundColor: '#ede9fe',
+                  },
+                }}
+              >
+                History
+              </Button>
+              <Button
+                variant="contained"
+                startIcon={generatingTrends ? <CircularProgress size={20} sx={{ color: 'white' }} /> : <PsychologyIcon />}
+                onClick={handleGenerateTrends}
+                disabled={generatingTrends || emails.length === 0}
+                sx={{
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: 'white',
+                  '&:hover': {
+                    background: 'linear-gradient(135deg, #5568d3 0%, #653a8b 100%)',
+                  },
+                  '&:disabled': {
+                    background: '#e2e8f0',
+                    color: '#94a3b8',
+                  },
+                }}
+              >
+                {generatingTrends ? 'Analyzing...' : 'Generate AI Trends'}
+              </Button>
+            </Box>
+            <AITrendsList trends={aiTrends} loading={generatingTrends} />
+          </AccordionDetails>
+        </Accordion>
+      </Box>
 
       {/* AI Trends History Dialog */}
       {user && (
