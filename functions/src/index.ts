@@ -53,3 +53,7 @@ export {extractCompetitorPosts} from "./competitors/extractCompetitorPosts";
 
 // Export AI trends analysis functions
 export {generateAITrends} from "./aiTrends/generateAITrends";
+
+// Export LinkedIn post generation functions
+export {generateLinkedInPostAsync} from "./linkedinGeneration/generateLinkedInPostAsync";
+export {getLinkedInGenerationJob} from "./linkedinGeneration/getLinkedInGenerationJob";

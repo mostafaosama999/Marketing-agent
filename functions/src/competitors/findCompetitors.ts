@@ -132,18 +132,29 @@ export const findCompetitors = functions
       data: FindCompetitorsRequest,
       context
     ): Promise<FindCompetitorsResponse> => {
+      console.log("=== findCompetitors Function Invoked ===");
+      console.log("Timestamp:", new Date().toISOString());
+      console.log("Authentication present:", !!context.auth);
+      console.log("User ID:", context.auth?.uid || "NONE");
+      console.log("Request data:", JSON.stringify(data, null, 2));
+
       // Verify authentication
       if (!context.auth) {
+        console.error("AUTHENTICATION FAILED - No auth context");
         throw new functions.https.HttpsError(
           "unauthenticated",
           "User must be authenticated to find competitors"
         );
       }
 
+      console.log("Authentication verified for user:", context.auth.uid);
+
       // Validate input
       const {companyId, companyName, website, description, industry} = data;
+      console.log("Validating input parameters...");
 
       if (!companyId || typeof companyId !== "string") {
+        console.error("VALIDATION FAILED - Invalid company ID:", companyId);
         throw new functions.https.HttpsError(
           "invalid-argument",
           "Company ID is required and must be a string"
@@ -151,40 +162,58 @@ export const findCompetitors = functions
       }
 
       if (!companyName || typeof companyName !== "string") {
+        console.error("VALIDATION FAILED - Invalid company name:", companyName);
         throw new functions.https.HttpsError(
           "invalid-argument",
           "Company name is required and must be a string"
         );
       }
 
+      console.log("Input validation passed");
+
       // Get OpenAI API key from environment config
+      console.log("Retrieving OpenAI API key from config...");
       const openaiApiKey =
       functions.config().openai?.key || process.env.OPENAI_API_KEY;
 
       if (!openaiApiKey) {
+        console.error("OPENAI API KEY NOT FOUND - Check firebase config");
+        console.error("functions.config().openai:", functions.config().openai);
+        console.error("process.env.OPENAI_API_KEY:", process.env.OPENAI_API_KEY ? "SET" : "NOT SET");
         throw new functions.https.HttpsError(
           "failed-precondition",
           "OpenAI API key not configured"
         );
       }
 
+      console.log("OpenAI API key found, length:", openaiApiKey.length);
+
       try {
         console.log(`Finding competitors for company: ${companyName} (${companyId})`);
         console.log(`User: ${context.auth.uid}`);
+        console.log("Additional context - Website:", website || "N/A");
+        console.log("Additional context - Industry:", industry || "N/A");
+        console.log("Additional context - Description:", description ? description.substring(0, 100) + "..." : "N/A");
 
+      console.log("Initializing OpenAI client...");
       const openai = new OpenAI({apiKey: openaiApiKey});
+      console.log("OpenAI client initialized successfully");
 
       // Build the prompts
+      console.log("Building competitor analysis prompts...");
       const {systemPrompt, userPrompt} = buildCompetitorPrompt(
         companyName,
         website || "",
         description || "",
         industry || ""
       );
+      console.log("Prompts built - System prompt length:", systemPrompt.length);
+      console.log("Prompts built - User prompt length:", userPrompt.length);
 
-      console.log("Calling OpenAI to find competitors...");
+      console.log("Calling OpenAI API (gpt-4-turbo-preview)...");
 
       // Call OpenAI
+      const startTime = Date.now();
       const completion = await openai.chat.completions.create({
         model: "gpt-4-turbo-preview",
         messages: [
@@ -194,14 +223,21 @@ export const findCompetitors = functions
         temperature: 0.7,
         max_tokens: 3000,
       });
+      const endTime = Date.now();
+      console.log(`OpenAI API call completed in ${endTime - startTime}ms`);
 
       const responseContent = completion.choices[0]?.message?.content;
 
       if (!responseContent) {
+        console.error("OPENAI RESPONSE EMPTY - No content in completion");
+        console.error("Completion object:", JSON.stringify(completion, null, 2));
         throw new Error("Empty response from OpenAI");
       }
 
-      console.log("Received response from OpenAI, parsing JSON...");
+      console.log("Received response from OpenAI");
+      console.log("Response length:", responseContent.length);
+      console.log("Response preview:", responseContent.substring(0, 200));
+      console.log("Parsing JSON response...");
 
       // Parse the JSON response
       let parsedResponse: { competitors: Competitor[] };
@@ -211,19 +247,27 @@ export const findCompetitors = functions
           .replace(/```json\n?/g, "")
           .replace(/```\n?/g, "")
           .trim();
+        console.log("Cleaned response preview:", cleanedResponse.substring(0, 200));
         parsedResponse = JSON.parse(cleanedResponse);
+        console.log("JSON parsing successful");
       } catch (parseError) {
-        console.error("Failed to parse OpenAI response as JSON:", parseError);
-        console.error("Raw response:", responseContent.substring(0, 500));
+        console.error("JSON PARSING FAILED:", parseError);
+        console.error("Parse error details:", (parseError as Error).message);
+        console.error("Raw response (first 500 chars):", responseContent.substring(0, 500));
+        console.error("Raw response (last 200 chars):", responseContent.substring(Math.max(0, responseContent.length - 200)));
         throw new Error("Invalid JSON response from OpenAI");
       }
 
       // Validate response structure
+      console.log("Validating response structure...");
       if (!parsedResponse.competitors || !Array.isArray(parsedResponse.competitors)) {
+        console.error("VALIDATION FAILED - Missing or invalid 'competitors' array");
+        console.error("Parsed response keys:", Object.keys(parsedResponse));
         throw new Error("Response missing 'competitors' array");
       }
 
       console.log(`Successfully found ${parsedResponse.competitors.length} competitors`);
+      console.log("Competitor names:", parsedResponse.competitors.map((c) => c.name).join(", "));
 
       // Calculate cost
       const usage = completion.usage;
@@ -249,6 +293,7 @@ export const findCompetitors = functions
       console.log(`Cost: $${costInfo.totalCost.toFixed(4)} (${costInfo.totalTokens} tokens)`);
 
       // Log API cost
+      console.log("Logging API cost to Firestore...");
       await logApiCost(
         context.auth.uid,
         "competitor-search",
@@ -262,16 +307,25 @@ export const findCompetitors = functions
           },
         }
       );
+      console.log("API cost logged successfully");
 
       // Return the response (no Firestore updates - just finding competitors for now)
-      return {
+      console.log("Preparing response object...");
+      const response = {
         competitors: parsedResponse.competitors,
         companyName,
         analysisComplete: true,
         costInfo,
       };
+      console.log("=== findCompetitors Function Completed Successfully ===");
+      console.log("Total execution time:", Date.now() - startTime, "ms");
+      return response;
     } catch (error: any) {
-      console.error("Error finding competitors:", error);
+      console.error("=== ERROR in findCompetitors ===");
+      console.error("Error type:", error.constructor.name);
+      console.error("Error message:", error.message);
+      console.error("Error stack:", error.stack);
+      console.error("Error details:", JSON.stringify(error, null, 2));
 
       // Provide more specific error messages
       if (error.message?.includes("API key")) {

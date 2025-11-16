@@ -157,19 +157,39 @@ export const CompetitorWorkflowDialog: React.FC<CompetitorWorkflowDialogProps> =
 
   // STEP 1: Find Competitors
   const handleFindCompetitors = async () => {
+    console.log('=== CompetitorWorkflowDialog: handleFindCompetitors ===');
+    console.log('Timestamp:', new Date().toISOString());
+    console.log('Company:', {
+      id: company.id,
+      name: company.name,
+      website: company.website,
+      industry: company.industry,
+    });
+    console.log('User auth state:', user ? 'Authenticated' : 'NOT AUTHENTICATED');
+    if (user) {
+      console.log('User ID:', user.uid);
+      console.log('User email:', user.email);
+    }
+
     setCurrentStep('finding');
     setLoading(true);
     setError(null);
 
     try {
-
-      const response = await findCompetitors({
+      const requestPayload = {
         companyId: company.id,
         companyName: company.name,
         website: company.website || '',
         description: company.description || '',
         industry: company.industry || '',
-      });
+      };
+
+      console.log('Calling findCompetitors with payload:', requestPayload);
+
+      const response = await findCompetitors(requestPayload);
+
+      console.log('findCompetitors returned successfully');
+      console.log('Number of competitors found:', response.competitors?.length || 0);
 
       // Transform competitors into enriched format
       const enrichedCompetitors: CompetitorWithEnrichment[] = response.competitors.map(comp => ({
@@ -205,11 +225,22 @@ export const CompetitorWorkflowDialog: React.FC<CompetitorWorkflowDialogProps> =
       }
 
       // Move to review step
+      console.log('Moving to review step');
       setCurrentStep('review');
+      console.log('=== handleFindCompetitors Completed Successfully ===');
 
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to find competitors');
+      console.error('=== handleFindCompetitors FAILED ===');
+      console.error('Error type:', err?.constructor?.name);
+      console.error('Error message:', err instanceof Error ? err.message : 'Unknown error');
+      console.error('Error object:', err);
+      console.error('Error stack:', err instanceof Error ? err.stack : 'N/A');
+
+      const errorMessage = err instanceof Error ? err.message : 'Failed to find competitors';
+      console.error('Setting error state to:', errorMessage);
+      setError(errorMessage);
     } finally {
+      console.log('handleFindCompetitors cleanup - setting loading to false');
       setLoading(false);
     }
   };

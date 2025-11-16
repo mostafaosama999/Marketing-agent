@@ -4,6 +4,8 @@ import {FieldValue} from "firebase-admin/firestore";
 /**
  * OpenAI API Pricing (as of 2025)
  * GPT-4 Turbo: $10/1M input tokens, $30/1M output tokens
+ * GPT-4o-mini: $0.15/1M input tokens, $0.60/1M output tokens
+ * DALL-E 3: $0.040 per image (standard 1024x1024), $0.080 per image (HD 1024x1024)
  */
 const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   "gpt-4-turbo-preview": {
@@ -17,6 +19,20 @@ const MODEL_PRICING: Record<string, { input: number; output: number }> = {
   "gpt-4": {
     input: 0.03 / 1000,
     output: 0.06 / 1000,
+  },
+  "gpt-4o-mini": {
+    input: 0.00015 / 1000, // $0.15 per 1M tokens
+    output: 0.0006 / 1000, // $0.60 per 1M tokens
+  },
+};
+
+/**
+ * DALL-E 3 Pricing (flat rate per image, not token-based)
+ */
+export const DALLE_PRICING = {
+  "dall-e-3": {
+    standard: 0.040, // $0.040 per 1024x1024 standard quality image
+    hd: 0.080,       // $0.080 per 1024x1024 HD quality image
   },
 };
 
@@ -36,10 +52,22 @@ export interface CostInfo {
   model: string;
 }
 
+export type ServiceType =
+  | "blog-qualification"
+  | "writing-program-finder"
+  | "writing-program-analyzer"
+  | "genai-blog-idea"
+  | "competitor-search"
+  | "linkedin-post-generation"
+  | "linkedin-analytics-extraction"
+  | "competitor-posts-extraction"
+  | "linkedin-post-from-trend"
+  | "linkedin-meme-image";
+
 export interface ApiCostRecord {
   userId: string;
   leadId?: string;
-  service: "blog-qualification" | "writing-program-finder" | "writing-program-analyzer" | "genai-blog-idea" | "competitor-search" | "linkedin-post-generation" | "linkedin-analytics-extraction" | "competitor-posts-extraction";
+  service: ServiceType;
   model: string;
   timestamp: FieldValue;
   inputTokens: number;
@@ -88,6 +116,8 @@ const SERVICE_TO_CATEGORY: Record<string, string> = {
   "linkedin-post-generation": "contentGeneration",
   "linkedin-analytics-extraction": "linkedInAnalytics",
   "competitor-posts-extraction": "competitorAnalysis",
+  "linkedin-post-from-trend": "contentGeneration",
+  "linkedin-meme-image": "contentGeneration",
 };
 
 /**
@@ -96,7 +126,7 @@ const SERVICE_TO_CATEGORY: Record<string, string> = {
  */
 export async function logApiCost(
   userId: string,
-  service: "blog-qualification" | "writing-program-finder" | "writing-program-analyzer" | "genai-blog-idea" | "competitor-search" | "linkedin-post-generation" | "linkedin-analytics-extraction" | "competitor-posts-extraction",
+  service: ServiceType,
   costInfo: CostInfo,
   metadata: {
     leadId?: string;

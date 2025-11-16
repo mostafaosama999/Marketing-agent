@@ -35,6 +35,7 @@ import EmailsList from '../../components/inbound/EmailsList';
 import GmailConnectionBanner from '../../components/inbound/GmailConnectionBanner';
 import AITrendsList from '../../components/inbound/AITrendsList';
 import AITrendsHistory from '../../components/inbound/AITrendsHistory';
+import LinkedInPostGeneration from '../../components/inbound/LinkedInPostGeneration';
 import {
   EmailData,
   SyncMetadata,
@@ -605,6 +606,14 @@ const InboundGeneration: React.FC = () => {
             <AITrendsList trends={aiTrends} loading={generatingTrends} />
           </AccordionDetails>
         </Accordion>
+      </Box>
+
+      {/* LinkedIn Post Generation Section */}
+      <Box sx={{ mb: 4 }}>
+        <LinkedInPostGeneration
+          aiTrends={aiTrends}
+          userId={user?.uid}
+        />
       </Box>
 
       {/* AI Trends History Dialog */}

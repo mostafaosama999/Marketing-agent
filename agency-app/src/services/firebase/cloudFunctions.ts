@@ -378,16 +378,47 @@ export interface FindCompetitorsResponse {
 export async function findCompetitors(
   request: FindCompetitorsRequest
 ): Promise<FindCompetitorsResponse> {
+  console.log('=== findCompetitors Service Call ===');
+  console.log('Timestamp:', new Date().toISOString());
+  console.log('Request:', JSON.stringify(request, null, 2));
+  console.log('Functions region:', functions.region);
+  console.log('Functions app:', functions.app?.name);
+
   try {
+    console.log('Creating httpsCallable for findCompetitors...');
     const findCompetitorsFunc = httpsCallable<
       FindCompetitorsRequest,
       FindCompetitorsResponse
     >(functions, 'findCompetitors');
+    console.log('httpsCallable created successfully');
 
+    console.log('Invoking cloud function...');
+    const startTime = Date.now();
     const result = await findCompetitorsFunc(request);
+    const endTime = Date.now();
+
+    console.log(`Cloud function completed in ${endTime - startTime}ms`);
+    console.log('Result data:', JSON.stringify(result.data, null, 2));
+    console.log('=== findCompetitors Service Call Successful ===');
+
     return result.data;
   } catch (error: any) {
-    console.error('Error finding competitors:', error);
+    console.error('=== findCompetitors Service Call FAILED ===');
+    console.error('Error type:', error?.constructor?.name);
+    console.error('Error code:', error?.code);
+    console.error('Error message:', error?.message);
+    console.error('Error details:', error?.details);
+    console.error('Full error object:', JSON.stringify(error, null, 2));
+    console.error('Error stack:', error?.stack);
+
+    // Log Firebase-specific error properties
+    if (error?.code) {
+      console.error('Firebase error code:', error.code);
+    }
+    if (error?.details) {
+      console.error('Firebase error details:', error.details);
+    }
+
     throw new Error(error.message || 'Failed to find competitors');
   }
 }
