@@ -15,7 +15,7 @@ import {
   Close as CloseIcon,
 } from '@mui/icons-material';
 import { FilterRule, FilterableField } from '../../../../types/filter';
-import { Lead } from '../../../../types/lead';
+import { Lead, LeadStatus } from '../../../../types/lead';
 import { Company } from '../../../../types/crm';
 import { FilterRuleRow } from './FilterRuleRow';
 import { getFilterRuleSummary, getFilterableFields } from '../../../../services/api/advancedFilterService';
@@ -28,6 +28,7 @@ interface AdvancedFiltersModalProps<T = Lead> {
   onClearFilters: () => void;
   data: T[];
   entityType?: 'lead' | 'company';
+  pipelineStages?: LeadStatus[]; // Optional pipeline stages for lead status field
 }
 
 export const AdvancedFiltersModal = <T extends Lead | Company = Lead>({
@@ -37,6 +38,7 @@ export const AdvancedFiltersModal = <T extends Lead | Company = Lead>({
   onClearFilters,
   data,
   entityType = 'lead',
+  pipelineStages,
 }: AdvancedFiltersModalProps<T>) => {
   const [rules, setRules] = useState<FilterRule[]>([]);
   const [fields, setFields] = useState<FilterableField[]>([]);
@@ -48,14 +50,14 @@ export const AdvancedFiltersModal = <T extends Lead | Company = Lead>({
       try {
         const filterableFields = entityType === 'company'
           ? getCompanyFilterableFields(data as Company[])
-          : getFilterableFields(data as Lead[]);
+          : getFilterableFields(data as Lead[], pipelineStages);
         setFields(filterableFields);
         setFieldsLoaded(true);
       } catch (error) {
         console.error('Error loading filterable fields:', error);
       }
     }
-  }, [open, data, entityType]);
+  }, [open, data, entityType, pipelineStages]);
 
   // Add default rule AFTER fields are loaded (only if no rules)
   useEffect(() => {

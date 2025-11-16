@@ -33,6 +33,7 @@ import {
   AttachMoney as MoneyIcon,
   Psychology as AIIcon,
   CloudQueue as APIIcon,
+  Spa as NurtureIcon,
 } from '@mui/icons-material';
 import { subscribeToLeads } from '../../services/api/leads';
 import { Lead, LeadStatus } from '../../types/lead';
@@ -110,14 +111,7 @@ const ProjectMonitoring: React.FC = () => {
     return daysSinceUpdate <= 7;
   }).length;
 
-  const stuckLeads = leads.filter(lead => {
-    const stateHistory = lead.stateHistory || {};
-    const currentStatusTimestamp = stateHistory[lead.status];
-    if (!currentStatusTimestamp) return false;
-
-    const daysSinceChange = (Date.now() - new Date(currentStatusTimestamp).getTime()) / (1000 * 60 * 60 * 24);
-    return daysSinceChange >= 7;
-  });
+  const nurtureLeads = leads.filter(lead => lead.status === 'nurture');
 
   const missingData = leads.filter(lead => !lead.email || !lead.phone);
 
@@ -132,11 +126,6 @@ const ProjectMonitoring: React.FC = () => {
     .filter(([_, count]) => count > 1)
     .sort(([_, a], [__, b]) => b - a)
     .slice(0, 5);
-
-  const stuckByStatus = stuckLeads.reduce((acc, lead) => {
-    acc[lead.status] = (acc[lead.status] || 0) + 1;
-    return acc;
-  }, {} as Record<LeadStatus, number>);
 
   // Calculate cost metrics
   const totalAICost = users.reduce((sum, user) =>
@@ -233,23 +222,23 @@ const ProjectMonitoring: React.FC = () => {
                 </Card>
               </Grid>
 
-              {/* Stuck Leads */}
+              {/* Nurture Leads */}
               <Grid size={{ xs: 12, md: 3 }}>
                 <Card sx={{
-                  background: 'linear-gradient(135deg, #ff9800 0%, #ffa726 100%)',
+                  background: 'linear-gradient(135deg, #00bcd4 0%, #00acc1 100%)',
                   color: 'white',
                 }}>
                   <CardContent>
                     <Box display="flex" alignItems="center" justifyContent="space-between">
                       <Box>
                         <Typography color="rgba(255,255,255,0.8)" gutterBottom variant="body2">
-                          Stuck (7+ days)
+                          Nurture Leads
                         </Typography>
                         <Typography variant="h4" fontWeight={700}>
-                          {stuckLeads.length}
+                          {nurtureLeads.length}
                         </Typography>
                       </Box>
-                      <ScheduleIcon sx={{ fontSize: 48, opacity: 0.3 }} />
+                      <NurtureIcon sx={{ fontSize: 48, opacity: 0.3 }} />
                     </Box>
                   </CardContent>
                 </Card>
@@ -280,40 +269,53 @@ const ProjectMonitoring: React.FC = () => {
 
             {/* Detailed Sections */}
             <Grid container spacing={3}>
-              {/* Stuck Leads by Status */}
+              {/* Nurture Leads */}
               <Grid size={{ xs: 12, md: 6 }}>
                 <Paper sx={{ p: 3, height: '100%' }}>
                   <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                    <ScheduleIcon sx={{ color: '#ff9800' }} />
-                    Leads Stuck by Stage
+                    <NurtureIcon sx={{ color: '#00bcd4' }} />
+                    Leads in Nurture
                   </Typography>
-                  {Object.keys(stuckByStatus).length === 0 ? (
+                  {nurtureLeads.length === 0 ? (
                     <Box sx={{ py: 4, textAlign: 'center' }}>
-                      <CheckCircleIcon sx={{ fontSize: 48, color: '#4caf50', mb: 1 }} />
+                      <NurtureIcon sx={{ fontSize: 48, color: '#cbd5e1', mb: 1 }} />
                       <Typography variant="body2" color="text.secondary">
-                        No stuck leads! Pipeline is healthy.
+                        No leads in nurture stage
                       </Typography>
                     </Box>
                   ) : (
-                    <List>
-                      {Object.entries(stuckByStatus).map(([status, count]) => (
-                        <ListItem key={status} sx={{ px: 0 }}>
-                          <ListItemText
-                            primary={STATUS_LABELS[status as LeadStatus]}
-                            secondary={`${count} lead${count > 1 ? 's' : ''} stuck for 7+ days`}
-                          />
-                          <Chip
-                            label={count}
-                            size="small"
-                            sx={{
-                              bgcolor: '#ff9800',
-                              color: 'white',
-                              fontWeight: 600,
-                            }}
-                          />
-                        </ListItem>
-                      ))}
-                    </List>
+                    <TableContainer sx={{ maxHeight: 400 }}>
+                      <Table size="small" stickyHeader>
+                        <TableHead>
+                          <TableRow>
+                            <TableCell sx={{ fontWeight: 600, bgcolor: '#f8fafc' }}>Lead Name</TableCell>
+                            <TableCell sx={{ fontWeight: 600, bgcolor: '#f8fafc' }}>Company</TableCell>
+                            <TableCell sx={{ fontWeight: 600, bgcolor: '#f8fafc' }}>Email</TableCell>
+                          </TableRow>
+                        </TableHead>
+                        <TableBody>
+                          {nurtureLeads.map((lead) => (
+                            <TableRow key={lead.id} hover>
+                              <TableCell>
+                                <Typography variant="body2" fontWeight={600}>
+                                  {lead.name}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="body2" color="text.secondary">
+                                  {lead.company || '—'}
+                                </Typography>
+                              </TableCell>
+                              <TableCell>
+                                <Typography variant="body2" color="text.secondary">
+                                  {lead.email || '—'}
+                                </Typography>
+                              </TableCell>
+                            </TableRow>
+                          ))}
+                        </TableBody>
+                      </Table>
+                    </TableContainer>
                   )}
                 </Paper>
               </Grid>

@@ -1379,6 +1379,7 @@ function CRMBoard() {
           onClearFilters={handleClearAllFilters}
           data={leads}
           entityType="lead"
+          pipelineStages={stages.map(s => s.id)}
         />
 
         {/* Bulk Edit Dialog */}

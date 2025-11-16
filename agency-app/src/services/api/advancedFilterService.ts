@@ -1,20 +1,37 @@
 // src/services/api/advancedFilterService.ts
 // Service for evaluating advanced filter rules against leads
 
-import { Lead } from '../../types/lead';
+import { Lead, LeadStatus } from '../../types/lead';
 import { FilterRule, FilterOperator, FilterableField } from '../../types/filter';
 
 /**
  * Get all filterable fields from standard Lead fields + custom fields from actual leads
+ * @param leads - Array of leads to extract fields from
+ * @param pipelineStages - Optional array of pipeline stage IDs to use for status options
  */
-export function getFilterableFields(leads: Lead[]): FilterableField[] {
+export function getFilterableFields(leads: Lead[], pipelineStages?: LeadStatus[]): FilterableField[] {
+  // Determine status options: use pipelineStages if provided, otherwise extract from leads
+  let statusOptions: string[];
+  if (pipelineStages && pipelineStages.length > 0) {
+    statusOptions = pipelineStages;
+  } else {
+    // Fallback: extract unique statuses from actual leads
+    const uniqueStatuses = new Set<string>();
+    leads.forEach(lead => {
+      if (lead.status) {
+        uniqueStatuses.add(lead.status);
+      }
+    });
+    statusOptions = Array.from(uniqueStatuses).sort();
+  }
+
   // Standard lead fields
   const standardFields: FilterableField[] = [
     { name: 'name', label: 'Name', type: 'text', isCustomField: false },
     { name: 'email', label: 'Email', type: 'text', isCustomField: false },
     { name: 'phone', label: 'Phone', type: 'text', isCustomField: false },
     { name: 'company', label: 'Company', type: 'text', isCustomField: false },
-    { name: 'status', label: 'Status', type: 'select', options: ['new_lead', 'qualified', 'contacted', 'follow_up', 'won', 'lost'], isCustomField: false },
+    { name: 'status', label: 'Status', type: 'select', options: statusOptions, isCustomField: false },
     { name: 'linkedin_status', label: 'LinkedIn Status', type: 'select', options: ['not_sent', 'sent', 'opened', 'replied', 'refused', 'no_response'], isCustomField: false },
     { name: 'email_outreach_status', label: 'Email Outreach Status', type: 'select', options: ['not_sent', 'sent', 'opened', 'replied', 'bounced', 'refused', 'no_response'], isCustomField: false },
     { name: 'createdAt', label: 'Created Date', type: 'date', isCustomField: false },
