@@ -5,6 +5,7 @@
 
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
+import {Timestamp} from "firebase-admin/firestore";
 import {HttpsError} from "firebase-functions/v1/auth";
 import {fetchEmails, storeEmails} from "./gmailService";
 import {ManualSyncRequest, ManualSyncResponse, SyncResult} from "./types";
@@ -86,7 +87,7 @@ async function updateSyncMetadata(result: SyncResult, userId: string): Promise<v
   try {
     const db = admin.firestore();
     await db.collection("newsletters").doc("metadata").set({
-      lastSync: admin.firestore.Timestamp.fromDate(result.lastSyncTime),
+      lastSync: Timestamp.fromDate(result.lastSyncTime),
       lastSyncSuccess: result.success,
       lastSyncEmailsFetched: result.emailsFetched,
       lastSyncEmailsStored: result.emailsStored,

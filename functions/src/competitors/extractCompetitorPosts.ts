@@ -28,59 +28,27 @@ interface ExtractedData {
   totalPosts: number;
 }
 
-const EXTRACTION_PROMPT = `You are a data extraction assistant. Extract the competitor profile information and ALL their LinkedIn posts from the provided LinkedIn profile feed page content.
+const EXTRACTION_PROMPT = `Extract competitor LinkedIn posts from the provided content.
 
-First, extract the competitor's profile information:
-1. **competitorName**: The full name of the person/profile (from the profile header)
-2. **competitorLinkedInUrl**: The LinkedIn profile URL if visible (optional)
+Extract profile info:
+- competitorName: Full name from profile header
+- competitorLinkedInUrl: Profile URL (optional)
 
-Then, for each post, extract:
-1. **content**: The full text of the post
-2. **likes**: Number of likes (reactions)
-3. **comments**: Number of comments
-4. **shares**: Number of shares (reposts)
-5. **impressions**: Number of impressions/views if visible (optional)
-6. **postedDate**: Relative date like "2w", "3d", "1mo" (exactly as shown)
-7. **hashtags**: Array of hashtags used (without # symbol)
-8. **mentions**: Array of @mentions (just the name/handle)
-9. **postType**: Classify as one of: text, image, video, carousel, article, poll, document
-10. **mediaInfo**: If media present, describe:
-    - type: image, video, carousel, or document
-    - count: number of items (for carousel)
-    - hasAlt: whether alt text is present
-    - description: brief description of the media
+For each post extract:
+- content: Full post text
+- likes, comments, shares: Engagement metrics (use 0 if not shown)
+- impressions: View count (optional)
+- postedDate: Relative date (e.g., "2w", "3d", "1mo")
+- hashtags: Array without # symbol
+- mentions: Array without @ symbol
+- postType: text|image|video|carousel|article|poll|document
+- mediaInfo: {type, count, hasAlt, description} if media present
 
-Important extraction rules:
-- Extract ALL posts visible in the content
-- If engagement metrics are not visible, use 0
-- Hashtags should NOT include the # symbol
-- Mentions should NOT include the @ symbol
-- For postedDate, use the exact format shown (e.g., "2w", "3d", "1mo", "2h")
-- Be thorough and extract every post you can find
-
-Return the data in this JSON format:
+Extract ALL posts. Return valid JSON only:
 {
-  "competitorName": "Full Name From Profile",
-  "competitorLinkedInUrl": "https://www.linkedin.com/in/username/",
-  "posts": [
-    {
-      "content": "Post text here...",
-      "likes": 123,
-      "comments": 45,
-      "shares": 6,
-      "impressions": 1500,
-      "postedDate": "2w",
-      "hashtags": ["AI", "MachineLearning"],
-      "mentions": ["JohnDoe"],
-      "postType": "image",
-      "mediaInfo": {
-        "type": "image",
-        "count": 1,
-        "hasAlt": true,
-        "description": "Diagram showing model architecture"
-      }
-    }
-  ],
+  "competitorName": "Name",
+  "competitorLinkedInUrl": "URL",
+  "posts": [{...}],
   "totalPosts": 1
 }`;
 
@@ -125,9 +93,9 @@ export const extractCompetitorPosts = functions
 
       const openai = new OpenAI({ apiKey: openaiApiKey });
 
-      // Extract posts using OpenAI GPT-4
+      // Extract posts using OpenAI GPT-4o-mini
       const completion = await openai.chat.completions.create({
-        model: 'gpt-4-turbo-preview',
+        model: 'gpt-4o-mini',
         response_format: { type: 'json_object' },
         temperature: 0,
         messages: [
@@ -148,7 +116,7 @@ export const extractCompetitorPosts = functions
       const tokenUsage = extractTokenUsage(completion);
       let costInfo: CostInfo | null = null;
       if (tokenUsage) {
-        costInfo = calculateCost(tokenUsage, 'gpt-4-turbo-preview');
+        costInfo = calculateCost(tokenUsage, 'gpt-4o-mini');
         console.log(`💰 OpenAI cost: $${costInfo.totalCost.toFixed(4)} (${tokenUsage.totalTokens} tokens)`);
       }
 
@@ -217,32 +185,24 @@ export const extractCompetitorPosts = functions
         extractedBy: userId,
       }));
 
-      // Save to Firestore in batch
+      // Save to Firestore in batch (flattened structure for speed)
       const batch = db.batch();
 
-      // Save each post to the competitor's posts subcollection
+      // Save each post to the flattened competitorPosts collection
       postsWithMetadata.forEach((post) => {
-        const postRef = db
-          .collection('competitorPosts')
-          .doc(userId)
-          .collection('competitors')
-          .doc(validCompetitorId)
-          .collection('posts')
-          .doc(post.id);
-
+        const postRef = db.collection('competitorPosts').doc(post.id);
         batch.set(postRef, post);
       });
 
       // Update sync metadata
       const metadataRef = db
         .collection('competitorSyncMetadata')
-        .doc(userId)
-        .collection('competitors')
-        .doc(validCompetitorId);
+        .doc(`${userId}_${validCompetitorId}`);
 
       batch.set(
         metadataRef,
         {
+          userId,
           competitorId: validCompetitorId,
           lastSync: now,
           lastSyncSuccess: true,
@@ -291,11 +251,10 @@ export const extractCompetitorPosts = functions
           const db = getFirestore();
           await db
             .collection('competitorSyncMetadata')
-            .doc(userId)
-            .collection('competitors')
-            .doc(competitorId)
+            .doc(`${userId}_${competitorId}`)
             .set(
               {
+                userId,
                 competitorId,
                 lastSync: Timestamp.now(),
                 lastSyncSuccess: false,

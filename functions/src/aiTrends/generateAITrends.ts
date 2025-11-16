@@ -5,6 +5,7 @@
 
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
+import {Timestamp} from "firebase-admin/firestore";
 import {HttpsError} from "firebase-functions/v1/auth";
 import OpenAI from "openai";
 import {AITrendsRequest, AITrendsResponse, AITrend, EmailData} from "./types";
@@ -191,7 +192,7 @@ Content: ${email.body.substring(0, 1000)}...
         id: sessionId,
         userId,
         trends: trendsWithIds,
-        generatedAt: admin.firestore.Timestamp.now(),
+        generatedAt: Timestamp.now(),
         emailCount: emails.length,
         totalCost: costInfo.totalCost,
         model: "gpt-4-turbo-preview",
@@ -215,8 +216,14 @@ Content: ${email.body.substring(0, 1000)}...
       return {
         success: true,
         session: {
-          ...session,
+          id: session.id,
+          userId: session.userId,
+          trends: session.trends,
           generatedAt: session.generatedAt.toDate(),
+          emailCount: session.emailCount,
+          customPrompt: session.customPrompt,
+          totalCost: session.totalCost,
+          model: session.model,
         },
         message: `Successfully analyzed ${emails.length} emails and identified ${trendsWithIds.length} AI trends`,
         costInfo: {

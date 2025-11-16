@@ -6,6 +6,7 @@
 import {google} from "googleapis";
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
+import {FieldValue} from "firebase-admin/firestore";
 
 const SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"];
 const REDIRECT_URI = "http://localhost:3000/auth/gmail/callback";
@@ -84,27 +85,43 @@ export function generateAuthUrl(): string {
  * Exchange authorization code for tokens
  */
 export async function exchangeCodeForTokens(code: string) {
+  console.log("🔍 [OAuth] Starting token exchange...");
+  console.log("🔍 [OAuth] Code received:", code?.substring(0, 20) + "...");
+
   const oauth2Client = getOAuth2Client();
+  console.log("🔍 [OAuth] OAuth2 client created");
 
   const {tokens} = await oauth2Client.getToken(code);
+  console.log("🔍 [OAuth] Tokens received from Google");
 
   if (!tokens.refresh_token) {
+    console.error("❌ [OAuth] No refresh token in response");
     throw new Error(
       "No refresh token received. Make sure to revoke previous access and try again."
     );
   }
 
+  console.log("🔍 [OAuth] Refresh token present, storing in Firestore...");
+
   // Store tokens in Firestore
   const db = admin.firestore();
-  await db.collection("gmailTokens").doc("admin").set({
+  console.log("🔍 [OAuth] Firestore instance:", !!db);
+  console.log("🔍 [OAuth] FieldValue:", !!FieldValue);
+  console.log("🔍 [OAuth] serverTimestamp:", !!FieldValue.serverTimestamp);
+
+  const tokenData = {
     refreshToken: tokens.refresh_token,
     accessToken: tokens.access_token,
     expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
     email: functions.config().gmail?.inbox_email || "mostafaainews@gmail.com",
-    createdAt: admin.firestore.FieldValue.serverTimestamp(),
-  });
+    createdAt: FieldValue.serverTimestamp(),
+  };
 
-  console.log("✅ Tokens stored in Firestore");
+  console.log("🔍 [OAuth] Token data prepared:", Object.keys(tokenData));
+
+  await db.collection("gmailTokens").doc("admin").set(tokenData);
+
+  console.log("✅ [OAuth] Tokens stored in Firestore successfully");
 
   return {
     refreshToken: tokens.refresh_token,

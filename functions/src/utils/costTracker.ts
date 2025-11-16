@@ -108,22 +108,31 @@ export async function logApiCost(
   try {
     const db = admin.firestore();
 
-    // Create cost record
-    const costRecord: ApiCostRecord = {
+    // Create cost record - only include defined values (Firestore rejects undefined)
+    const costRecord: any = {
       userId,
-      leadId: metadata.leadId,
       service,
       model: costInfo.model,
       timestamp: FieldValue.serverTimestamp(),
       inputTokens: costInfo.inputTokens,
       outputTokens: costInfo.outputTokens,
       totalCost: costInfo.totalCost,
-      metadata: {
-        companyName: metadata.companyName,
-        website: metadata.website,
-        operationDetails: metadata.operationDetails,
-      },
+      metadata: {},
     };
+
+    // Only add optional fields if they're defined
+    if (metadata.leadId !== undefined) {
+      costRecord.leadId = metadata.leadId;
+    }
+    if (metadata.companyName !== undefined) {
+      costRecord.metadata.companyName = metadata.companyName;
+    }
+    if (metadata.website !== undefined) {
+      costRecord.metadata.website = metadata.website;
+    }
+    if (metadata.operationDetails !== undefined) {
+      costRecord.metadata.operationDetails = metadata.operationDetails;
+    }
 
     // Save to apiCosts collection (detailed audit trail)
     await db.collection("apiCosts").add(costRecord);

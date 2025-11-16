@@ -4,6 +4,7 @@
 
 import {google} from "googleapis";
 import * as admin from "firebase-admin";
+import {Timestamp} from "firebase-admin/firestore";
 import {EmailData, EmailSender} from "./types";
 import {getAuthenticatedOAuth2Client} from "./oauthService";
 
@@ -233,8 +234,8 @@ export async function storeEmails(emails: EmailData[]): Promise<number> {
       // Convert Date objects to Firestore Timestamps
       const emailDoc = {
         ...email,
-        receivedAt: admin.firestore.Timestamp.fromDate(email.receivedAt),
-        fetchedAt: admin.firestore.Timestamp.fromDate(email.fetchedAt),
+        receivedAt: Timestamp.fromDate(email.receivedAt),
+        fetchedAt: Timestamp.fromDate(email.fetchedAt),
       };
 
       batch.set(emailsRef.doc(email.id), emailDoc);

@@ -121,12 +121,14 @@ export function subscribeToCompetitorPosts(
       },
       (error) => {
         console.error('Error in competitor posts subscription:', error);
-        throw new Error('Failed to subscribe to competitor posts');
+        // Don't throw - just log the error and call callback with empty array
+        callback([]);
       }
     );
   } catch (error) {
     console.error('Error setting up competitor posts subscription:', error);
-    throw new Error('Failed to set up competitor posts subscription');
+    // Return a no-op unsubscribe function instead of throwing
+    return () => {};
   }
 }
 
@@ -189,12 +191,14 @@ export function subscribeToSyncMetadata(
       },
       (error) => {
         console.error('Error in sync metadata subscription:', error);
-        throw new Error('Failed to subscribe to sync metadata');
+        // Don't throw - just call callback with null
+        callback(null);
       }
     );
   } catch (error) {
     console.error('Error setting up sync metadata subscription:', error);
-    throw new Error('Failed to set up sync metadata subscription');
+    // Return a no-op unsubscribe function instead of throwing
+    return () => {};
   }
 }
 

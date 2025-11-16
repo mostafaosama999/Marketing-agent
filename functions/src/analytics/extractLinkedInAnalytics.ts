@@ -104,7 +104,7 @@ export const extractLinkedInAnalytics = functions
 
       // Call OpenAI API for extraction
       const completion = await openai.chat.completions.create({
-        model: "gpt-4-turbo-preview",
+        model: "gpt-4o-mini",
         response_format: { type: "json_object" },
         temperature: 0, // Deterministic for data extraction
         messages: [
@@ -127,7 +127,7 @@ export const extractLinkedInAnalytics = functions
       const tokenUsage = extractTokenUsage(completion);
       let costInfo: CostInfo | null = null;
       if (tokenUsage) {
-        costInfo = calculateCost(tokenUsage, "gpt-4-turbo-preview");
+        costInfo = calculateCost(tokenUsage, "gpt-4o-mini");
         console.log(`💰 OpenAI cost: $${costInfo.totalCost.toFixed(4)} (${tokenUsage.totalTokens} tokens)`);
       }
 
