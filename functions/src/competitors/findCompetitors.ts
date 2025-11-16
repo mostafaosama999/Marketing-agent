@@ -120,9 +120,9 @@ IMPORTANT:
 }
 
 /**
- * Cloud Function: Find Competitors
+ * Cloud Function: Find Competitors V2
  */
-export const findCompetitors = functions
+export const findCompetitorsV2 = functions
   .runWith({
     timeoutSeconds: 120,
     memory: "512MB",
@@ -132,7 +132,7 @@ export const findCompetitors = functions
       data: FindCompetitorsRequest,
       context
     ): Promise<FindCompetitorsResponse> => {
-      console.log("=== findCompetitors Function Invoked ===");
+      console.log("=== findCompetitorsV2 Function Invoked ===");
       console.log("Timestamp:", new Date().toISOString());
       console.log("Authentication present:", !!context.auth);
       console.log("User ID:", context.auth?.uid || "NONE");

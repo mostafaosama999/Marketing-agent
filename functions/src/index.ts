@@ -23,7 +23,7 @@ export {analyzeWritingProgramDetailsCloud} from "./writingProgramAnalyzer";
 export {fetchApolloEmail} from "./apollo/apolloProxy";
 export {enrichOrganizationCloud} from "./apollo/enrichOrganization";
 export {searchPeopleCloud} from "./apollo/searchPeople";
-export {findCompetitors} from "./competitors/findCompetitors";
+export {findCompetitorsV2} from "./competitors/findCompetitors";
 
 // Export new profile scraper functions
 export {profileScraperSync} from "./webflow/profileSync";
@@ -57,3 +57,7 @@ export {generateAITrends} from "./aiTrends/generateAITrends";
 // Export LinkedIn post generation functions
 export {generateLinkedInPostAsync} from "./linkedinGeneration/generateLinkedInPostAsync";
 export {getLinkedInGenerationJob} from "./linkedinGeneration/getLinkedInGenerationJob";
+
+// Export new post ideas generation functions
+export {generatePostIdeas} from "./linkedinGeneration/generatePostIdeas";
+export {generatePostFromIdea} from "./linkedinGeneration/generatePostFromIdea";

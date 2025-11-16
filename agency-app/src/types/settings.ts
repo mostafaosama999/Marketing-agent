@@ -21,6 +21,9 @@ export interface AppSettings {
   aiTrendsPrompt?: string;
   aiTrendsDefaultEmailCount?: number;
 
+  // LinkedIn Post Generation Configuration
+  linkedInPostPrompt?: string;
+
   // Metadata
   updatedAt: Date;
   updatedBy: string; // User ID who last updated settings
@@ -36,6 +39,7 @@ export interface UpdateSettingsRequest {
   aiPrompts?: AppSettings['aiPrompts'];
   aiTrendsPrompt?: string;
   aiTrendsDefaultEmailCount?: number;
+  linkedInPostPrompt?: string;
 }
 
 /**

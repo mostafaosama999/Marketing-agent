@@ -83,6 +83,9 @@ export const SettingsPage: React.FC = () => {
   const [aiTrendsPrompt, setAiTrendsPrompt] = useState('');
   const [aiTrendsEmailCount, setAiTrendsEmailCount] = useState(50);
 
+  // LinkedIn Post Generation settings
+  const [linkedInPostPrompt, setLinkedInPostPrompt] = useState('');
+
   // Custom prompts state (loaded from localStorage)
   const [customPrompts, setCustomPrompts] = useState<Record<string, PromptMetadata>>({});
 
@@ -102,6 +105,7 @@ export const SettingsPage: React.FC = () => {
         setOfferHeadline(data.offerHeadline || '');
         setAiTrendsPrompt(data.aiTrendsPrompt || '');
         setAiTrendsEmailCount(data.aiTrendsDefaultEmailCount || 50);
+        setLinkedInPostPrompt(data.linkedInPostPrompt || '');
       } catch (err) {
         console.error('Error loading settings:', err);
         setError('Failed to load settings');
@@ -119,6 +123,7 @@ export const SettingsPage: React.FC = () => {
       setOfferHeadline(updatedSettings.offerHeadline || '');
       setAiTrendsPrompt(updatedSettings.aiTrendsPrompt || '');
       setAiTrendsEmailCount(updatedSettings.aiTrendsDefaultEmailCount || 50);
+      setLinkedInPostPrompt(updatedSettings.linkedInPostPrompt || '');
     });
 
     return () => unsubscribe();
@@ -250,6 +255,68 @@ Focus on trends that:
 - Connect to themes like innovation, strategy, team building, or decision-making`;
 
     setAiTrendsPrompt(defaultPrompt);
+  };
+
+  const handleSaveLinkedInPostSettings = async () => {
+    if (!user) return;
+
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      await updateSettings({
+        linkedInPostPrompt,
+      }, user.uid);
+      setSuccess('LinkedIn Post Generation settings saved successfully!');
+
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      console.error('Error saving LinkedIn Post settings:', err);
+      setError(err.message || 'Failed to save LinkedIn Post settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleResetLinkedInPostPrompt = () => {
+    const defaultPrompt = `Create a professional LinkedIn post for a CEO/leadership audience that combines AI trend insights with proven competitor engagement strategies.
+
+AI TREND CONTEXT:
+- Title: {trend.title}
+- Description: {trend.description}
+- Category: {trend.category}
+- Leadership Angle: {trend.leadershipAngle}
+- Key Points: {trend.keyPoints}
+
+COMPETITOR INSIGHTS:
+- Common Themes: {competitorSummary.commonThemes}
+- Engagement Patterns: {competitorSummary.engagementPatterns}
+- Tone: {competitorSummary.toneAndStyle}
+- Hashtag Strategy: {competitorSummary.hashtagStrategy}
+
+POST REQUIREMENTS:
+1. Word count: 180-220 words (STRICT)
+2. Tone: Professional yet engaging, thought-leadership style
+3. Structure:
+   - Hook: Attention-grabbing opening (1-2 sentences)
+   - Context: Explain the AI trend and why it matters (2-3 sentences)
+   - Leadership Insight: Strategic implications for business leaders (2-3 sentences)
+   - Call-to-Action: Thought-provoking question or actionable takeaway (1-2 sentences)
+4. Include 3-5 relevant hashtags at the end
+5. Use line breaks for readability
+6. Incorporate insights from competitor patterns
+7. Avoid buzzwords and overhype
+8. Focus on actionable insights
+
+Return a JSON object with this exact structure:
+{
+  "content": "The full LinkedIn post text with line breaks",
+  "hashtags": ["hashtag1", "hashtag2", "hashtag3", "hashtag4", "hashtag5"]
+}`;
+
+    setLinkedInPostPrompt(defaultPrompt);
   };
 
   // Handle copy to clipboard with feedback
@@ -913,19 +980,91 @@ Focus on trends that:
                 </Paper>
               </Box>
 
-              {/* Future Settings Placeholder */}
-              <Box
-                sx={{
-                  textAlign: 'center',
-                  py: 6,
-                  px: 4,
-                  borderRadius: 2,
-                  border: '1px dashed #e2e8f0',
-                }}
-              >
-                <Typography variant="body1" sx={{ color: '#94a3b8' }}>
-                  More general settings coming soon...
-                </Typography>
+              {/* LinkedIn Post Generation Settings */}
+              <Box sx={{ mb: 4 }}>
+                <Paper
+                  sx={{
+                    borderRadius: 3,
+                    boxShadow: '0 4px 20px rgba(0, 0, 0, 0.08)',
+                    background: 'rgba(255, 255, 255, 0.95)',
+                    backdropFilter: 'blur(20px)',
+                    p: 3,
+                  }}
+                >
+                  <Typography variant="h6" sx={{ fontWeight: 700, mb: 2 }}>
+                    LinkedIn Post Generation
+                  </Typography>
+                  <Typography variant="body2" sx={{ color: '#64748b', mb: 3 }}>
+                    Configure the AI prompt that generates LinkedIn posts from AI trends and competitor insights
+                  </Typography>
+
+                  <Divider sx={{ my: 3 }} />
+
+                  {/* LinkedIn Post Generation Prompt */}
+                  <Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                        LinkedIn Post Generation Prompt
+                      </Typography>
+                      <Button
+                        size="small"
+                        onClick={handleResetLinkedInPostPrompt}
+                        sx={{
+                          color: '#667eea',
+                          textTransform: 'none',
+                          '&:hover': {
+                            backgroundColor: '#ede9fe',
+                          },
+                        }}
+                      >
+                        Reset to Default
+                      </Button>
+                    </Box>
+                    <Typography variant="caption" sx={{ color: '#64748b', mb: 2, display: 'block' }}>
+                      This prompt guides the AI in creating LinkedIn posts that combine AI trends with competitor engagement patterns.
+                      Variables like {'{trend.title}'} and {'{competitorSummary.commonThemes}'} will be automatically replaced.
+                    </Typography>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={16}
+                      value={linkedInPostPrompt}
+                      onChange={(e) => setLinkedInPostPrompt(e.target.value)}
+                      placeholder="Enter your custom LinkedIn post generation prompt..."
+                      sx={{
+                        '& .MuiOutlinedInput-root': {
+                          fontFamily: 'monospace',
+                          fontSize: '0.875rem',
+                        },
+                      }}
+                    />
+                  </Box>
+
+                  {/* Save Button */}
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
+                    <Button
+                      variant="contained"
+                      onClick={handleSaveLinkedInPostSettings}
+                      disabled={saving}
+                      startIcon={saving ? <CircularProgress size={20} /> : <SaveIcon />}
+                      sx={{
+                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        color: 'white',
+                        fontWeight: 600,
+                        px: 3,
+                        '&:hover': {
+                          background: 'linear-gradient(135deg, #5568d3 0%, #653a8b 100%)',
+                        },
+                        '&:disabled': {
+                          background: '#e2e8f0',
+                          color: '#94a3b8',
+                        },
+                      }}
+                    >
+                      {saving ? 'Saving...' : 'Save LinkedIn Post Settings'}
+                    </Button>
+                  </Box>
+                </Paper>
               </Box>
             </Box>
           </TabPanel>

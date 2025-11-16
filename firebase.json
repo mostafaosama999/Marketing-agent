@@ -41,20 +41,6 @@
     "hosting": {
       "port": 5003
     },
-    "hub": {
-      "port": 4402
-    },
-    "logging": {
-      "port": 4502
-    },
-    "singleProjectMode": true,
-    "export": {
-      "on_exit": {
-        "path": "./emulator-data"
-      }
-    },
-    "import": {
-      "path": "./emulator-data"
-    }
+    "singleProjectMode": true
   }
 }

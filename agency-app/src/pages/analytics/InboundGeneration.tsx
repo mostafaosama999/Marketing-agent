@@ -611,7 +611,6 @@ const InboundGeneration: React.FC = () => {
       {/* LinkedIn Post Generation Section */}
       <Box sx={{ mb: 4 }}>
         <LinkedInPostGeneration
-          aiTrends={aiTrends}
           userId={user?.uid}
         />
       </Box>

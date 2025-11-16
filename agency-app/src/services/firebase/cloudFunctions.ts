@@ -385,11 +385,11 @@ export async function findCompetitors(
   console.log('Functions app:', functions.app?.name);
 
   try {
-    console.log('Creating httpsCallable for findCompetitors...');
+    console.log('Creating httpsCallable for findCompetitorsV2...');
     const findCompetitorsFunc = httpsCallable<
       FindCompetitorsRequest,
       FindCompetitorsResponse
-    >(functions, 'findCompetitors');
+    >(functions, 'findCompetitorsV2');
     console.log('httpsCallable created successfully');
 
     console.log('Invoking cloud function...');
