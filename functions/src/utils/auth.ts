@@ -1,18 +1,40 @@
 import {google} from "googleapis";
 import * as functions from "firebase-functions";
 
+// Helper function to safely get config (compatible with both v1 and v2)
+function getConfig(key: string): string | undefined {
+  // First try environment variables (v2)
+  const envValue = process.env[key.toUpperCase().replace(/\./g, '_')];
+  if (envValue) {
+    return envValue;
+  }
+
+  // Fallback to functions.config() for v1 functions
+  try {
+    const parts = key.split('.');
+    let config: any = functions.config();
+    for (const part of parts) {
+      config = config?.[part];
+      if (config === undefined) break;
+    }
+    return config;
+  } catch {
+    return undefined;
+  }
+}
+
 // Google Service Account configuration for Docs API
 const GOOGLE_CREDENTIALS = {
   type: "service_account",
-  project_id: functions.config().google?.project_id || "marketing-app-cc237",
-  private_key_id: functions.config().google?.private_key_id,
-  private_key: functions.config().google?.private_key?.replace(/\\n/g, "\n"),
-  client_email: functions.config().google?.client_email,
-  client_id: functions.config().google?.client_id,
+  project_id: getConfig("google.project_id") || "marketing-app-cc237",
+  private_key_id: getConfig("google.private_key_id"),
+  private_key: getConfig("google.private_key")?.replace(/\\n/g, "\n"),
+  client_email: getConfig("google.client_email"),
+  client_id: getConfig("google.client_id"),
   auth_uri: "https://accounts.google.com/o/oauth2/auth",
   token_uri: "https://oauth2.googleapis.com/token",
   auth_provider_x509_cert_url: "https://www.googleapis.com/oauth2/v1/certs",
-  client_x509_cert_url: functions.config().google?.client_x509_cert_url,
+  client_x509_cert_url: getConfig("google.client_x509_cert_url"),
   universe_domain: "googleapis.com",
 };
 

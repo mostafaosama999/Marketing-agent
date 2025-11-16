@@ -58,6 +58,11 @@ const categoryColors: Record<string, { bg: string; border: string; tag: string }
     border: '#ec4899',
     tag: '#fce7f3',
   },
+  'Data Extraction': {
+    bg: 'linear-gradient(135deg, #8b5cf6 0%, #6d28d9 100%)',
+    border: '#8b5cf6',
+    tag: '#ede9fe',
+  },
 };
 
 export const PromptCard: React.FC<PromptCardProps> = ({ prompt, editable = false, onSave }) => {

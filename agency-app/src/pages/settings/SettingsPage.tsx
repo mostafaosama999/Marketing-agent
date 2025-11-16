@@ -13,6 +13,7 @@ import {
   CircularProgress,
   Divider,
   IconButton,
+  MenuItem,
 } from '@mui/material';
 import {
   Save as SaveIcon,
@@ -78,6 +79,10 @@ export const SettingsPage: React.FC = () => {
   const [offerTemplate, setOfferTemplate] = useState('');
   const [offerHeadline, setOfferHeadline] = useState('');
 
+  // AI Trends settings
+  const [aiTrendsPrompt, setAiTrendsPrompt] = useState('');
+  const [aiTrendsEmailCount, setAiTrendsEmailCount] = useState(50);
+
   // Custom prompts state (loaded from localStorage)
   const [customPrompts, setCustomPrompts] = useState<Record<string, PromptMetadata>>({});
 
@@ -95,6 +100,8 @@ export const SettingsPage: React.FC = () => {
         setSettings(data);
         setOfferTemplate(data.offerTemplate);
         setOfferHeadline(data.offerHeadline || '');
+        setAiTrendsPrompt(data.aiTrendsPrompt || '');
+        setAiTrendsEmailCount(data.aiTrendsDefaultEmailCount || 50);
       } catch (err) {
         console.error('Error loading settings:', err);
         setError('Failed to load settings');
@@ -110,6 +117,8 @@ export const SettingsPage: React.FC = () => {
       setSettings(updatedSettings);
       setOfferTemplate(updatedSettings.offerTemplate);
       setOfferHeadline(updatedSettings.offerHeadline || '');
+      setAiTrendsPrompt(updatedSettings.aiTrendsPrompt || '');
+      setAiTrendsEmailCount(updatedSettings.aiTrendsDefaultEmailCount || 50);
     });
 
     return () => unsubscribe();
@@ -195,6 +204,52 @@ export const SettingsPage: React.FC = () => {
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleSaveAITrendsSettings = async () => {
+    if (!user) return;
+
+    setSaving(true);
+    setError(null);
+    setSuccess(null);
+
+    try {
+      await updateSettings({
+        aiTrendsPrompt,
+        aiTrendsDefaultEmailCount: aiTrendsEmailCount,
+      }, user.uid);
+      setSuccess('AI Trends settings saved successfully!');
+
+      // Clear success message after 3 seconds
+      setTimeout(() => setSuccess(null), 3000);
+    } catch (err: any) {
+      console.error('Error saving AI Trends settings:', err);
+      setError(err.message || 'Failed to save AI Trends settings');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleResetAITrendsPrompt = () => {
+    const defaultPrompt = `You are an AI trends analyst helping a LinkedIn thought leader create content about AI and leadership.
+
+Analyze the following newsletter emails and identify the top AI and machine learning trends that would be suitable for creating LinkedIn posts about leadership, innovation, and strategic thinking.
+
+For each trend:
+1. Provide a clear, concise title
+2. Write a 2-3 sentence description
+3. Categorize it (models, techniques, applications, tools, research, industry)
+4. Assign a relevance score (0-100) for leadership content
+5. List 2-3 key points that leaders should understand
+6. Suggest a leadership angle (how leaders can apply or think about this trend)
+
+Focus on trends that:
+- Are current and emerging (not outdated)
+- Have practical implications for business leaders
+- Can be explained to a non-technical executive audience
+- Connect to themes like innovation, strategy, team building, or decision-making`;
+
+    setAiTrendsPrompt(defaultPrompt);
   };
 
   // Handle copy to clipboard with feedback
@@ -750,37 +805,128 @@ export const SettingsPage: React.FC = () => {
 
           {/* General Tab */}
           <TabPanel value={tabValue} index={3}>
-            <Box
-              sx={{
-                textAlign: 'center',
-                py: 8,
-                px: 4,
-              }}
-            >
-              <Typography
-                variant="h5"
+            <Box sx={{ px: 4 }}>
+              {/* AI Trends Analysis Settings */}
+              <Box sx={{ mb: 6 }}>
+                <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
+                  AI Trends Analysis Configuration
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#64748b', mb: 3 }}>
+                  Customize the prompt and default settings for AI trends analysis on your newsletter emails
+                </Typography>
+
+                <Paper
+                  sx={{
+                    p: 3,
+                    borderRadius: 2,
+                    border: '1px solid #e2e8f0',
+                  }}
+                >
+                  {/* Default Email Count */}
+                  <Box sx={{ mb: 3 }}>
+                    <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1 }}>
+                      Default Email Count
+                    </Typography>
+                    <Typography variant="caption" sx={{ color: '#64748b', mb: 2, display: 'block' }}>
+                      Default number of emails to analyze when generating AI trends
+                    </Typography>
+                    <TextField
+                      select
+                      fullWidth
+                      value={aiTrendsEmailCount}
+                      onChange={(e) => setAiTrendsEmailCount(Number(e.target.value))}
+                      size="small"
+                      sx={{ maxWidth: 200 }}
+                    >
+                      <MenuItem value={10}>Last 10 emails</MenuItem>
+                      <MenuItem value={30}>Last 30 emails</MenuItem>
+                      <MenuItem value={50}>Last 50 emails</MenuItem>
+                      <MenuItem value={100}>Last 100 emails</MenuItem>
+                    </TextField>
+                  </Box>
+
+                  <Divider sx={{ my: 3 }} />
+
+                  {/* AI Trends Prompt */}
+                  <Box>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1 }}>
+                      <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                        AI Trends Analysis Prompt
+                      </Typography>
+                      <Button
+                        size="small"
+                        onClick={handleResetAITrendsPrompt}
+                        sx={{
+                          color: '#667eea',
+                          textTransform: 'none',
+                          '&:hover': {
+                            backgroundColor: '#ede9fe',
+                          },
+                        }}
+                      >
+                        Reset to Default
+                      </Button>
+                    </Box>
+                    <Typography variant="caption" sx={{ color: '#64748b', mb: 2, display: 'block' }}>
+                      This prompt guides the AI in analyzing newsletter emails for trends suitable for LinkedIn leadership posts
+                    </Typography>
+                    <TextField
+                      fullWidth
+                      multiline
+                      rows={12}
+                      value={aiTrendsPrompt}
+                      onChange={(e) => setAiTrendsPrompt(e.target.value)}
+                      placeholder="Enter your custom AI trends analysis prompt..."
+                      sx={{
+                        '& .MuiOutlinedInput-root': {
+                          fontFamily: 'monospace',
+                          fontSize: '0.875rem',
+                        },
+                      }}
+                    />
+                  </Box>
+
+                  {/* Save Button */}
+                  <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 3 }}>
+                    <Button
+                      variant="contained"
+                      onClick={handleSaveAITrendsSettings}
+                      disabled={saving}
+                      startIcon={saving ? <CircularProgress size={20} /> : <SaveIcon />}
+                      sx={{
+                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        color: 'white',
+                        fontWeight: 600,
+                        px: 3,
+                        '&:hover': {
+                          background: 'linear-gradient(135deg, #5568d3 0%, #653a8b 100%)',
+                        },
+                        '&:disabled': {
+                          background: '#e2e8f0',
+                          color: '#94a3b8',
+                        },
+                      }}
+                    >
+                      {saving ? 'Saving...' : 'Save AI Trends Settings'}
+                    </Button>
+                  </Box>
+                </Paper>
+              </Box>
+
+              {/* Future Settings Placeholder */}
+              <Box
                 sx={{
-                  fontWeight: 600,
-                  color: '#64748b',
-                  mb: 2,
+                  textAlign: 'center',
+                  py: 6,
+                  px: 4,
+                  borderRadius: 2,
+                  border: '1px dashed #e2e8f0',
                 }}
               >
-                General Settings
-              </Typography>
-              <Typography variant="body1" sx={{ color: '#94a3b8', mb: 3, maxWidth: 600, mx: 'auto' }}>
-                Configure general application preferences, notifications, and other settings. This feature is coming soon!
-              </Typography>
-              <Chip
-                label="Coming Soon"
-                sx={{
-                  bgcolor: '#dbeafe',
-                  color: '#1e40af',
-                  fontWeight: 600,
-                  fontSize: '14px',
-                  px: 2,
-                  py: 2.5,
-                }}
-              />
+                <Typography variant="body1" sx={{ color: '#94a3b8' }}>
+                  More general settings coming soon...
+                </Typography>
+              </Box>
             </Box>
           </TabPanel>
         </Box>

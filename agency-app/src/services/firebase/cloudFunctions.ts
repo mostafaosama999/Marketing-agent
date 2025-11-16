@@ -4,8 +4,8 @@
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import app from './firestore';
 
-// Initialize Functions
-const functions = getFunctions(app);
+// Initialize Functions with explicit region
+const functions = getFunctions(app, 'us-central1');
 
 // Types for cloud function requests/responses
 export interface WritingProgramResult {

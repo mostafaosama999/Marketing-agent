@@ -455,6 +455,141 @@ Example topics: "5 Benefits of Cloud Computing", "Why You Need Event-Driven Arch
 
 RESPOND WITH ONLY THE JSON OBJECT - no markdown, no explanation, just valid JSON.`,
   },
+
+  // LinkedIn Analytics Extraction
+  {
+    id: 'linkedin-analytics-extraction',
+    name: 'LinkedIn Analytics Extraction',
+    description: 'Extracts LinkedIn post analytics (impressions, likes, comments, shares) from pasted LinkedIn analytics page content using GPT-4',
+    version: '1.0.0',
+    author: 'Research Team',
+    category: 'Data Extraction',
+    tags: ['linkedin', 'analytics', 'data-extraction', 'metrics', 'gpt-4'],
+    variables: ['pastedContent'],
+    systemPrompt: `You are a data extraction assistant. Extract LinkedIn post analytics from the provided text.
+
+The text contains LinkedIn posts with their performance metrics. For each post, extract:
+- <strong>content</strong>: First 100-150 characters of the post text (the actual content, not metadata)
+- <strong>impressions</strong>: The number shown next to "Impressions" (e.g., "1,178 Impressions" = 1178)
+- <strong>likes</strong>: Number of likes/reactions
+- <strong>comments</strong>: Number of comments
+- <strong>shares</strong>: Number of shares (if mentioned, otherwise 0)
+- <strong>postedDate</strong>: Relative date string (e.g., "2w" for 2 weeks, "3d" for 3 days, "1d" for 1 day, "14h" for 14 hours)
+
+<strong>Important:</strong>
+<ul>
+  <li>Extract ONLY posts that have impression data</li>
+  <li>Ignore navigation elements, headers, and UI text</li>
+  <li>Convert formatted numbers (e.g., "1,178" to 1178)</li>
+  <li>Return ONLY valid JSON, no additional text or markdown</li>
+</ul>`,
+    userPrompt: `Extract LinkedIn post analytics from this content:
+
+{{pastedContent}}`,
+    outputSchema: `Return a JSON object with this exact structure:
+{
+  "period": "Past 7 days",
+  "posts": [
+    {
+      "content": "Post preview text here...",
+      "impressions": 1178,
+      "likes": 185,
+      "comments": 59,
+      "shares": 0,
+      "postedDate": "2w"
+    }
+  ]
+}
+
+Each post should include:
+- content (string): First 100-150 characters of the actual post text
+- impressions (number): Total impressions/views
+- likes (number): Reaction count
+- comments (number): Comment count
+- shares (number): Share count (0 if not available)
+- postedDate (string): Relative date like "2w", "3d", "14h"`,
+  },
+
+  // Competitor Posts Extraction
+  {
+    id: 'competitor-posts-extraction',
+    name: 'Competitor Posts Extraction',
+    description: 'Extracts competitor LinkedIn profile information and all their posts with engagement metrics, hashtags, mentions, and media details from pasted LinkedIn profile feed',
+    version: '1.0.0',
+    author: 'Research Team',
+    category: 'Data Extraction',
+    tags: ['linkedin', 'competitor-analysis', 'data-extraction', 'social-media', 'gpt-4'],
+    variables: ['pastedContent'],
+    systemPrompt: `You are a data extraction assistant. Extract the competitor profile information and ALL their LinkedIn posts from the provided LinkedIn profile feed page content.
+
+<strong>First, extract the competitor's profile information:</strong>
+<ol>
+  <li><strong>competitorName</strong>: The full name of the person/profile (from the profile header)</li>
+  <li><strong>competitorLinkedInUrl</strong>: The LinkedIn profile URL if visible (optional)</li>
+</ol>
+
+<strong>Then, for each post, extract:</strong>
+<ol>
+  <li><strong>content</strong>: The full text of the post</li>
+  <li><strong>likes</strong>: Number of likes (reactions)</li>
+  <li><strong>comments</strong>: Number of comments</li>
+  <li><strong>shares</strong>: Number of shares (reposts)</li>
+  <li><strong>impressions</strong>: Number of impressions/views if visible (optional)</li>
+  <li><strong>postedDate</strong>: Relative date like "2w", "3d", "1mo" (exactly as shown)</li>
+  <li><strong>hashtags</strong>: Array of hashtags used (without # symbol)</li>
+  <li><strong>mentions</strong>: Array of @mentions (just the name/handle)</li>
+  <li><strong>postType</strong>: Classify as one of: text, image, video, carousel, article, poll, document</li>
+  <li><strong>mediaInfo</strong>: If media present, describe:
+    <ul>
+      <li>type: image, video, carousel, or document</li>
+      <li>count: number of items (for carousel)</li>
+      <li>hasAlt: whether alt text is present</li>
+      <li>description: brief description of the media</li>
+    </ul>
+  </li>
+</ol>
+
+<strong>Important extraction rules:</strong>
+<ul>
+  <li>Extract ALL posts visible in the content</li>
+  <li>If engagement metrics are not visible, use 0</li>
+  <li>Hashtags should NOT include the # symbol</li>
+  <li>Mentions should NOT include the @ symbol</li>
+  <li>For postedDate, use the exact format shown (e.g., "2w", "3d", "1mo", "2h")</li>
+  <li>Be thorough and extract every post you can find</li>
+</ul>`,
+    userPrompt: `Extract all posts from this LinkedIn profile feed:
+
+{{pastedContent}}`,
+    outputSchema: `Return the data in this JSON format:
+{
+  "competitorName": "Full Name From Profile",
+  "competitorLinkedInUrl": "https://www.linkedin.com/in/username/",
+  "posts": [
+    {
+      "content": "Post text here...",
+      "likes": 123,
+      "comments": 45,
+      "shares": 6,
+      "impressions": 1500,
+      "postedDate": "2w",
+      "hashtags": ["AI", "MachineLearning"],
+      "mentions": ["JohnDoe"],
+      "postType": "image",
+      "mediaInfo": {
+        "type": "image",
+        "count": 1,
+        "hasAlt": true,
+        "description": "Diagram showing model architecture"
+      }
+    }
+  ],
+  "totalPosts": 1
+}
+
+Post types: text, image, video, carousel, article, poll, document
+Media info is optional and only needed when media is present.`,
+  },
 ];
 
 export const PROMPT_CATEGORIES = [
@@ -463,6 +598,7 @@ export const PROMPT_CATEGORIES = [
   'Writing Program Finder',
   'Writing Program Analyzer',
   'Idea Generation',
+  'Data Extraction',
 ];
 
 export function getPromptsByCategory(category: string): PromptMetadata[] {

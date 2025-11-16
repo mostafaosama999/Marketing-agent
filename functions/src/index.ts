@@ -43,3 +43,16 @@ export {
 // Export analytics functions
 export {extractLinkedInAnalytics} from "./analytics/extractLinkedInAnalytics";
 export {syncGoogleAnalytics, scheduledGoogleAnalyticsSync} from "./analytics/syncGoogleAnalytics";
+
+// Export Gmail integration functions
+export {scheduledEmailSync} from "./gmail/scheduledEmailSync";
+export {manualEmailSync} from "./gmail/manualEmailSync";
+export {getGmailAuthUrl} from "./gmail/generateAuthUrl";
+export {exchangeGmailOAuthCode} from "./gmail/exchangeOAuthCode";
+export {checkGmailConnectionStatus} from "./gmail/checkGmailConnection";
+
+// Export competitor content tracking functions
+export {extractCompetitorPosts} from "./competitors/extractCompetitorPosts";
+
+// Export AI trends analysis functions
+export {generateAITrends} from "./aiTrends/generateAITrends";

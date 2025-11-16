@@ -49,6 +49,13 @@ import { Company } from '../../../types/crm';
 import { getCompany } from '../../../services/api/companies';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '../../../services/firebase/firestore';
+import { DropdownFieldManager } from './DropdownFieldManager';
+import { DropdownMenuWithAdd } from './DropdownMenuWithAdd';
+import {
+  initializeBuiltInDropdowns,
+  getLinkedInStatusLabel,
+  getEmailStatusLabel,
+} from '../../../services/api/builtInDropdownsService';
 
 interface CRMLeadsTableProps {
   leads: Lead[];
@@ -125,6 +132,10 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
   const [selectedLeadForCustomField, setSelectedLeadForCustomField] = useState<Lead | null>(null);
   const [selectedCustomFieldName, setSelectedCustomFieldName] = useState<string | null>(null);
 
+  // Built-in dropdown options (LinkedIn/Email status)
+  const [linkedInStatusOptions, setLinkedInStatusOptions] = useState<string[]>([]);
+  const [emailStatusOptions, setEmailStatusOptions] = useState<string[]>([]);
+
   // Date picker state
   const [datePickerAnchor, setDatePickerAnchor] = useState<null | HTMLElement>(null);
   const [selectedLeadForDate, setSelectedLeadForDate] = useState<Lead | null>(null);
@@ -153,47 +164,48 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
   const [offerTemplate, setOfferTemplate] = useState<string>('');
   const [companies, setCompanies] = useState<Map<string, Company>>(new Map());
 
-  // Fetch all field definitions on mount (dropdowns, dates, etc.)
-  useEffect(() => {
-    const fetchFieldDefinitions = async () => {
-      try {
-        const definitions = await getFieldDefinitions('lead');
-        console.log('🔍 [CRMLeadsTable] Loaded field definitions:', definitions);
-
-        const linkedInFields = definitions.filter(def => def.section === 'linkedin');
-        console.log('🔍 [CRMLeadsTable] LinkedIn field definitions:', linkedInFields.map(f => ({
-          name: f.name,
-          label: f.label,
-          fieldType: f.fieldType,
-          hasOptions: !!f.options,
-          optionsCount: f.options?.length
-        })));
-
-        // Enhance "Who Applied" field with users from Firestore
-        const whoAppliedField = definitions.find(def => def.name === 'linkedin_who_applied');
-        if (whoAppliedField) {
-          try {
-            const usersSnapshot = await getDocs(collection(db, 'users'));
-            const userNames = usersSnapshot.docs
-              .map(doc => doc.data().displayName || doc.data().email)
-              .filter(name => name)
-              .sort();
-
-            // Only use real users from Firestore, ignore hardcoded options
-            whoAppliedField.options = userNames;
-
-            console.log('🔍 [CRMLeadsTable] Enhanced who_applied options:', userNames);
-          } catch (error) {
-            console.error('❌ [CRMLeadsTable] Error loading users for who_applied:', error);
-          }
-        }
-
-        setFieldDefinitions(definitions);
-      } catch (error) {
-        console.error('❌ [CRMLeadsTable] Error fetching field definitions:', error);
+  // Fetch all field definitions (dropdowns, dates, etc.)
+  const fetchFieldDefinitions = async () => {
+    try {
+      // Initialize built-in dropdowns (LinkedIn/Email status) if needed
+      if (user) {
+        await initializeBuiltInDropdowns(user.uid);
       }
-    };
 
+      const definitions = await getFieldDefinitions('lead');
+
+      // Enhance "Who Applied" field with users from Firestore
+      const whoAppliedField = definitions.find(def => def.name === 'linkedin_who_applied');
+      if (whoAppliedField) {
+        try {
+          const usersSnapshot = await getDocs(collection(db, 'users'));
+          const userNames = usersSnapshot.docs
+            .map(doc => doc.data().displayName || doc.data().email)
+            .filter(name => name)
+            .sort();
+
+          // Only use real users from Firestore, ignore hardcoded options
+          whoAppliedField.options = userNames;
+        } catch (error) {
+          console.error('❌ [CRMLeadsTable] Error loading users for who_applied:', error);
+        }
+      }
+
+      // Extract LinkedIn and Email status options from field definitions
+      const linkedInStatusDef = definitions.find(def => def.name === 'linkedin_status');
+      const emailStatusDef = definitions.find(def => def.name === 'email_status');
+
+      setLinkedInStatusOptions(linkedInStatusDef?.options || []);
+      setEmailStatusOptions(emailStatusDef?.options || []);
+
+      setFieldDefinitions(definitions);
+    } catch (error) {
+      console.error('❌ [CRMLeadsTable] Error fetching field definitions:', error);
+    }
+  };
+
+  // Fetch field definitions on mount
+  useEffect(() => {
     fetchFieldDefinitions();
   }, []);
 
@@ -1043,18 +1055,6 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
           // Check if this is a dropdown field (check column.fieldType first, then fallback to fieldDefinitions)
           const isDropdown = column.fieldType === 'dropdown' || isDropdownField(column.fieldName);
 
-          // Debug logging for linkedin fields
-          if (column.fieldName.includes('linkedin_')) {
-            console.log(`🔍 [Render] Field: ${column.fieldName}`, {
-              columnFieldType: column.fieldType,
-              isDropdownFromFunc: isDropdownField(column.fieldName),
-              isDropdownFinal: isDropdown,
-              value: value,
-              columnId: columnId,
-              label: column.label
-            });
-          }
-
           if (isDropdown) {
             // All dropdown fields render as clickable chips, even when empty
             const displayValue = value || '-';
@@ -1445,7 +1445,7 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
         component={Paper}
         count={sortedLeads.length}
         page={page}
-        onPageChange={(event, newPage) => setPage(newPage)}
+        onPageChange={(_event, newPage) => setPage(newPage)}
         rowsPerPage={rowsPerPage}
         onRowsPerPageChange={(event) => {
           setRowsPerPage(parseInt(event.target.value, 10));
@@ -1513,33 +1513,28 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
         open={Boolean(linkedInMenuAnchor)}
         onClose={handleLinkedInMenuClose}
       >
-        {[
-          { value: 'not_sent', label: 'Not Sent' },
-          { value: 'sent', label: 'Sent' },
-          { value: 'opened', label: 'Opened' },
-          { value: 'replied', label: 'Replied' },
-          { value: 'refused', label: 'Refused' },
-          { value: 'no_response', label: 'No Response' },
-        ].map((option) => {
-          const colors = getOutreachStatusColor(option.value);
-          return (
-            <MenuItem
-              key={option.value}
-              onClick={() => handleLinkedInStatusChange(option.value)}
-              selected={selectedLeadForLinkedIn?.outreach?.linkedIn?.status === option.value}
-            >
-              <Chip
-                label={option.label}
-                size="small"
-                sx={{
-                  bgcolor: colors.bg,
-                  color: colors.color,
-                  fontWeight: 500,
-                }}
-              />
-            </MenuItem>
-          );
-        })}
+        <DropdownMenuWithAdd
+          options={linkedInStatusOptions.map(value => {
+            const colors = getOutreachStatusColor(value);
+            return {
+              value,
+              label: getLinkedInStatusLabel(value),
+              chipSx: {
+                bgcolor: colors.bg,
+                color: colors.color,
+                fontWeight: 500,
+              },
+            };
+          })}
+          selectedValue={selectedLeadForLinkedIn?.outreach?.linkedIn?.status}
+          onSelect={(value) => handleLinkedInStatusChange(value)}
+          entityType="lead"
+          fieldName="linkedin_status"
+          onUpdate={() => {
+            fetchFieldDefinitions();
+            handleLinkedInMenuClose();
+          }}
+        />
       </Menu>
 
       {/* Email Status Menu */}
@@ -1548,34 +1543,28 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
         open={Boolean(emailMenuAnchor)}
         onClose={handleEmailMenuClose}
       >
-        {[
-          { value: 'not_sent', label: 'Not Sent' },
-          { value: 'sent', label: 'Sent' },
-          { value: 'opened', label: 'Opened' },
-          { value: 'replied', label: 'Replied' },
-          { value: 'bounced', label: 'Bounced' },
-          { value: 'refused', label: 'Refused' },
-          { value: 'no_response', label: 'No Response' },
-        ].map((option) => {
-          const colors = getOutreachStatusColor(option.value);
-          return (
-            <MenuItem
-              key={option.value}
-              onClick={() => handleEmailStatusChange(option.value)}
-              selected={selectedLeadForEmail?.outreach?.email?.status === option.value}
-            >
-              <Chip
-                label={option.label}
-                size="small"
-                sx={{
-                  bgcolor: colors.bg,
-                  color: colors.color,
-                  fontWeight: 500,
-                }}
-              />
-            </MenuItem>
-          );
-        })}
+        <DropdownMenuWithAdd
+          options={emailStatusOptions.map(value => {
+            const colors = getOutreachStatusColor(value);
+            return {
+              value,
+              label: getEmailStatusLabel(value),
+              chipSx: {
+                bgcolor: colors.bg,
+                color: colors.color,
+                fontWeight: 500,
+              },
+            };
+          })}
+          selectedValue={selectedLeadForEmail?.outreach?.email?.status}
+          onSelect={(value) => handleEmailStatusChange(value)}
+          entityType="lead"
+          fieldName="email_status"
+          onUpdate={() => {
+            fetchFieldDefinitions();
+            handleEmailMenuClose();
+          }}
+        />
       </Menu>
 
       {/* Custom Field Dropdown Menu */}
@@ -1626,27 +1615,30 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
             );
           }
 
-          return options.map((option) => {
-            const isSelected = selectedLeadForCustomField?.customFields?.[selectedCustomFieldName] === option;
-
-            return (
-              <MenuItem
-                key={option}
-                onClick={() => handleCustomFieldChange(option)}
-                selected={isSelected}
-              >
-                <Chip
-                  label={option}
-                  size="small"
-                  sx={{
+          return (
+            <DropdownMenuWithAdd
+              options={options.map(option => {
+                const isSelected = selectedLeadForCustomField?.customFields?.[selectedCustomFieldName] === option;
+                return {
+                  value: option,
+                  label: option,
+                  chipSx: {
                     bgcolor: isSelected ? '#e0e7ff' : '#f3f4f6',
                     color: isSelected ? '#4f46e5' : '#6b7280',
                     fontWeight: 500,
-                  }}
-                />
-              </MenuItem>
-            );
-          });
+                  },
+                };
+              })}
+              selectedValue={selectedLeadForCustomField?.customFields?.[selectedCustomFieldName]}
+              onSelect={(value) => handleCustomFieldChange(value)}
+              entityType="lead"
+              fieldName={selectedCustomFieldName}
+              onUpdate={() => {
+                fetchFieldDefinitions();
+                handleCustomFieldMenuClose();
+              }}
+            />
+          );
         })()}
       </Menu>
 

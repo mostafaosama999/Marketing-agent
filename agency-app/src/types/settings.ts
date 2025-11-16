@@ -17,6 +17,10 @@ export interface AppSettings {
     writingProgramAnalysis?: string;
   };
 
+  // AI Trends Configuration
+  aiTrendsPrompt?: string;
+  aiTrendsDefaultEmailCount?: number;
+
   // Metadata
   updatedAt: Date;
   updatedBy: string; // User ID who last updated settings
@@ -30,6 +34,8 @@ export interface UpdateSettingsRequest {
   offerTemplate?: string;
   offerHeadline?: string;
   aiPrompts?: AppSettings['aiPrompts'];
+  aiTrendsPrompt?: string;
+  aiTrendsDefaultEmailCount?: number;
 }
 
 /**

@@ -172,126 +172,126 @@ export const findCompetitors = functions
         console.log(`Finding competitors for company: ${companyName} (${companyId})`);
         console.log(`User: ${context.auth.uid}`);
 
-        const openai = new OpenAI({apiKey: openaiApiKey});
+      const openai = new OpenAI({apiKey: openaiApiKey});
 
-        // Build the prompts
-        const {systemPrompt, userPrompt} = buildCompetitorPrompt(
-          companyName,
-          website || "",
-          description || "",
-          industry || ""
-        );
+      // Build the prompts
+      const {systemPrompt, userPrompt} = buildCompetitorPrompt(
+        companyName,
+        website || "",
+        description || "",
+        industry || ""
+      );
 
-        console.log("Calling OpenAI to find competitors...");
+      console.log("Calling OpenAI to find competitors...");
 
-        // Call OpenAI
-        const completion = await openai.chat.completions.create({
+      // Call OpenAI
+      const completion = await openai.chat.completions.create({
+        model: "gpt-4-turbo-preview",
+        messages: [
+          {role: "system", content: systemPrompt},
+          {role: "user", content: userPrompt},
+        ],
+        temperature: 0.7,
+        max_tokens: 3000,
+      });
+
+      const responseContent = completion.choices[0]?.message?.content;
+
+      if (!responseContent) {
+        throw new Error("Empty response from OpenAI");
+      }
+
+      console.log("Received response from OpenAI, parsing JSON...");
+
+      // Parse the JSON response
+      let parsedResponse: { competitors: Competitor[] };
+      try {
+        // Remove markdown code blocks if present
+        const cleanedResponse = responseContent
+          .replace(/```json\n?/g, "")
+          .replace(/```\n?/g, "")
+          .trim();
+        parsedResponse = JSON.parse(cleanedResponse);
+      } catch (parseError) {
+        console.error("Failed to parse OpenAI response as JSON:", parseError);
+        console.error("Raw response:", responseContent.substring(0, 500));
+        throw new Error("Invalid JSON response from OpenAI");
+      }
+
+      // Validate response structure
+      if (!parsedResponse.competitors || !Array.isArray(parsedResponse.competitors)) {
+        throw new Error("Response missing 'competitors' array");
+      }
+
+      console.log(`Successfully found ${parsedResponse.competitors.length} competitors`);
+
+      // Calculate cost
+      const usage = completion.usage;
+      const costInfo = usage ?
+        calculateCost(
+          {
+            inputTokens: usage.prompt_tokens,
+            outputTokens: usage.completion_tokens,
+            totalTokens: usage.total_tokens,
+          },
+          "gpt-4-turbo-preview"
+        ) :
+        {
+          inputTokens: 0,
+          outputTokens: 0,
+          totalTokens: 0,
+          inputCost: 0,
+          outputCost: 0,
+          totalCost: 0,
           model: "gpt-4-turbo-preview",
-          messages: [
-            {role: "system", content: systemPrompt},
-            {role: "user", content: userPrompt},
-          ],
-          temperature: 0.7,
-          max_tokens: 3000,
-        });
-
-        const responseContent = completion.choices[0]?.message?.content;
-
-        if (!responseContent) {
-          throw new Error("Empty response from OpenAI");
-        }
-
-        console.log("Received response from OpenAI, parsing JSON...");
-
-        // Parse the JSON response
-        let parsedResponse: { competitors: Competitor[] };
-        try {
-          // Remove markdown code blocks if present
-          const cleanedResponse = responseContent
-            .replace(/```json\n?/g, "")
-            .replace(/```\n?/g, "")
-            .trim();
-          parsedResponse = JSON.parse(cleanedResponse);
-        } catch (parseError) {
-          console.error("Failed to parse OpenAI response as JSON:", parseError);
-          console.error("Raw response:", responseContent.substring(0, 500));
-          throw new Error("Invalid JSON response from OpenAI");
-        }
-
-        // Validate response structure
-        if (!parsedResponse.competitors || !Array.isArray(parsedResponse.competitors)) {
-          throw new Error("Response missing 'competitors' array");
-        }
-
-        console.log(`Successfully found ${parsedResponse.competitors.length} competitors`);
-
-        // Calculate cost
-        const usage = completion.usage;
-        const costInfo = usage ?
-          calculateCost(
-            {
-              inputTokens: usage.prompt_tokens,
-              outputTokens: usage.completion_tokens,
-              totalTokens: usage.total_tokens,
-            },
-            "gpt-4-turbo-preview"
-          ) :
-          {
-            inputTokens: 0,
-            outputTokens: 0,
-            totalTokens: 0,
-            inputCost: 0,
-            outputCost: 0,
-            totalCost: 0,
-            model: "gpt-4-turbo-preview",
-          };
-
-        console.log(`Cost: $${costInfo.totalCost.toFixed(4)} (${costInfo.totalTokens} tokens)`);
-
-        // Log API cost
-        await logApiCost(
-          context.auth.uid,
-          "competitor-search",
-          costInfo,
-          {
-            companyName,
-            website: website || "",
-            operationDetails: {
-              companyId,
-              competitorsFound: parsedResponse.competitors.length,
-            },
-          }
-        );
-
-        // Return the response (no Firestore updates - just finding competitors for now)
-        return {
-          competitors: parsedResponse.competitors,
-          companyName,
-          analysisComplete: true,
-          costInfo,
         };
-      } catch (error: any) {
-        console.error("Error finding competitors:", error);
 
-        // Provide more specific error messages
-        if (error.message?.includes("API key")) {
-          throw new functions.https.HttpsError(
-            "failed-precondition",
-            "OpenAI API key is invalid or not configured"
-          );
+      console.log(`Cost: $${costInfo.totalCost.toFixed(4)} (${costInfo.totalTokens} tokens)`);
+
+      // Log API cost
+      await logApiCost(
+        context.auth.uid,
+        "competitor-search",
+        costInfo,
+        {
+          companyName,
+          website: website || "",
+          operationDetails: {
+            companyId,
+            competitorsFound: parsedResponse.competitors.length,
+          },
         }
+      );
 
-        if (error.message?.includes("quota") || error.message?.includes("rate limit")) {
-          throw new functions.https.HttpsError(
-            "resource-exhausted",
-            "OpenAI API rate limit reached. Please try again later."
-          );
-        }
+      // Return the response (no Firestore updates - just finding competitors for now)
+      return {
+        competitors: parsedResponse.competitors,
+        companyName,
+        analysisComplete: true,
+        costInfo,
+      };
+    } catch (error: any) {
+      console.error("Error finding competitors:", error);
 
+      // Provide more specific error messages
+      if (error.message?.includes("API key")) {
         throw new functions.https.HttpsError(
-          "internal",
-          `Failed to find competitors: ${error.message || "Unknown error"}`
+          "failed-precondition",
+          "OpenAI API key is invalid or not configured"
         );
       }
+
+      if (error.message?.includes("quota") || error.message?.includes("rate limit")) {
+        throw new functions.https.HttpsError(
+          "resource-exhausted",
+          "OpenAI API rate limit reached. Please try again later."
+        );
+      }
+
+      throw new functions.https.HttpsError(
+        "internal",
+        `Failed to find competitors: ${error.message || "Unknown error"}`
+      );
     }
-  );
+  }
+);

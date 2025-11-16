@@ -8,6 +8,7 @@ import ProtectedRoute from './ProtectedRoute';
 
 // Pages
 import Login from './pages/auth/Login';
+import GmailCallback from './pages/auth/GmailCallback';
 import TeamManagement from './pages/team/TeamManagement';
 import TeamMemberPerformance from './pages/team/TeamMemberPerformance';
 import ProjectMonitoring from './pages/analytics/ProjectMonitoring';
@@ -90,6 +91,7 @@ function AppContent() {
           <Route path="/analytics" element={<LeadAnalytics />} />
           <Route path="/analytics/outbound" element={<OutboundAnalytics />} />
           <Route path="/inbound-generation" element={<InboundGeneration />} />
+          <Route path="/auth/gmail/callback" element={<GmailCallback />} />
           <Route path="/monitoring" element={<ProjectMonitoring />} />
           <Route path="/settings" element={<SettingsPage />} />
         </Routes>

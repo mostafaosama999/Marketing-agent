@@ -2,6 +2,7 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import OpenAI from "openai";
+import { extractTokenUsage, calculateCost, logApiCost, CostInfo } from "../utils/costTracker";
 
 interface ExtractedPost {
   content: string;
@@ -122,6 +123,14 @@ export const extractLinkedInAnalytics = functions
       const responseText = completion.choices[0]?.message?.content || "";
       console.log("OpenAI response:", responseText);
 
+      // Extract token usage and calculate cost
+      const tokenUsage = extractTokenUsage(completion);
+      let costInfo: CostInfo | null = null;
+      if (tokenUsage) {
+        costInfo = calculateCost(tokenUsage, "gpt-4-turbo-preview");
+        console.log(`💰 OpenAI cost: $${costInfo.totalCost.toFixed(4)} (${tokenUsage.totalTokens} tokens)`);
+      }
+
       // Parse JSON response
       let extractedData: ExtractionResult;
       try {
@@ -171,12 +180,30 @@ export const extractLinkedInAnalytics = functions
       console.log(`✅ Extracted ${extractedData.posts.length} posts for user ${userId}`);
       console.log(`Total impressions: ${totalImpressions}, Total engagement: ${totalEngagement}`);
 
+      // Log API cost
+      if (costInfo) {
+        await logApiCost(
+          userId,
+          "linkedin-analytics-extraction",
+          costInfo,
+          {
+            operationDetails: {
+              period: extractedData.period,
+              postCount: extractedData.posts.length,
+              totalImpressions,
+              totalEngagement,
+            }
+          }
+        );
+      }
+
       return {
         success: true,
         postCount: extractedData.posts.length,
         totalImpressions,
         totalEngagement,
         period: extractedData.period,
+        costInfo: costInfo || undefined,
       };
     } catch (error: any) {
       console.error("Failed to extract LinkedIn analytics:", error);

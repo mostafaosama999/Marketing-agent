@@ -2,6 +2,7 @@ import OpenAI from "openai";
 import * as functions from "firebase-functions";
 import { ExtractedContent } from "./contentExtractionUtils";
 import { LINKEDIN_POST_CONDENSED_INSIGHTS, LINKEDIN_POST_SYSTEM_PROMPT } from "../prompts";
+import { extractTokenUsage, calculateCost, CostInfo } from "./costTracker";
 
 export interface LinkedInPost {
   content: string;
@@ -15,6 +16,7 @@ export interface LinkedInPostGeneration {
   post1: LinkedInPost;
   post2: LinkedInPost;
   generatedAt: string;
+  costInfo?: CostInfo;
 }
 
 // Lazy-initialize OpenAI (only when needed, not at import time)
@@ -67,6 +69,14 @@ export async function generateLinkedInPosts(extractedContent: ExtractedContent):
 
     console.log(`✅ OpenAI response received (${response.length} characters)`);
 
+    // Extract token usage and calculate cost
+    const tokenUsage = extractTokenUsage(completion);
+    let costInfo: CostInfo | null = null;
+    if (tokenUsage) {
+      costInfo = calculateCost(tokenUsage, "gpt-4");
+      console.log(`💰 OpenAI cost: $${costInfo.totalCost.toFixed(4)} (${tokenUsage.totalTokens} tokens)`);
+    }
+
     // Parse the JSON response
     let parsedResponse;
     try {
@@ -108,6 +118,7 @@ export async function generateLinkedInPosts(extractedContent: ExtractedContent):
         hashtags: parsedResponse.post2.hashtags || extractHashtags(parsedResponse.post2.content || ""),
       },
       generatedAt: new Date().toISOString(),
+      costInfo: costInfo || undefined,
     };
 
     // Validate post lengths
