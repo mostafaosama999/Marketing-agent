@@ -1,7 +1,7 @@
 import OpenAI from "openai";
 import * as functions from "firebase-functions";
 import { ExtractedContent } from "./contentExtractionUtils";
-import { LINKEDIN_POST_CONDENSED_INSIGHTS, LINKEDIN_POST_SYSTEM_PROMPT, DEFAULT_CONDENSED_INSIGHTS_PROMPT } from "../prompts";
+import { LINKEDIN_POST_CONDENSED_INSIGHTS, LINKEDIN_POST_SYSTEM_PROMPT } from "../prompts";
 import { extractTokenUsage, calculateCost, CostInfo } from "./costTracker";
 
 export interface LinkedInPost {

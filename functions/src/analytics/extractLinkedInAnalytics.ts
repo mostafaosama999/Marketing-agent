@@ -23,29 +23,48 @@ interface ExtractionResult {
 
 const EXTRACTION_PROMPT = `You are a data extraction assistant. Extract LinkedIn post analytics from the provided text.
 
-The text contains LinkedIn posts with their performance metrics. For each post, extract:
-- content: First 100-150 characters of the post text (the actual content, not metadata)
+The text contains multiple LinkedIn posts with their performance metrics. Extract ALL posts you find. For each post, extract:
+- content: The COMPLETE post text (all content including hashtags, not just a preview - this is critical for analyzing writing patterns)
 - impressions: The number shown next to "Impressions" (e.g., "1,178 Impressions" = 1178)
 - likes: Number of likes/reactions
 - comments: Number of comments
 - shares: Number of shares (if mentioned, otherwise 0)
 - postedDate: Relative date string (e.g., "2w" for 2 weeks, "3d" for 3 days, "1d" for 1 day, "14h" for 14 hours)
 
-Important:
-- Extract ONLY posts that have impression data
+CRITICAL INSTRUCTIONS:
+- Extract ALL posts found in the content, not just the first one
+- The posts array should contain EVERY post that has impression data
+- Continue scanning the entire content until all posts are extracted
+- Extract ALL posts that have impression data (skip any posts without metrics)
 - Ignore navigation elements, headers, and UI text
 - Convert formatted numbers (e.g., "1,178" to 1178)
 - Return ONLY valid JSON, no additional text or markdown
 
-Return a JSON object with this exact structure:
+Return a JSON object with this exact structure (showing 3 posts as an example - extract however many you find):
 {
-  "period": "Past 7 days",
+  "period": "Past 28 days",
   "posts": [
     {
-      "content": "Post preview text here...",
-      "impressions": 1178,
+      "content": "First complete post text here with all content and hashtags...",
+      "impressions": 40250,
       "likes": 185,
       "comments": 59,
+      "shares": 0,
+      "postedDate": "2w"
+    },
+    {
+      "content": "Second complete post text here with all content and hashtags...",
+      "impressions": 371,
+      "likes": 4,
+      "comments": 3,
+      "shares": 0,
+      "postedDate": "3w"
+    },
+    {
+      "content": "Third complete post text here with all content and hashtags...",
+      "impressions": 257,
+      "likes": 3,
+      "comments": 0,
       "shares": 0,
       "postedDate": "2w"
     }

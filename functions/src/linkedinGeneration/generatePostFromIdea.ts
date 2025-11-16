@@ -19,8 +19,6 @@ import {
 import {
   getFullPostPrompt,
   getMemeImagePrompt,
-  DEFAULT_FULL_POST_PROMPT,
-  DEFAULT_DALLE_IMAGE_PROMPT,
 } from '../prompts/postIdeasPrompt';
 
 /**
@@ -92,16 +90,6 @@ export const generatePostFromIdea = functions
         console.log(
           `🚀 Starting post generation from idea: ${ideaId} (session: ${sessionId})`
         );
-
-        // Fetch settings for custom prompts
-        const settingsDoc = await db
-          .collection('settings')
-          .doc('app-settings')
-          .get();
-
-        const settings = settingsDoc.exists ? settingsDoc.data() : {};
-        const customPrompts = settings?.postIdeasPrompts || {};
-        const customDallePrompt = settings?.dalleImageStylePrompt;
 
         // 3. Create job document immediately
         const jobRef = db
@@ -183,6 +171,16 @@ async function processPostGeneration(
   }
 
   const openai = new OpenAI({apiKey: openaiApiKey});
+
+  // Fetch settings for custom prompts
+  const settingsDoc = await db
+    .collection('settings')
+    .doc('app-settings')
+    .get();
+
+  const settings = settingsDoc.exists ? settingsDoc.data() : {};
+  const customPrompts = settings?.postIdeasPrompts || {};
+  const customDallePrompt = settings?.dalleImageStylePrompt;
 
   try {
     // STAGE 1: Fetch session and idea (0-20%)

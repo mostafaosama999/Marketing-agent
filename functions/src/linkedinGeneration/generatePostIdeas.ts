@@ -24,10 +24,6 @@ import {
   getNewsletterTrendsPrompt,
   getCompetitorInsightsPrompt,
   getPostIdeasPrompt,
-  DEFAULT_ANALYTICS_ANALYSIS_PROMPT,
-  DEFAULT_NEWSLETTER_TRENDS_PROMPT,
-  DEFAULT_COMPETITOR_INSIGHTS_PROMPT,
-  DEFAULT_POST_IDEAS_PROMPT,
 } from '../prompts/postIdeasPrompt';
 
 /**
