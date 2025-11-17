@@ -340,9 +340,12 @@ export const CompaniesPage: React.FC = () => {
 
     // Apply advanced filters if any rules are set
     if (advancedFilterRules.length > 0) {
+      console.log('📊 [COMPANIES PAGE] Before advanced filter:', filtered.length);
       filtered = applyCompanyAdvancedFilters(filtered, advancedFilterRules) as Array<Company & { leadCount: number }>;
+      console.log('📊 [COMPANIES PAGE] After advanced filter:', filtered.length);
     }
 
+    console.log('📊 [COMPANIES PAGE] Final filtered companies:', filtered.length);
     return filtered;
   }, [companies, filters, advancedFilterRules]);
 

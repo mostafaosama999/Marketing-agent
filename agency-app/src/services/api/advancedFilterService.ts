@@ -156,6 +156,11 @@ export function evaluateRule(lead: Lead, rule: FilterRule): boolean {
     return fieldValue === undefined || fieldValue === null || fieldValue === '';
   }
   if (operator === 'is_not_empty') {
+    // For number fields, 0 is a valid non-empty value
+    if (typeof fieldValue === 'number') {
+      return true; // Any number (including 0) is considered non-empty
+    }
+    // For other field types, check for undefined, null, and empty string
     return fieldValue !== undefined && fieldValue !== null && fieldValue !== '';
   }
 
