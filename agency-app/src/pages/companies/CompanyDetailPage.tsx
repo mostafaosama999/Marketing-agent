@@ -41,6 +41,7 @@ import {
   CompareArrows as CompareArrowsIcon,
 } from '@mui/icons-material';
 import { Company, CompanyFormData } from '../../types/crm';
+import { getStatusLabel, getStatusColor } from '../../components/features/companies/CompanyStatusBadge';
 import {
   getCompany,
   updateCompany,
@@ -1377,6 +1378,7 @@ export const CompanyDetailPage: React.FC = () => {
                         <TableRow>
                           <TableCell sx={{ fontWeight: 600 }}>Name</TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>Email</TableCell>
+                          <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>LinkedIn Status</TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>Email Status</TableCell>
                           <TableCell sx={{ fontWeight: 600 }}>Created</TableCell>
@@ -1394,6 +1396,21 @@ export const CompanyDetailPage: React.FC = () => {
                               <Typography variant="body2" color="text.secondary">
                                 {lead.email || '-'}
                               </Typography>
+                            </TableCell>
+                            <TableCell>
+                              {lead.status && (
+                                <Chip
+                                  label={getStatusLabel(lead.status)}
+                                  size="small"
+                                  sx={{
+                                    bgcolor: `${getStatusColor(lead.status)}22`,
+                                    color: getStatusColor(lead.status),
+                                    fontWeight: 500,
+                                    fontSize: '10px',
+                                    height: '20px',
+                                  }}
+                                />
+                              )}
                             </TableCell>
                             <TableCell>
                               {renderOutreachStatus(

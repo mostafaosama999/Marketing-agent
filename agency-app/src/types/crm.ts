@@ -28,6 +28,12 @@ export interface Company {
   ratingV2UpdatedBy?: string; // User ID who last updated the rating
   ratingV2UpdatedAt?: Date; // Timestamp when rating was last updated
 
+  // Company Status - Overall pipeline status based on leads
+  status?: LeadStatus; // Current status (uses same 6 stages as leads)
+  statusLockedManually?: boolean; // If true, status won't auto-update from leads
+  statusLastUpdatedAt?: Date; // Timestamp when status was last updated
+  statusLastUpdatedBy?: string; // User ID who last updated the status
+
   // Offer/Pitch for lead outreach
   offer?: {
     blogIdea: string; // The blog idea/topic to offer
@@ -163,6 +169,8 @@ export interface CompanyFormData {
   industry?: string;
   description?: string;
   ratingV2?: number | null;
+  status?: LeadStatus;
+  statusLockedManually?: boolean;
   customFields?: Record<string, any>;
 }
 

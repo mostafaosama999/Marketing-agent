@@ -1,5 +1,5 @@
 // src/pages/analytics/CompanyAnalytics.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Box,
   Typography,
@@ -10,18 +10,22 @@ import {
   createTheme,
 } from '@mui/material';
 import Grid from '@mui/material/GridLegacy';
+import { BarChart } from '@mui/x-charts/BarChart';
 import {
   Business as BusinessIcon,
   TrendingUp as TrendingUpIcon,
-  Assessment as AssessmentIcon,
   Timeline as TimelineIcon,
   Archive as ArchiveIcon,
   Public as PublicIcon,
   Category as CategoryIcon,
   Star as StarIcon,
+  Assignment as AssignmentIcon,
 } from '@mui/icons-material';
+import { useNavigate } from 'react-router-dom';
 import { subscribeToCompanies, subscribeToArchivedCompanies } from '../../services/api/companies';
 import { Company } from '../../types/crm';
+import { LeadStatus } from '../../types/lead';
+import { getStatusLabel, getStatusColor } from '../../components/features/companies/CompanyStatusBadge';
 
 // Modern theme
 const modernTheme = createTheme({
@@ -162,6 +166,7 @@ const CompanyAnalytics: React.FC = () => {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [archivedCompanies, setArchivedCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
+  const navigate = useNavigate();
 
   // Subscribe to active companies
   useEffect(() => {
@@ -191,16 +196,108 @@ const CompanyAnalytics: React.FC = () => {
     ? (companies.reduce((sum, c) => sum + (c.ratingV2 || 0), 0) / companies.length).toFixed(1)
     : '0';
 
-  // Companies by industry
-  const companiesByIndustry = companies.reduce((acc, company) => {
-    const industry = company.industry || 'Unknown';
-    acc[industry] = (acc[industry] || 0) + 1;
-    return acc;
-  }, {} as Record<string, number>);
+  // Rating distribution (0-10, where 0 = Archived)
+  const ratingDistribution = useMemo(() => {
+    // Start with archived companies as rating 0
+    const counts = [
+      {
+        rating: '0 (Archived)',
+        count: archivedCompanies.length,
+      },
+    ];
 
-  const topIndustries = Object.entries(companiesByIndustry)
-    .sort(([, a], [, b]) => b - a)
-    .slice(0, 5);
+    // Add ratings 1-10
+    const ratingOrder = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    ratingOrder.forEach(rating => {
+      const count = companies.filter(c => c.ratingV2 === rating).length;
+      counts.push({
+        rating: rating.toString(),
+        count,
+      });
+    });
+
+    // Add "No Rating" category for active companies without rating
+    const noRatingCount = companies.filter(c => !c.ratingV2 || c.ratingV2 === null).length;
+    counts.push({
+      rating: 'No Rating',
+      count: noRatingCount,
+    });
+
+    return counts;
+  }, [companies, archivedCompanies]);
+
+  // Handle rating bar click
+  const handleRatingClick = (event: any, itemData: any) => {
+    if (itemData?.axisValue) {
+      const rating = itemData.axisValue;
+      // Handle archived companies (rating "0 (Archived)")
+      if (rating.startsWith('0')) {
+        navigate(`/companies?archived=true`);
+      } else {
+        navigate(`/companies?rating=${rating}`);
+      }
+    }
+  };
+
+  // Company type distribution (from customFields)
+  const companyTypeDistribution = useMemo(() => {
+    // Count companies by type
+    const typeCounts: Record<string, number> = {};
+
+    companies.forEach(company => {
+      // Check all possible field name variations
+      const companyType = company.customFields?.['Company Type']
+        || company.customFields?.['company_type']
+        || company.customFields?.companyType
+        || 'Unknown';
+      typeCounts[companyType] = (typeCounts[companyType] || 0) + 1;
+    });
+
+    // Convert to array and sort by count (descending)
+    return Object.entries(typeCounts)
+      .map(([type, count]) => ({
+        type,
+        count,
+      }))
+      .sort((a, b) => b.count - a.count);
+  }, [companies]);
+
+  // Handle company type bar click
+  const handleCompanyTypeClick = (event: any, itemData: any) => {
+    if (itemData?.axisValue) {
+      const type = itemData.axisValue;
+      navigate(`/companies?companyType=${type}`);
+    }
+  };
+
+  // Status distribution
+  const statusDistribution = useMemo(() => {
+    const allStatuses: LeadStatus[] = ['new_lead', 'qualified', 'contacted', 'follow_up', 'nurture', 'won', 'lost'];
+
+    return allStatuses
+      .map(status => {
+        const count = companies.filter(c => c.status === status).length;
+        return {
+          status: getStatusLabel(status),
+          count: count,
+          statusId: status,
+          color: getStatusColor(status),
+        };
+      })
+      .filter(item => item.count > 0); // Only show statuses that have companies
+  }, [companies]);
+
+  // Handle status bar chart click
+  const handleStatusClick = (event: any, itemData: any) => {
+    if (itemData?.axisValue) {
+      const statusLabel = itemData.axisValue;
+      // Find the status ID from the label
+      const statusItem = statusDistribution.find(s => s.status === statusLabel);
+      if (statusItem) {
+        navigate(`/companies?status=${statusItem.statusId}`);
+      }
+    }
+  };
 
   return (
     <ThemeProvider theme={modernTheme}>
@@ -279,129 +376,231 @@ const CompanyAnalytics: React.FC = () => {
               </Grid>
             </Grid>
 
-            {/* Top Industries */}
-            <Card
-              sx={{
-                background: 'rgba(255, 255, 255, 0.9)',
-                borderRadius: 3,
-                backdropFilter: 'blur(20px)',
-                border: '1px solid rgba(226, 232, 240, 0.5)',
-                boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08)',
-                mb: 4,
-              }}
-            >
-              <CardContent sx={{ p: 3 }}>
-                <Typography
-                  variant="h5"
-                  sx={{
-                    color: '#1e293b',
-                    fontWeight: 700,
-                    mb: 3,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 1,
-                  }}
-                >
-                  <BusinessIcon sx={{ fontSize: 24, color: '#667eea' }} />
-                  Top 5 Industries
-                </Typography>
-                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                  {topIndustries.map(([industry, count], index) => (
-                    <Box
-                      key={industry}
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        p: 2,
-                        borderRadius: 2,
-                        background: index % 2 === 0 ? 'rgba(102, 126, 234, 0.05)' : 'transparent',
-                      }}
-                    >
-                      <Typography
-                        variant="body2"
-                        sx={{
-                          color: '#1e293b',
-                          fontWeight: 600,
-                          fontSize: '14px',
-                        }}
-                      >
-                        {industry}
-                      </Typography>
-                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-                        <Box
-                          sx={{
-                            width: `${(count / totalCompanies) * 200}px`,
-                            height: 8,
-                            borderRadius: 1,
-                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                            minWidth: '20px',
-                          }}
-                        />
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            color: '#64748b',
-                            fontWeight: 700,
-                            fontSize: '14px',
-                            minWidth: '60px',
-                            textAlign: 'right',
-                          }}
-                        >
-                          {count} ({Math.round((count / totalCompanies) * 100)}%)
-                        </Typography>
-                      </Box>
-                    </Box>
-                  ))}
-                  {topIndustries.length === 0 && (
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        color: '#94a3b8',
-                        textAlign: 'center',
-                        py: 4,
-                      }}
-                    >
-                      No industry data available
-                    </Typography>
-                  )}
-                </Box>
-              </CardContent>
-            </Card>
-
             {/* Distribution Charts - Row 1 */}
             <Grid container spacing={3} sx={{ mb: 4 }}>
               <Grid item xs={12} md={6}>
-                <PlaceholderChart
-                  title="Distribution by Rating V2"
-                  description="Coming soon: View how companies are distributed across different rating levels"
-                  icon={<StarIcon sx={{ fontSize: 40, color: '#667eea' }} />}
-                />
+                {/* Rating Distribution Chart */}
+                <Card
+                  sx={{
+                    background: 'rgba(255, 255, 255, 0.9)',
+                    borderRadius: 3,
+                    backdropFilter: 'blur(20px)',
+                    border: '1px solid rgba(226, 232, 240, 0.5)',
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08)',
+                  }}
+                >
+                  <CardContent sx={{ p: 4 }}>
+                    <Typography
+                      variant="h5"
+                      sx={{
+                        color: '#1e293b',
+                        fontWeight: 700,
+                        mb: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                      }}
+                    >
+                      <StarIcon sx={{ fontSize: 24, color: '#667eea' }} />
+                      Distribution by Rating V2
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: '#64748b', mb: 4 }}>
+                      View how companies are distributed across different rating levels
+                    </Typography>
+
+                    <Box sx={{ height: 400 }}>
+                      <BarChart
+                        dataset={ratingDistribution}
+                        xAxis={[{ dataKey: 'rating', scaleType: 'band', label: 'Rating' }]}
+                        yAxis={[{ label: 'Number of Companies' }]}
+                        series={[
+                          {
+                            dataKey: 'count',
+                            label: 'Companies',
+                            color: '#667eea',
+                          },
+                        ]}
+                        margin={{ left: 80, right: 20, top: 20, bottom: 60 }}
+                        grid={{ vertical: true, horizontal: true }}
+                        onItemClick={handleRatingClick}
+                        sx={{
+                          '& .MuiChartsAxis-label': {
+                            fill: '#64748b',
+                            fontWeight: 600,
+                          },
+                          '& .MuiChartsAxis-tick': {
+                            stroke: '#e2e8f0',
+                          },
+                          '& .MuiChartsAxis-tickLabel': {
+                            fill: '#475569',
+                            fontWeight: 500,
+                          },
+                          '& .MuiBarElement-root': {
+                            cursor: 'pointer',
+                            transition: 'opacity 0.2s',
+                            '&:hover': {
+                              opacity: 0.8,
+                            },
+                          },
+                        }}
+                      />
+                    </Box>
+                  </CardContent>
+                </Card>
               </Grid>
               <Grid item xs={12} md={6}>
-                <PlaceholderChart
-                  title="Distribution by Country"
-                  description="Coming soon: Analyze company distribution across different countries and regions"
-                  icon={<PublicIcon sx={{ fontSize: 40, color: '#10b981' }} />}
-                />
+                {/* Status Distribution Chart */}
+                <Card
+                  sx={{
+                    background: 'rgba(255, 255, 255, 0.9)',
+                    borderRadius: 3,
+                    backdropFilter: 'blur(20px)',
+                    border: '1px solid rgba(226, 232, 240, 0.5)',
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08)',
+                  }}
+                >
+                  <CardContent sx={{ p: 4 }}>
+                    <Typography
+                      variant="h5"
+                      sx={{
+                        color: '#1e293b',
+                        fontWeight: 700,
+                        mb: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                      }}
+                    >
+                      <AssignmentIcon sx={{ fontSize: 24, color: '#667eea' }} />
+                      Distribution by Status
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: '#64748b', mb: 4 }}>
+                      View how companies are distributed across pipeline stages
+                    </Typography>
+
+                    <Box sx={{ height: 400 }}>
+                      <BarChart
+                        dataset={statusDistribution}
+                        xAxis={[{
+                          dataKey: 'status',
+                          scaleType: 'band',
+                          label: 'Status',
+                        }]}
+                        yAxis={[{ label: 'Number of Companies' }]}
+                        series={[
+                          {
+                            dataKey: 'count',
+                            label: 'Companies',
+                            color: '#667eea',
+                          },
+                        ]}
+                        margin={{ left: 80, right: 20, top: 20, bottom: 60 }}
+                        grid={{ vertical: true, horizontal: true }}
+                        onItemClick={handleStatusClick}
+                        sx={{
+                          '& .MuiChartsAxis-label': {
+                            fill: '#64748b',
+                            fontWeight: 600,
+                          },
+                          '& .MuiChartsAxis-tick': {
+                            stroke: '#e2e8f0',
+                          },
+                          '& .MuiChartsAxis-tickLabel': {
+                            fill: '#475569',
+                            fontWeight: 500,
+                          },
+                          '& .MuiBarElement-root': {
+                            cursor: 'pointer',
+                            transition: 'opacity 0.2s',
+                            '&:hover': {
+                              opacity: 0.8,
+                            },
+                          },
+                        }}
+                      />
+                    </Box>
+                  </CardContent>
+                </Card>
               </Grid>
             </Grid>
 
             {/* Distribution Charts - Row 2 */}
             <Grid container spacing={3} sx={{ mb: 4 }}>
               <Grid item xs={12} md={6}>
-                <PlaceholderChart
-                  title="Distribution by Company Type"
-                  description="Coming soon: See breakdown of companies by type (SaaS, Agency, Enterprise, etc.)"
-                  icon={<CategoryIcon sx={{ fontSize: 40, color: '#f59e0b' }} />}
-                />
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <PlaceholderChart
-                  title="Company Growth Timeline"
-                  description="Coming soon: Track how your company database has grown over time"
-                  icon={<TrendingUpIcon sx={{ fontSize: 40, color: '#8b5cf6' }} />}
-                />
+                {/* Company Type Distribution Chart */}
+                <Card
+                  sx={{
+                    background: 'rgba(255, 255, 255, 0.9)',
+                    borderRadius: 3,
+                    backdropFilter: 'blur(20px)',
+                    border: '1px solid rgba(226, 232, 240, 0.5)',
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08)',
+                  }}
+                >
+                  <CardContent sx={{ p: 4 }}>
+                    <Typography
+                      variant="h5"
+                      sx={{
+                        color: '#1e293b',
+                        fontWeight: 700,
+                        mb: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                      }}
+                    >
+                      <CategoryIcon sx={{ fontSize: 24, color: '#f59e0b' }} />
+                      Distribution by Company Type
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: '#64748b', mb: 4 }}>
+                      See breakdown of companies by type (SaaS, Agency, Enterprise, etc.)
+                    </Typography>
+
+                    <Box sx={{ height: 500 }}>
+                      <BarChart
+                        dataset={companyTypeDistribution}
+                        xAxis={[{
+                          dataKey: 'type',
+                          scaleType: 'band',
+                          label: 'Company Type',
+                        }]}
+                        yAxis={[{ label: 'Number of Companies' }]}
+                        series={[
+                          {
+                            dataKey: 'count',
+                            label: 'Companies',
+                            color: '#f59e0b',
+                            valueFormatter: (value) => value?.toString() || '0',
+                          },
+                        ]}
+                        margin={{ left: 80, right: 20, top: 20, bottom: 150 }}
+                        grid={{ vertical: true, horizontal: true }}
+                        onItemClick={handleCompanyTypeClick}
+                        sx={{
+                          '& .MuiChartsAxis-label': {
+                            fill: '#64748b',
+                            fontWeight: 600,
+                          },
+                          '& .MuiChartsAxis-tick': {
+                            stroke: '#e2e8f0',
+                          },
+                          '& .MuiChartsAxis-tickLabel': {
+                            fill: '#475569',
+                            fontWeight: 500,
+                            fontSize: '12px',
+                          },
+                          '& .MuiBarElement-root': {
+                            cursor: 'pointer',
+                            transition: 'opacity 0.2s',
+                            '&:hover': {
+                              opacity: 0.8,
+                            },
+                          },
+                        }}
+                      />
+                    </Box>
+                  </CardContent>
+                </Card>
               </Grid>
             </Grid>
 

@@ -139,8 +139,42 @@ Stored in `pipelineConfig/default`, customizable via `PipelineConfigContext`. Ea
 **Cost Tracking**: Per-lead, per-company, and per-user in `userCostTracking` collection
 
 ### Company Features
-**Core**: name (unique), website, industry, description, customFields
-**Extended**: Blog Analysis, Writing Program Analysis, Offer/Pitch Management
+**Core**: name (unique), website, industry, description, customFields, ratingV2
+**Extended**: Blog Analysis, Writing Program Analysis, Offer/Pitch Management, Company Status
+
+### Company Status System (NEW)
+**Overview**: Companies have overall status that auto-syncs from lead statuses with manual override capability
+
+**Status Fields**:
+- `status`: LeadStatus (same 6 stages as leads: new_lead → qualified → contacted → follow_up → nurture → won/lost)
+- `statusLockedManually`: boolean (if true, status won't auto-update from leads)
+- `statusLastUpdatedAt`: Date (timestamp of last status change)
+- `statusLastUpdatedBy`: string (user ID who last updated)
+
+**Status Calculation Logic**:
+- **Majority-based**: Company status = most common status among its leads
+- **Tie-breaker**: If multiple statuses have same count, uses most advanced status
+- **No leads**: Defaults to 'new_lead'
+- **Archived leads**: Excluded from calculation
+
+**Auto-Sync Behavior**:
+- Triggers on: Lead status change, lead creation, lead deletion, bulk lead operations
+- Respects lock: If `statusLockedManually = true`, skips auto-update
+- Error handling: Logs errors but doesn't fail lead operations
+
+**Manual Override**:
+- Click status badge in table → opens menu with all 6 statuses
+- Selecting new status: Sets status AND locks it (`statusLockedManually = true`)
+- Unlock option: Shows in menu if locked, recalculates status from leads
+
+**UI Components**:
+- `CompanyStatusBadge`: Colored badge with lock icon indicator
+- Status column in CompanyTable with inline editing
+- Tooltip shows lock status and explanation
+
+**Services**:
+- `companyStatus.ts`: Core calculation logic (`calculateCompanyStatus`, `updateCompanyStatusFromLeads`, `setCompanyStatusManually`, `unlockCompanyStatus`)
+- Integrated into `companies.ts` and `leads.ts` services
 
 ### Blog Analysis (`qualifyBlog` function)
 Analyzes company blog for content writing fit:
@@ -241,7 +275,8 @@ Auto-creates companies when leads added. Lead has `companyId` reference.
 **Subcollection `timeline/{leadId}`**: stateHistory, stateDurations, statusChanges[] with fromStatus, toStatus, changedBy, changedAt
 
 ### Company Document
-**Core**: id, name (unique), website, industry, description, customFields
+**Core**: id, name (unique), website, industry, description, customFields, ratingV2, ratingV2UpdatedBy, ratingV2UpdatedAt
+**Status**: status (LeadStatus), statusLockedManually (boolean), statusLastUpdatedAt (Date), statusLastUpdatedBy (string)
 **Extended**: totalApiCosts, archived, offer{blogIdea}, blogAnalysis{}, writingProgramAnalysis{}, apolloEnrichment{}
 
 ### Other Collections
@@ -289,6 +324,7 @@ Auto-creates companies when leads added. Lead has `companyId` reference.
 4. **Drag-drop broken**: Board view active, lead has id, refresh if sync lost
 5. **Dropdown fields not detected**: Ensure column name contains "dropdown" (case-insensitive), check CSV encoding
 6. **Inline edit not working**: Verify field definition exists in Firestore `fieldDefinitions` collection, check fieldType is "dropdown"
+7. **Company status not updating**: Check `statusLockedManually` flag, verify lead has `companyId`, check console for errors
 
 **Debug**: `localStorage.setItem('crm_debug', 'true')`
 

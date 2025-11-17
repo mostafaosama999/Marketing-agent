@@ -10,6 +10,7 @@ export interface CompanyFilterState {
   // Standard filters
   search: string;
   industry: string;
+  status: string;
   employeeRange: string;
   fundingStage: string;
 
@@ -23,6 +24,7 @@ export interface CompanyFilterState {
 export const DEFAULT_COMPANY_FILTER_STATE: CompanyFilterState = {
   search: '',
   industry: '',
+  status: '',
   employeeRange: '',
   fundingStage: '',
 };

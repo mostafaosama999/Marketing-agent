@@ -82,8 +82,8 @@ const modernTheme = createTheme({
   },
 });
 
-// SessionStorage key for persisting active filters
-const ACTIVE_FILTERS_SESSION_KEY = 'crm_active_filters';
+// LocalStorage key for persisting active filters across page refreshes
+const ACTIVE_FILTERS_STORAGE_KEY = 'crm_active_filters';
 
 function CRMBoard() {
   const navigate = useNavigate();
@@ -250,15 +250,15 @@ function CRMBoard() {
     }
   }, [leads]);
 
-  // Load filters from sessionStorage on mount (for persistence across navigation)
+  // Load filters from localStorage on mount (persists across page refreshes)
   useEffect(() => {
     const debugMode = localStorage.getItem('crm_debug') === 'true';
 
     try {
-      const savedFilters = sessionStorage.getItem(ACTIVE_FILTERS_SESSION_KEY);
+      const savedFilters = localStorage.getItem(ACTIVE_FILTERS_STORAGE_KEY);
 
       if (debugMode) {
-        console.log('[CRM Filter Persistence] Loading filters from sessionStorage:', savedFilters);
+        console.log('[CRM Filter Persistence] Loading filters from localStorage:', savedFilters);
       }
 
       if (savedFilters) {
@@ -282,34 +282,34 @@ function CRMBoard() {
           console.log('[CRM Filter Persistence] Filters successfully restored');
         }
       } else if (debugMode) {
-        console.log('[CRM Filter Persistence] No saved filters found in sessionStorage');
+        console.log('[CRM Filter Persistence] No saved filters found in localStorage');
       }
     } catch (error) {
-      console.error('Error loading filters from sessionStorage:', error);
+      console.error('Error loading filters from localStorage:', error);
     }
   }, []); // Only run once on mount
 
-  // Helper function to save filters to sessionStorage
-  const saveFiltersToSession = React.useCallback(() => {
+  // Helper function to save filters to localStorage
+  const saveFiltersToStorage = React.useCallback(() => {
     try {
       const filterState = {
         filters,
         advancedFilterRules,
         currentView,
       };
-      sessionStorage.setItem(ACTIVE_FILTERS_SESSION_KEY, JSON.stringify(filterState));
+      localStorage.setItem(ACTIVE_FILTERS_STORAGE_KEY, JSON.stringify(filterState));
 
       // Debug logging (only if crm_debug is enabled)
       const debugMode = localStorage.getItem('crm_debug') === 'true';
       if (debugMode) {
-        console.log('[CRM Filter Persistence] Saved filters to sessionStorage:', filterState);
+        console.log('[CRM Filter Persistence] Saved filters to localStorage:', filterState);
       }
     } catch (error) {
-      console.error('Error saving filters to sessionStorage:', error);
+      console.error('Error saving filters to localStorage:', error);
     }
   }, [filters, advancedFilterRules, currentView]);
 
-  // Save filters to sessionStorage whenever they change (skip initial mount)
+  // Save filters to localStorage whenever they change (skip initial mount)
   useEffect(() => {
     // Skip saving on the very first render to allow loading to complete
     if (isInitialMount.current) {
@@ -317,14 +317,14 @@ function CRMBoard() {
       return;
     }
 
-    saveFiltersToSession();
-  }, [filters, advancedFilterRules, currentView, saveFiltersToSession]);
+    saveFiltersToStorage();
+  }, [filters, advancedFilterRules, currentView, saveFiltersToStorage]);
 
   // Add beforeunload handler to ensure filters are saved before navigation
   useEffect(() => {
     const handleBeforeUnload = () => {
       // Force save filters before page unload/navigation
-      saveFiltersToSession();
+      saveFiltersToStorage();
     };
 
     // Listen to both beforeunload and pagehide for better browser compatibility
@@ -333,11 +333,11 @@ function CRMBoard() {
 
     return () => {
       // Save one final time on cleanup
-      saveFiltersToSession();
+      saveFiltersToStorage();
       window.removeEventListener('beforeunload', handleBeforeUnload);
       window.removeEventListener('pagehide', handleBeforeUnload);
     };
-  }, [saveFiltersToSession]);
+  }, [saveFiltersToStorage]);
 
   // Migrate localStorage data and load default preset on mount
   useEffect(() => {
@@ -345,13 +345,13 @@ function CRMBoard() {
       if (!user) return;
 
       try {
-        // Check if we have active session filters
-        const savedFilters = sessionStorage.getItem(ACTIVE_FILTERS_SESSION_KEY);
+        // Check if we have active filters in localStorage
+        const savedFilters = localStorage.getItem(ACTIVE_FILTERS_STORAGE_KEY);
 
         // First, migrate any existing localStorage data
         await migrateLocalStorageToFirestore(user.uid);
 
-        // Only load default preset if no active session filters exist
+        // Only load default preset if no active filters exist
         if (!savedFilters) {
           const defaultPreset = await getDefaultPreset(user.uid);
           if (defaultPreset) {
@@ -1190,7 +1190,7 @@ function CRMBoard() {
                       },
                     }}
                   >
-                    <Badge badgeContent={archivedLeadsCount} color="primary">
+                    <Badge badgeContent={archivedLeadsCount} color="primary" max={999999}>
                       <ArchiveIcon />
                     </Badge>
                   </IconButton>

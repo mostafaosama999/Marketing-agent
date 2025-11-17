@@ -45,9 +45,11 @@ import { Company } from '../../../types/crm';
 import { TableColumnConfig } from '../../../types/table';
 import { FieldDefinition } from '../../../types/fieldDefinitions';
 import { getFieldDefinitions } from '../../../services/api/fieldDefinitionsService';
-import { updateCompanyCustomField, updateCompanyField, updateCompany } from '../../../services/api/companies';
+import { updateCompanyCustomField, updateCompanyField, updateCompany, setCompanyStatusManually, unlockCompanyStatus } from '../../../services/api/companies';
 import { bulkFindWritingPrograms, bulkAnalyzeWritingPrograms } from '../../../services/api/bulkWritingProgramService';
 import { useAuth } from '../../../contexts/AuthContext';
+import { CompanyStatusBadge } from './CompanyStatusBadge';
+import { LeadStatus } from '../../../types/lead';
 
 interface CompanyTableProps {
   companies: Array<Company & { leadCount: number }>;
@@ -93,6 +95,10 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
   // Rating V2 inline edit state
   const [ratingMenuAnchor, setRatingMenuAnchor] = useState<null | HTMLElement>(null);
   const [selectedCompanyForRating, setSelectedCompanyForRating] = useState<Company | null>(null);
+
+  // Status inline edit state
+  const [statusMenuAnchor, setStatusMenuAnchor] = useState<null | HTMLElement>(null);
+  const [selectedCompanyForStatus, setSelectedCompanyForStatus] = useState<Company | null>(null);
 
   // Pagination state
   const [page, setPage] = useState(() => {
@@ -218,6 +224,72 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
       }
     }
     handleRatingMenuClose();
+  };
+
+  // Status inline edit handlers
+  const handleStatusClick = (
+    event: React.MouseEvent<HTMLElement>,
+    company: Company
+  ) => {
+    event.stopPropagation();
+    setStatusMenuAnchor(event.currentTarget);
+    setSelectedCompanyForStatus(company);
+  };
+
+  const handleStatusMenuClose = () => {
+    setStatusMenuAnchor(null);
+    setSelectedCompanyForStatus(null);
+  };
+
+  const handleStatusChange = async (newStatus: LeadStatus) => {
+    if (selectedCompanyForStatus && userProfile?.uid) {
+      try {
+        // Manually set status and lock it
+        await setCompanyStatusManually(
+          selectedCompanyForStatus.id,
+          newStatus,
+          userProfile.uid
+        );
+        setSnackbar({
+          open: true,
+          message: 'Company status updated and locked',
+          severity: 'success',
+        });
+      } catch (error) {
+        console.error('Error updating status:', error);
+        setSnackbar({
+          open: true,
+          message: 'Failed to update status',
+          severity: 'error',
+        });
+      }
+    }
+    handleStatusMenuClose();
+  };
+
+  const handleStatusUnlock = async () => {
+    if (selectedCompanyForStatus && userProfile?.uid) {
+      try {
+        // Unlock status and recalculate from leads
+        await unlockCompanyStatus(
+          selectedCompanyForStatus.id,
+          userProfile.uid
+        );
+        setSnackbar({
+          open: true,
+          message: 'Status unlocked and synced with leads',
+          severity: 'success',
+        });
+      } catch (error) {
+        console.error('Error unlocking status:', error);
+        setSnackbar({
+          open: true,
+          message: 'Failed to unlock status',
+          severity: 'error',
+        });
+      }
+    }
+    handleStatusMenuClose();
   };
 
   // Date picker handlers
@@ -484,6 +556,14 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
           aValue = a.createdAt;
           bValue = b.createdAt;
           break;
+        case 'status':
+          aValue = a.status;
+          bValue = b.status;
+          break;
+        case 'ratingV2':
+          aValue = a.ratingV2;
+          bValue = b.ratingV2;
+          break;
         default:
           // Check if this is a custom field
           const column = displayColumns.find(col => col.id === orderBy);
@@ -740,6 +820,18 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
                   filter: 'brightness(1.1)',
                 },
               }}
+            />
+          </TableCell>
+        );
+
+      case 'status':
+        return (
+          <TableCell key={columnId} sx={{ textAlign: 'center' }}>
+            <CompanyStatusBadge
+              status={company.status}
+              locked={company.statusLockedManually}
+              size="small"
+              onClick={(e) => handleStatusClick(e, company)}
             />
           </TableCell>
         );
@@ -1315,6 +1407,58 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
         >
           Clear
         </MenuItem>
+      </Menu>
+
+      {/* Status dropdown menu */}
+      <Menu
+        anchorEl={statusMenuAnchor}
+        open={Boolean(statusMenuAnchor)}
+        onClose={handleStatusMenuClose}
+        PaperProps={{
+          sx: {
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            borderRadius: '8px',
+            minWidth: 180,
+          }
+        }}
+      >
+        {(['new_lead', 'qualified', 'contacted', 'follow_up', 'nurture', 'won', 'lost'] as LeadStatus[]).map((status) => (
+          <MenuItem
+            key={status}
+            onClick={() => handleStatusChange(status)}
+            selected={selectedCompanyForStatus?.status === status}
+            sx={{
+              fontSize: '13px',
+              py: 1,
+              fontWeight: selectedCompanyForStatus?.status === status ? 600 : 400,
+              '&:hover': {
+                bgcolor: 'rgba(102, 126, 234, 0.1)',
+              },
+            }}
+          >
+            <CompanyStatusBadge status={status} size="small" />
+          </MenuItem>
+        ))}
+        {selectedCompanyForStatus?.statusLockedManually && (
+          <>
+            <MenuItem
+              sx={{
+                borderTop: '1px solid',
+                borderColor: 'divider',
+                fontSize: '12px',
+                py: 1,
+                color: '#667eea',
+                fontWeight: 600,
+                '&:hover': {
+                  bgcolor: 'rgba(102, 126, 234, 0.1)',
+                },
+              }}
+              onClick={handleStatusUnlock}
+            >
+              🔓 Unlock & Auto-Sync
+            </MenuItem>
+          </>
+        )}
       </Menu>
 
       {/* Date Picker Popover */}

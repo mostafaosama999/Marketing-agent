@@ -90,6 +90,9 @@ import {
 import { ProgramUrlFieldMappingSelector } from '../../components/features/companies/ProgramUrlFieldMappingSelector';
 import { BlogUrlFieldMappingSelector } from '../../components/features/companies/BlogUrlFieldMappingSelector';
 
+// LocalStorage key for persisting active filters across page refreshes
+const ACTIVE_COMPANY_FILTERS_STORAGE_KEY = 'companies_active_filters';
+
 /**
  * Helper function to extract domain from URL
  */
@@ -150,9 +153,31 @@ export const CompaniesPage: React.FC = () => {
   const [websiteMappingDialogOpen, setWebsiteMappingDialogOpen] = useState(false);
   const [pendingAnalysisCompany, setPendingAnalysisCompany] = useState<Company | null>(null);
 
-  // Filter state
-  const [filters, setFilters] = useState<CompanyFilterState>(DEFAULT_COMPANY_FILTER_STATE);
-  const [advancedFilterRules, setAdvancedFilterRules] = useState<FilterRule[]>([]);
+  // Filter state - initialize from localStorage if available
+  const [filters, setFilters] = useState<CompanyFilterState>(() => {
+    try {
+      const savedFilters = localStorage.getItem(ACTIVE_COMPANY_FILTERS_STORAGE_KEY);
+      if (savedFilters) {
+        const parsed = JSON.parse(savedFilters);
+        return parsed.filters || DEFAULT_COMPANY_FILTER_STATE;
+      }
+    } catch (error) {
+      console.error('Error loading company filters from localStorage:', error);
+    }
+    return DEFAULT_COMPANY_FILTER_STATE;
+  });
+  const [advancedFilterRules, setAdvancedFilterRules] = useState<FilterRule[]>(() => {
+    try {
+      const savedFilters = localStorage.getItem(ACTIVE_COMPANY_FILTERS_STORAGE_KEY);
+      if (savedFilters) {
+        const parsed = JSON.parse(savedFilters);
+        return parsed.advancedFilterRules || [];
+      }
+    } catch (error) {
+      console.error('Error loading company advanced filters from localStorage:', error);
+    }
+    return [];
+  });
 
   // Preset dialog state
   const [showSavePresetDialog, setShowSavePresetDialog] = useState(false);
@@ -225,23 +250,48 @@ export const CompaniesPage: React.FC = () => {
     localStorage.setItem('companies_current_view', currentView);
   }, [currentView]);
 
-  // Load default preset on mount
+  // Persist filters to localStorage whenever they change
+  useEffect(() => {
+    try {
+      const filterState = {
+        filters,
+        advancedFilterRules,
+      };
+      localStorage.setItem(ACTIVE_COMPANY_FILTERS_STORAGE_KEY, JSON.stringify(filterState));
+
+      // Debug logging (only if crm_debug is enabled)
+      const debugMode = localStorage.getItem('crm_debug') === 'true';
+      if (debugMode) {
+        console.log('[Company Filter Persistence] Saved filters to localStorage:', filterState);
+      }
+    } catch (error) {
+      console.error('Error saving company filters to localStorage:', error);
+    }
+  }, [filters, advancedFilterRules]);
+
+  // Load default preset on mount (only if no active filters exist)
   useEffect(() => {
     if (!user) return;
 
     async function loadDefaultPreset() {
       try {
-        const defaultPreset = await getDefaultCompanyPreset(user.uid);
-        if (defaultPreset) {
-          // Apply preset filters
-          setFilters(defaultPreset.basicFilters);
-          setAdvancedFilterRules(defaultPreset.advancedRules);
+        // Check if we have active filters in localStorage
+        const savedFilters = localStorage.getItem(ACTIVE_COMPANY_FILTERS_STORAGE_KEY);
 
-          // Apply table column preferences if saved in preset
-          if (defaultPreset.tableColumns) {
-            const preferences = defaultPreset.tableColumns;
-            const columnsWithPreferences = applyColumnPreferences(allCompaniesColumns, preferences);
-            setAllCompaniesColumns(columnsWithPreferences);
+        // Only load default preset if no active filters exist
+        if (!savedFilters) {
+          const defaultPreset = await getDefaultCompanyPreset(user.uid);
+          if (defaultPreset) {
+            // Apply preset filters
+            setFilters(defaultPreset.basicFilters);
+            setAdvancedFilterRules(defaultPreset.advancedRules);
+
+            // Apply table column preferences if saved in preset
+            if (defaultPreset.tableColumns) {
+              const preferences = defaultPreset.tableColumns;
+              const columnsWithPreferences = applyColumnPreferences(allCompaniesColumns, preferences);
+              setAllCompaniesColumns(columnsWithPreferences);
+            }
           }
         }
       } catch (error) {
@@ -324,6 +374,13 @@ export const CompaniesPage: React.FC = () => {
       );
     }
 
+    // Apply status filter
+    if (filters.status) {
+      filtered = filtered.filter(company =>
+        company.status === filters.status
+      );
+    }
+
     // Apply employee range filter (from Apollo enrichment)
     if (filters.employeeRange) {
       filtered = filtered.filter(company =>
@@ -340,12 +397,9 @@ export const CompaniesPage: React.FC = () => {
 
     // Apply advanced filters if any rules are set
     if (advancedFilterRules.length > 0) {
-      console.log('📊 [COMPANIES PAGE] Before advanced filter:', filtered.length);
       filtered = applyCompanyAdvancedFilters(filtered, advancedFilterRules) as Array<Company & { leadCount: number }>;
-      console.log('📊 [COMPANIES PAGE] After advanced filter:', filtered.length);
     }
 
-    console.log('📊 [COMPANIES PAGE] Final filtered companies:', filtered.length);
     return filtered;
   }, [companies, filters, advancedFilterRules]);
 
@@ -1077,7 +1131,7 @@ export const CompaniesPage: React.FC = () => {
                 },
               }}
             >
-              <Badge badgeContent={archivedCompaniesCount} color="primary">
+              <Badge badgeContent={archivedCompaniesCount} color="primary" max={999999}>
                 <ArchiveIcon />
               </Badge>
             </IconButton>

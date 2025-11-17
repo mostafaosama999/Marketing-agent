@@ -20,6 +20,7 @@ import { db } from '../firebase/firestore';
 import { Lead, LeadFormData, LeadStatus } from '../../types/lead';
 import { getOrCreateCompany, deleteCompany, countLeadsForCompany } from './companies';
 import { leadTimelineService } from './leadSubcollections';
+import { updateCompanyStatusFromLeads } from './companyStatus';
 
 const LEADS_COLLECTION = 'leads';
 
@@ -351,6 +352,16 @@ export async function createLead(
       userId
     );
 
+    // Update company status (first lead for new company)
+    if (company.id) {
+      try {
+        await updateCompanyStatusFromLeads(company.id);
+      } catch (companyError) {
+        // Log error but don't fail the lead creation
+        console.error('Error updating company status after lead creation:', companyError);
+      }
+    }
+
     return docRef.id;
   } catch (error) {
     console.error('Error creating lead:', error);
@@ -435,6 +446,21 @@ export async function createLeadsBatch(
       await batch.commit();
     }
 
+    // After all batches, update company statuses for all affected companies
+    const uniqueCompanyIds = new Set(companyIdMap.values());
+    if (uniqueCompanyIds.size > 0) {
+      try {
+        await Promise.all(
+          Array.from(uniqueCompanyIds).map(companyId =>
+            updateCompanyStatusFromLeads(companyId)
+          )
+        );
+      } catch (companyError) {
+        // Log error but don't fail the batch creation
+        console.error('Error updating company statuses after batch lead creation:', companyError);
+      }
+    }
+
     return leadIds;
   } catch (error) {
     console.error('Error creating leads batch:', error);
@@ -513,6 +539,16 @@ export async function updateLeadStatus(
       userId,
       notes
     );
+
+    // Trigger company status recalculation if lead has a company
+    if (lead.companyId) {
+      try {
+        await updateCompanyStatusFromLeads(lead.companyId);
+      } catch (companyError) {
+        // Log error but don't fail the lead status update
+        console.error('Error updating company status after lead status change:', companyError);
+      }
+    }
   } catch (error) {
     console.error('Error updating lead status:', error);
     throw error;
@@ -864,6 +900,14 @@ export async function deleteLead(leadId: string): Promise<void> {
         });
         // This was the last lead for this company, delete the company
         await deleteCompany(companyId);
+      } else {
+        // Update company status based on remaining leads
+        try {
+          await updateCompanyStatusFromLeads(companyId);
+        } catch (companyError) {
+          // Log error but don't fail the lead deletion
+          console.error('Error updating company status after lead deletion:', companyError);
+        }
       }
     }
   } catch (error) {
@@ -919,6 +963,30 @@ export async function bulkUpdateLeadStatus(
           }
         })
       );
+    }
+
+    // After all batches, update company statuses for affected companies
+    // Get unique company IDs from all updated leads
+    const companyIds = new Set<string>();
+    for (const leadId of leadIds) {
+      const lead = await getLead(leadId);
+      if (lead?.companyId) {
+        companyIds.add(lead.companyId);
+      }
+    }
+
+    // Update company statuses in parallel
+    if (companyIds.size > 0) {
+      try {
+        await Promise.all(
+          Array.from(companyIds).map(companyId =>
+            updateCompanyStatusFromLeads(companyId)
+          )
+        );
+      } catch (companyError) {
+        // Log error but don't fail the bulk update
+        console.error('Error updating company statuses after bulk lead update:', companyError);
+      }
     }
   } catch (error) {
     console.error('Error bulk updating lead status:', error);

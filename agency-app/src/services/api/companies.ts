@@ -19,6 +19,12 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase/firestore';
 import { Company, CompanyFormData } from '../../types/crm';
+import { LeadStatus } from '../../types/lead';
+import {
+  setCompanyStatusManually as setStatusManually,
+  unlockCompanyStatus as unlockStatus,
+  batchUpdateCompanyStatuses,
+} from './companyStatus';
 
 const COMPANIES_COLLECTION = 'entities';  // Renamed from 'companies' to bypass auto-deletion issue
 const LEADS_COLLECTION = 'leads';
@@ -34,6 +40,8 @@ function convertToCompany(id: string, data: any): Company {
     industry: data.industry,
     description: data.description,
     ratingV2: data.ratingV2 !== undefined ? data.ratingV2 : null,
+    ratingV2UpdatedBy: data.ratingV2UpdatedBy,
+    ratingV2UpdatedAt: data.ratingV2UpdatedAt?.toDate ? data.ratingV2UpdatedAt.toDate() : (data.ratingV2UpdatedAt ? new Date(data.ratingV2UpdatedAt) : undefined),
     customFields: data.customFields || {},
     createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt || new Date()),
     updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : (data.updatedAt || new Date()),
@@ -43,6 +51,10 @@ function convertToCompany(id: string, data: any): Company {
     archivedAt: data.archivedAt?.toDate ? data.archivedAt.toDate() : (data.archivedAt ? new Date(data.archivedAt) : undefined),
     archivedBy: data.archivedBy,
     archiveReason: data.archiveReason,
+    status: data.status,
+    statusLockedManually: data.statusLockedManually || false,
+    statusLastUpdatedAt: data.statusLastUpdatedAt?.toDate ? data.statusLastUpdatedAt.toDate() : (data.statusLastUpdatedAt ? new Date(data.statusLastUpdatedAt) : undefined),
+    statusLastUpdatedBy: data.statusLastUpdatedBy,
     writingProgramAnalysis: data.writingProgramAnalysis ? {
       ...data.writingProgramAnalysis,
       lastAnalyzedAt: data.writingProgramAnalysis.lastAnalyzedAt?.toDate
@@ -129,6 +141,9 @@ export async function getOrCreateCompany(companyName: string): Promise<Company> 
     const docRef = await addDoc(companiesRef, {
       name: normalizedName,
       customFields: {},
+      status: 'new_lead', // Default status for new companies
+      statusLockedManually: false,
+      statusLastUpdatedAt: serverTimestamp(),
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     });
@@ -143,6 +158,9 @@ export async function getOrCreateCompany(companyName: string): Promise<Company> 
       id: docRef.id,
       name: normalizedName,
       customFields: {},
+      status: 'new_lead',
+      statusLockedManually: false,
+      statusLastUpdatedAt: new Date(),
       createdAt: new Date(),
       updatedAt: new Date(),
     };
@@ -205,6 +223,9 @@ export async function getOrCreateCompaniesBatch(
         batch.set(companyDocRef, {
           name: companyName,
           customFields: {},
+          status: 'new_lead', // Default status for new companies
+          statusLockedManually: false,
+          statusLastUpdatedAt: serverTimestamp(),
           createdAt: serverTimestamp(),
           updatedAt: serverTimestamp(),
         });
@@ -321,6 +342,9 @@ export async function createCompany(
       customFields: companyData.customFields || {},
       createdAt: now,
       updatedAt: now,
+      status: companyData.status || 'new_lead', // Default status
+      statusLockedManually: companyData.statusLockedManually || false,
+      statusLastUpdatedAt: now,
     };
 
     // Only add optional fields if they have values
@@ -837,4 +861,43 @@ export async function deleteCompanies(companyIds: string[]): Promise<void> {
     console.error('Error bulk deleting companies:', error);
     throw new Error('Failed to delete companies');
   }
+}
+
+// ============================================================================
+// Company Status Management Functions
+// ============================================================================
+
+/**
+ * Manually set company status and lock it from auto-updates
+ * @param companyId - ID of the company
+ * @param status - New status to set
+ * @param userId - ID of the user making the change
+ */
+export async function setCompanyStatusManually(
+  companyId: string,
+  status: LeadStatus,
+  userId: string
+): Promise<void> {
+  return setStatusManually(companyId, status, userId);
+}
+
+/**
+ * Unlock company status and recalculate from leads
+ * @param companyId - ID of the company
+ * @param userId - ID of the user unlocking
+ */
+export async function unlockCompanyStatus(
+  companyId: string,
+  userId: string
+): Promise<LeadStatus> {
+  return unlockStatus(companyId, userId);
+}
+
+/**
+ * Batch update company statuses for multiple companies
+ * Useful after bulk lead operations
+ * @param companyIds - Array of company IDs to update
+ */
+export async function bulkUpdateCompanyStatuses(companyIds: string[]): Promise<void> {
+  return batchUpdateCompanyStatuses(companyIds);
 }
