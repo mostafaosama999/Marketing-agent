@@ -86,6 +86,10 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
   const [selectedCompanyForDate, setSelectedCompanyForDate] = useState<Company | null>(null);
   const [selectedDateFieldName, setSelectedDateFieldName] = useState<string | null>(null);
 
+  // Rating V2 inline edit state
+  const [ratingMenuAnchor, setRatingMenuAnchor] = useState<null | HTMLElement>(null);
+  const [selectedCompanyForRating, setSelectedCompanyForRating] = useState<Company | null>(null);
+
   // Pagination state
   const [page, setPage] = useState(() => {
     const saved = localStorage.getItem('companies_table_page');
@@ -174,6 +178,41 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
   // Helper function to check if a custom field is a dropdown
   const isDropdownField = (fieldName: string): boolean => {
     return fieldDefinitions.some(def => def.name === fieldName && def.fieldType === 'dropdown');
+  };
+
+  // Rating V2 inline edit handlers
+  const handleRatingClick = (
+    event: React.MouseEvent<HTMLElement>,
+    company: Company
+  ) => {
+    event.stopPropagation();
+    setRatingMenuAnchor(event.currentTarget);
+    setSelectedCompanyForRating(company);
+  };
+
+  const handleRatingMenuClose = () => {
+    setRatingMenuAnchor(null);
+    setSelectedCompanyForRating(null);
+  };
+
+  const handleRatingChange = async (newRating: number | null) => {
+    if (selectedCompanyForRating) {
+      try {
+        await updateCompanyField(
+          selectedCompanyForRating.id,
+          'ratingV2',
+          newRating
+        );
+      } catch (error) {
+        console.error('Error updating rating:', error);
+        setSnackbar({
+          open: true,
+          message: 'Failed to update rating',
+          severity: 'error',
+        });
+      }
+    }
+    handleRatingMenuClose();
   };
 
   // Date picker handlers
@@ -616,6 +655,78 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
           </TableCell>
         );
 
+      case 'ratingV2':
+        // Helper function to get traffic light colors based on rating
+        const getRatingColors = (rating: number | null | undefined) => {
+          if (rating === null || rating === undefined) {
+            // Soft purple/lavender that blends with the column background
+            return {
+              background: 'rgba(102, 126, 234, 0.25)',
+              hoverBackground: 'rgba(102, 126, 234, 0.4)',
+            };
+          }
+          // Low ratings (1-3): Red
+          if (rating <= 3) {
+            return {
+              background: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)',
+              hoverBackground: 'linear-gradient(135deg, #DC2626 0%, #B91C1C 100%)',
+            };
+          }
+          // Medium ratings (4-7): Amber/Yellow
+          if (rating <= 7) {
+            return {
+              background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
+              hoverBackground: 'linear-gradient(135deg, #D97706 0%, #B45309 100%)',
+            };
+          }
+          // High ratings (8-10): Green
+          return {
+            background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+            hoverBackground: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+          };
+        };
+
+        const colors = getRatingColors(company.ratingV2);
+
+        return (
+          <TableCell
+            key={columnId}
+            sx={{
+              bgcolor: 'rgba(102, 126, 234, 0.08)',
+              borderLeft: '1px solid rgba(102, 126, 234, 0.15)',
+              borderRight: '1px solid rgba(102, 126, 234, 0.15)',
+              textAlign: 'center',
+            }}
+          >
+            <Chip
+              label={company.ratingV2 !== null && company.ratingV2 !== undefined ? company.ratingV2 : '-'}
+              size="small"
+              onClick={(e) => handleRatingClick(e, company)}
+              sx={{
+                background: colors.background,
+                color: '#fff',
+                fontWeight: 700,
+                fontSize: company.ratingV2 !== null && company.ratingV2 !== undefined ? '11px' : '10px',
+                height: company.ratingV2 !== null && company.ratingV2 !== undefined ? '24px' : '20px',
+                minWidth: company.ratingV2 !== null && company.ratingV2 !== undefined ? '40px' : '32px',
+                maxWidth: company.ratingV2 !== null && company.ratingV2 !== undefined ? '40px' : '32px',
+                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.15)',
+                cursor: 'pointer',
+                margin: 'auto',
+                '& .MuiChip-label': {
+                  px: company.ratingV2 !== null && company.ratingV2 !== undefined ? 1.5 : 1,
+                },
+                '&:hover': {
+                  background: colors.hoverBackground,
+                  transform: 'translateY(-1px)',
+                  boxShadow: '0 4px 8px rgba(0, 0, 0, 0.25)',
+                  filter: 'brightness(1.1)',
+                },
+              }}
+            />
+          </TableCell>
+        );
+
       case 'description':
         return (
           <TableCell key={columnId}>
@@ -861,11 +972,22 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
                     py: 0,
                     px: 1,
                     fontSize: '10px',
-                    fontWeight: 600,
-                    color: '#64748b',
+                    fontWeight: column.id === 'ratingV2' ? 700 : 600,
+                    color: column.id === 'ratingV2' ? '#667eea' : '#64748b',
                     textTransform: 'uppercase',
                     letterSpacing: '0.5px',
                     height: '36px',
+                    bgcolor: column.id === 'ratingV2' ? 'rgba(102, 126, 234, 0.08)' : 'transparent',
+                    position: 'relative',
+                    '&::after': column.id === 'ratingV2' ? {
+                      content: '""',
+                      position: 'absolute',
+                      bottom: 0,
+                      left: 0,
+                      right: 0,
+                      height: '3px',
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                    } : {},
                   }}
                 >
                   <TableSortLabel
@@ -874,10 +996,11 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
                     onClick={() => handleRequestSort(column.id)}
                     disabled={!column.sortable}
                     sx={{
-                      fontSize: '12px',
-                      color: '#64748b',
+                      fontSize: column.id === 'ratingV2' ? '13px' : '12px',
+                      color: column.id === 'ratingV2' ? '#667eea' : '#64748b',
+                      fontWeight: column.id === 'ratingV2' ? 700 : 'inherit',
                       '&:hover': {
-                        color: '#475569',
+                        color: column.id === 'ratingV2' ? '#5568d3' : '#475569',
                       },
                       '&.Mui-active': {
                         color: '#667eea',
@@ -1112,6 +1235,57 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
             {option}
           </MenuItem>
         ))}
+      </Menu>
+
+      {/* Rating V2 dropdown menu */}
+      <Menu
+        anchorEl={ratingMenuAnchor}
+        open={Boolean(ratingMenuAnchor)}
+        onClose={handleRatingMenuClose}
+        PaperProps={{
+          sx: {
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            borderRadius: '8px',
+            minWidth: 120,
+          }
+        }}
+      >
+        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((rating) => (
+          <MenuItem
+            key={rating}
+            onClick={() => handleRatingChange(rating)}
+            sx={{
+              fontSize: '13px',
+              py: 1,
+              justifyContent: 'center',
+              fontWeight: selectedCompanyForRating?.ratingV2 === rating ? 700 : 400,
+              background: selectedCompanyForRating?.ratingV2 === rating
+                ? 'linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%)'
+                : 'transparent',
+              '&:hover': {
+                bgcolor: 'rgba(102, 126, 234, 0.1)',
+              },
+            }}
+          >
+            {rating}
+          </MenuItem>
+        ))}
+        <MenuItem
+          onClick={() => handleRatingChange(null)}
+          sx={{
+            fontSize: '13px',
+            py: 1,
+            justifyContent: 'center',
+            color: 'text.secondary',
+            borderTop: '1px solid',
+            borderColor: 'divider',
+            '&:hover': {
+              bgcolor: 'rgba(102, 126, 234, 0.1)',
+            },
+          }}
+        >
+          Clear
+        </MenuItem>
       </Menu>
 
       {/* Date Picker Popover */}

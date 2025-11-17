@@ -56,7 +56,10 @@
     "migrate:status-v2": "npx tsx scripts/migrate-status-v2.ts",
     "migrate:status-v2:dry-run": "npx tsx scripts/migrate-status-v2.ts --dry-run",
     "migrate:status-v2-client": "npx tsx scripts/migrate-status-v2-client.ts",
-    "migrate:status-v2-client:dry-run": "npx tsx scripts/migrate-status-v2-client.ts --dry-run"
+    "migrate:status-v2-client:dry-run": "npx tsx scripts/migrate-status-v2-client.ts --dry-run",
+    "add:ratingV2": "npx tsx scripts/add-ratingV2-to-companies.ts",
+    "add:ratingV2:dry-run": "npx tsx scripts/add-ratingV2-to-companies.ts --dry-run",
+    "add:ratingV2:test": "npx tsx scripts/add-ratingV2-to-companies.ts --test=Cloudflare"
   },
   "eslintConfig": {
     "extends": [

@@ -26,6 +26,8 @@ import {
   DialogActions,
   DialogContentText,
   Snackbar,
+  Checkbox,
+  FormControlLabel,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -94,6 +96,7 @@ export const CompanyDetailPage: React.FC = () => {
     website: '',
     industry: '',
     description: '',
+    ratingV2: null,
     customFields: {},
   });
 
@@ -125,6 +128,9 @@ export const CompanyDetailPage: React.FC = () => {
   // Archive dialog state
   const [archiveDialogOpen, setArchiveDialogOpen] = useState(false);
   const [archiving, setArchiving] = useState(false);
+  const [archiveReason, setArchiveReason] = useState('');
+  const [cascadeToLeads, setCascadeToLeads] = useState(false);
+  const [activeLeadsCount, setActiveLeadsCount] = useState(0);
 
   // Analysis state
   const [writingProgramLoading, setWritingProgramLoading] = useState(false);
@@ -188,6 +194,7 @@ export const CompanyDetailPage: React.FC = () => {
           website: companyData.website || '',
           industry: companyData.industry || '',
           description: companyData.description || '',
+          ratingV2: companyData.ratingV2 ?? null,
           customFields: companyData.customFields || {},
         });
 
@@ -237,6 +244,7 @@ export const CompanyDetailPage: React.FC = () => {
       normalizeValue(formData.website) !== normalizeValue(company.website) ||
       normalizeValue(formData.industry) !== normalizeValue(company.industry) ||
       normalizeValue(formData.description) !== normalizeValue(company.description) ||
+      formData.ratingV2 !== (company.ratingV2 ?? null) ||
       JSON.stringify(formData.customFields || {}) !== JSON.stringify(company.customFields || {});
 
     setHasUnsavedChanges(hasChanges);
@@ -371,6 +379,10 @@ export const CompanyDetailPage: React.FC = () => {
       if (formData.description?.trim()) {
         companyData.description = formData.description.trim();
       }
+      // Add ratingV2 if it has a value (allow null explicitly)
+      if (formData.ratingV2 !== undefined) {
+        companyData.ratingV2 = formData.ratingV2;
+      }
 
       await updateCompany(company.id, companyData);
 
@@ -433,7 +445,12 @@ export const CompanyDetailPage: React.FC = () => {
   };
 
   // Archive/Unarchive handlers
-  const handleArchiveToggle = () => {
+  const handleArchiveToggle = async () => {
+    // When archiving, fetch active leads count
+    if (!company?.archived && company?.id) {
+      const activeLeads = companyLeads.filter(lead => !lead.archived);
+      setActiveLeadsCount(activeLeads.length);
+    }
     setArchiveDialogOpen(true);
   };
 
@@ -450,7 +467,14 @@ export const CompanyDetailPage: React.FC = () => {
           setCompany(updatedCompany);
         }
       } else {
-        await archiveCompany(company.id, user.uid);
+        const result = await archiveCompany(company.id, user.uid, archiveReason, cascadeToLeads);
+        if (result.leadsArchived > 0) {
+          setSnackbar({
+            open: true,
+            message: `Archived company and ${result.leadsArchived} associated lead${result.leadsArchived > 1 ? 's' : ''}`,
+            severity: 'success',
+          });
+        }
         navigate('/companies');
       }
     } catch (error) {
@@ -459,6 +483,8 @@ export const CompanyDetailPage: React.FC = () => {
     } finally {
       setArchiving(false);
       setArchiveDialogOpen(false);
+      setArchiveReason(''); // Reset reason
+      setCascadeToLeads(false); // Reset cascade option
     }
   };
 
@@ -1181,6 +1207,27 @@ export const CompanyDetailPage: React.FC = () => {
                 />
               </Grid>
 
+              <Grid size={{ xs: 12, md: 6 }}>
+                <TextField
+                  fullWidth
+                  type="number"
+                  label="Rating V2"
+                  value={formData.ratingV2 ?? ''}
+                  onChange={(e) => {
+                    const value = e.target.value === '' ? null : Number(e.target.value);
+                    setFormData({ ...formData, ratingV2: value });
+                  }}
+                  disabled={saving}
+                  placeholder="Enter numeric rating"
+                  helperText="Optional - Numeric rating value"
+                  inputProps={{
+                    min: 0,
+                    max: 10,
+                    step: 0.1,
+                  }}
+                />
+              </Grid>
+
               <Grid size={{ xs: 12 }}>
                 <TextField
                   fullWidth
@@ -1762,7 +1809,12 @@ export const CompanyDetailPage: React.FC = () => {
       {/* Archive/Unarchive Company Dialog */}
       <Dialog
         open={archiveDialogOpen}
-        onClose={() => !archiving && setArchiveDialogOpen(false)}
+        onClose={() => {
+          if (!archiving) {
+            setArchiveDialogOpen(false);
+            setArchiveReason(''); // Reset reason on close
+          }
+        }}
         maxWidth="sm"
         fullWidth
       >
@@ -1788,10 +1840,50 @@ export const CompanyDetailPage: React.FC = () => {
               </>
             )}
           </DialogContentText>
+          {!company.archived && (
+            <>
+              <TextField
+                autoFocus
+                margin="dense"
+                label="Reason (optional)"
+                type="text"
+                fullWidth
+                multiline
+                rows={3}
+                value={archiveReason}
+                onChange={(e) => setArchiveReason(e.target.value)}
+                disabled={archiving}
+                placeholder="Enter reason for archiving this company..."
+                sx={{ mt: 2 }}
+              />
+              {activeLeadsCount > 0 && (
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={cascadeToLeads}
+                      onChange={(e) => setCascadeToLeads(e.target.checked)}
+                      disabled={archiving}
+                      sx={{
+                        color: '#667eea',
+                        '&.Mui-checked': {
+                          color: '#667eea',
+                        },
+                      }}
+                    />
+                  }
+                  label={`Also archive ${activeLeadsCount} associated lead${activeLeadsCount > 1 ? 's' : ''}`}
+                  sx={{ mt: 2 }}
+                />
+              )}
+            </>
+          )}
         </DialogContent>
         <DialogActions sx={{ px: 3, pb: 3 }}>
           <Button
-            onClick={() => setArchiveDialogOpen(false)}
+            onClick={() => {
+              setArchiveDialogOpen(false);
+              setArchiveReason(''); // Reset reason on cancel
+            }}
             disabled={archiving}
             sx={{ textTransform: 'none', fontWeight: 600 }}
           >

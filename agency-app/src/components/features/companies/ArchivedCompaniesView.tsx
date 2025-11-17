@@ -20,6 +20,8 @@ import {
   Unarchive as UnarchiveIcon,
   Edit as EditIcon,
 } from '@mui/icons-material';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../../../services/firebase/firestore';
 import { Company } from '../../../types/crm';
 import { subscribeToArchivedCompanies } from '../../../services/api/companies';
 
@@ -38,11 +40,43 @@ export const ArchivedCompaniesView: React.FC<ArchivedCompaniesViewProps> = ({
 }) => {
   const [archivedCompanies, setArchivedCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
+  const [userDisplayNames, setUserDisplayNames] = useState<Map<string, string>>(new Map());
 
   useEffect(() => {
     const unsubscribe = subscribeToArchivedCompanies((companies) => {
       setArchivedCompanies(companies);
       setLoading(false);
+
+      // Fetch user display names for all archivedBy users
+      const fetchUserNames = async () => {
+        const userIdSet = new Set(companies
+          .map(c => c.archivedBy)
+          .filter(Boolean));
+        const uniqueUserIds = Array.from(userIdSet) as string[];
+
+        const names = new Map<string, string>();
+        await Promise.all(
+          uniqueUserIds.map(async (userId) => {
+            try {
+              const userDoc = await getDoc(doc(db, 'users', userId));
+              if (userDoc.exists()) {
+                const userData = userDoc.data();
+                names.set(userId, userData.displayName || userData.email || 'Unknown User');
+              } else {
+                names.set(userId, 'Unknown User');
+              }
+            } catch (error) {
+              console.error(`Error fetching user ${userId}:`, error);
+              names.set(userId, 'Unknown User');
+            }
+          })
+        );
+        setUserDisplayNames(names);
+      };
+
+      if (companies.length > 0) {
+        fetchUserNames();
+      }
     });
 
     return () => unsubscribe();
@@ -168,6 +202,8 @@ export const ArchivedCompaniesView: React.FC<ArchivedCompaniesViewProps> = ({
                     Lead Count
                   </TableCell>
                   <TableCell sx={{ fontWeight: 600, bgcolor: '#f8fafc' }}>Archived Date</TableCell>
+                  <TableCell sx={{ fontWeight: 600, bgcolor: '#f8fafc' }}>Archived By</TableCell>
+                  <TableCell sx={{ fontWeight: 600, bgcolor: '#f8fafc' }}>Reason</TableCell>
                   <TableCell sx={{ fontWeight: 600, bgcolor: '#f8fafc', textAlign: 'center' }}>
                     Actions
                   </TableCell>
@@ -216,6 +252,33 @@ export const ArchivedCompaniesView: React.FC<ArchivedCompaniesViewProps> = ({
                       <Typography variant="body2" color="text.secondary">
                         {formatDate(company.archivedAt)}
                       </Typography>
+                    </TableCell>
+                    <TableCell onClick={() => onCompanyClick(company)}>
+                      <Typography variant="body2" color="text.secondary">
+                        {company.archivedBy ? userDisplayNames.get(company.archivedBy) || 'Loading...' : '-'}
+                      </Typography>
+                    </TableCell>
+                    <TableCell onClick={() => onCompanyClick(company)}>
+                      {company.archiveReason ? (
+                        <Tooltip title={company.archiveReason} arrow>
+                          <Typography
+                            variant="body2"
+                            color="text.secondary"
+                            sx={{
+                              maxWidth: 200,
+                              overflow: 'hidden',
+                              textOverflow: 'ellipsis',
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {company.archiveReason}
+                          </Typography>
+                        </Tooltip>
+                      ) : (
+                        <Typography variant="body2" color="text.secondary">
+                          -
+                        </Typography>
+                      )}
                     </TableCell>
                     <TableCell sx={{ textAlign: 'center' }}>
                       <Tooltip title="Unarchive">

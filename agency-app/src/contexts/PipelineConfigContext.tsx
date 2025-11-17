@@ -1,6 +1,6 @@
 // src/contexts/PipelineConfigContext.tsx
 
-import React, { createContext, useContext, ReactNode } from 'react';
+import React, { createContext, useContext, ReactNode, useCallback, useMemo } from 'react';
 import { usePipelineConfig } from '../hooks/usePipelineConfig';
 import { PipelineStage } from '../services/api/pipelineConfigService';
 import { LeadStatus } from '../types/lead';
@@ -21,19 +21,21 @@ const PipelineConfigContext = createContext<PipelineConfigContextType | undefine
 export function PipelineConfigProvider({ children }: { children: ReactNode }) {
   const { stages, loading, updateLabel, updateOrder, getLabelMap } = usePipelineConfig();
 
-  const getLabel = (status: LeadStatus): string => {
+  // Memoize getLabel function to prevent re-creating on every render
+  const getLabel = useCallback((status: LeadStatus): string => {
     const stage = stages.find((s) => s.id === status);
     return stage?.label || status;
-  };
+  }, [stages]);
 
-  const value: PipelineConfigContextType = {
+  // Memoize the entire context value to prevent unnecessary re-renders
+  const value: PipelineConfigContextType = useMemo(() => ({
     stages,
     loading,
     getLabel,
     getLabelMap,
     updateLabel,
     updateOrder,
-  };
+  }), [stages, loading, getLabel, getLabelMap, updateLabel, updateOrder]);
 
   return (
     <PipelineConfigContext.Provider value={value}>

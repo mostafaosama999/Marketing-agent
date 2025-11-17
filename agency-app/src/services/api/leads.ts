@@ -73,6 +73,8 @@ function convertToLead(id: string, data: any): Lead {
     archived: data.archived || false,
     archivedAt: safeToDate(data.archivedAt),
     archivedBy: data.archivedBy,
+    archiveReason: data.archiveReason,
+    cascadedFrom: data.cascadedFrom,
     outreach: data.outreach
       ? {
           linkedIn: data.outreach.linkedIn
@@ -748,15 +750,32 @@ async function deleteLeadTimeline(leadId: string): Promise<void> {
  * Archive a lead
  * Sets archived flag to true and records who archived it and when
  */
-export async function archiveLead(leadId: string, userId: string): Promise<void> {
+export async function archiveLead(
+  leadId: string,
+  userId: string,
+  reason?: string,
+  cascadedFromCompanyId?: string
+): Promise<void> {
   try {
     const leadRef = doc(db, LEADS_COLLECTION, leadId);
-    await updateDoc(leadRef, {
+    const updateData: any = {
       archived: true,
       archivedAt: serverTimestamp(),
       archivedBy: userId,
       updatedAt: serverTimestamp(),
-    });
+    };
+
+    // Add reason if provided
+    if (reason && reason.trim()) {
+      updateData.archiveReason = reason.trim();
+    }
+
+    // Add cascade metadata if archived with company
+    if (cascadedFromCompanyId) {
+      updateData.cascadedFrom = cascadedFromCompanyId;
+    }
+
+    await updateDoc(leadRef, updateData);
     console.log('✅ Lead archived successfully:', leadId);
   } catch (error) {
     console.error('Error archiving lead:', error);
@@ -775,6 +794,8 @@ export async function unarchiveLead(leadId: string): Promise<void> {
       archived: false,
       archivedAt: null,
       archivedBy: null,
+      archiveReason: null,
+      cascadedFrom: null,
       updatedAt: serverTimestamp(),
     });
     console.log('✅ Lead unarchived successfully:', leadId);
@@ -950,6 +971,59 @@ export async function bulkUpdateLeadFields(
  * Bulk delete leads (uses batch writes where possible)
  * Also handles company cleanup
  */
+/**
+ * Bulk archive leads
+ * @param leadIds Array of lead IDs to archive
+ * @param userId User ID performing the archive
+ * @param reason Optional reason for archiving
+ * @param cascadedFromCompanyId Optional company ID if archived as part of company cascade
+ */
+export async function bulkArchiveLeads(
+  leadIds: string[],
+  userId: string,
+  reason?: string,
+  cascadedFromCompanyId?: string
+): Promise<void> {
+  try {
+    const BATCH_SIZE = 500;
+
+    // Process in batches of 500 (Firestore limit)
+    for (let i = 0; i < leadIds.length; i += BATCH_SIZE) {
+      const batchLeadIds = leadIds.slice(i, i + BATCH_SIZE);
+      const batch = writeBatch(db);
+
+      batchLeadIds.forEach((leadId) => {
+        const leadRef = doc(db, LEADS_COLLECTION, leadId);
+        const updateData: any = {
+          archived: true,
+          archivedAt: serverTimestamp(),
+          archivedBy: userId,
+          updatedAt: serverTimestamp(),
+        };
+
+        // Add reason if provided
+        if (reason && reason.trim()) {
+          updateData.archiveReason = reason.trim();
+        }
+
+        // Add cascade metadata if archived with company
+        if (cascadedFromCompanyId) {
+          updateData.cascadedFrom = cascadedFromCompanyId;
+        }
+
+        batch.update(leadRef, updateData);
+      });
+
+      await batch.commit();
+    }
+
+    console.log('✅ Leads archived successfully:', leadIds.length);
+  } catch (error) {
+    console.error('Error bulk archiving leads:', error);
+    throw new Error('Failed to archive leads');
+  }
+}
+
 export async function bulkDeleteLeads(leadIds: string[]): Promise<void> {
   console.log('🗑️ [BULK DELETE] Starting bulk lead deletion:', {
     count: leadIds.length,

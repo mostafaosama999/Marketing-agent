@@ -1,5 +1,5 @@
 // src/components/features/crm/CSVFieldMappingDialog.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -199,35 +199,30 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [headers]); // Only re-run when headers change, not when autoCreateFields changes
 
-  // Detect dropdown fields when mappings change
+  // Consolidated field detection - runs once when mappings are initialized
   useEffect(() => {
-    if (mappings.length > 0 && data.length > 0) {
-      const detected = detectDropdownFields(headers, data, mappings);
-      setDropdownFields(detected);
-    }
-  }, [mappings, headers, data]);
+    if (mappings.length === 0 || data.length === 0) return;
 
-  // Detect date fields when mappings change
-  useEffect(() => {
-    if (mappings.length > 0 && data.length > 0) {
-      const detected = detectDateFields(headers, data, mappings);
-      setDateFields(detected);
-    }
-  }, [mappings, headers, data]);
+    // Detect dropdown and date fields together
+    const detectedDropdowns = detectDropdownFields(headers, data, mappings);
+    const detectedDates = detectDateFields(headers, data, mappings);
 
-  // Update mappings with field types from detected dropdown and date fields
-  useEffect(() => {
-    if (dropdownFields.length > 0 || dateFields.length > 0) {
+    // Only update if we actually detected something
+    if (detectedDropdowns.length > 0 || detectedDates.length > 0) {
+      setDropdownFields(detectedDropdowns);
+      setDateFields(detectedDates);
+
+      // Update mappings with field types in a single batch
       setMappings((prev) =>
         prev.map((mapping) => {
           // Check if this field is a detected dropdown
-          const isDropdown = dropdownFields.some(d => d.columnName === mapping.csvField);
+          const isDropdown = detectedDropdowns.some(d => d.columnName === mapping.csvField);
           if (isDropdown) {
             return { ...mapping, fieldType: 'dropdown' as const };
           }
 
           // Check if this field is a detected date
-          const isDate = dateFields.some(d => d.columnName === mapping.csvField);
+          const isDate = detectedDates.some(d => d.columnName === mapping.csvField);
           if (isDate) {
             return { ...mapping, fieldType: 'date' as const };
           }
@@ -236,7 +231,8 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
         })
       );
     }
-  }, [dropdownFields, dateFields]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [headers.length, data.length]); // Only run once on initial load
 
   const handleMappingChange = (csvField: string, leadField: string) => {
     setMappings((prev) =>
@@ -290,12 +286,12 @@ export const CSVFieldMappingDialog: React.FC<CSVFieldMappingDialogProps> = ({
       .filter((val) => val && val.trim() !== '');
   };
 
-  // Group mappings by section
-  const groupedMappings = {
+  // Group mappings by section - memoized to prevent recalculation on every render
+  const groupedMappings = useMemo(() => ({
     general: mappings.filter((m) => m.section === 'general'),
     linkedin: mappings.filter((m) => m.section === 'linkedin'),
     email: mappings.filter((m) => m.section === 'email'),
-  };
+  }), [mappings]);
 
   // Calculate field mapping counts for summary
   // Count all fields by entity type, including auto-created fields

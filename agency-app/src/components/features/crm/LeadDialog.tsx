@@ -1,5 +1,5 @@
 // src/components/features/crm/LeadDialog.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -127,11 +127,18 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
 
   const [emailStatus, setEmailStatus] = useState<'not_sent' | 'sent' | 'opened' | 'replied' | 'bounced' | 'refused' | 'no_response'>('not_sent');
 
-  // Initialize form data when lead changes or dialog opens/closes
+  // Initialize form data when lead changes or dialog opens
+  // Split into two effects to avoid unnecessary re-runs
   useEffect(() => {
-    // Clear Apollo messages when switching leads or opening/closing dialog
+    if (!open) return;
+
+    // Clear Apollo messages when opening dialog
     setApolloSuccess(null);
     setApolloError(null);
+  }, [open]);
+
+  useEffect(() => {
+    if (!open) return;
 
     if (lead && mode === 'edit') {
       setFormData({
@@ -171,26 +178,28 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
       setLinkedInProfileUrl('');
       setEmailStatus('not_sent');
     }
-  }, [lead, mode, open]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [lead?.id, mode, open]); // Only re-run when lead ID changes, not on every lead update
 
   // Fetch activity/timeline when in edit mode
   useEffect(() => {
+    if (mode !== 'edit' || !lead || !open) return;
+
     const fetchActivity = async () => {
-      if (mode === 'edit' && lead && open) {
-        setActivityLoading(true);
-        try {
-          const changes = await leadTimelineService.getStatusChanges(lead.id);
-          setStatusChanges(changes);
-        } catch (error) {
-          console.error('Error fetching activity:', error);
-        } finally {
-          setActivityLoading(false);
-        }
+      setActivityLoading(true);
+      try {
+        const changes = await leadTimelineService.getStatusChanges(lead.id);
+        setStatusChanges(changes);
+      } catch (error) {
+        console.error('Error fetching activity:', error);
+      } finally {
+        setActivityLoading(false);
       }
     };
 
     fetchActivity();
-  }, [mode, lead, open]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [mode, lead?.id, open]); // Only re-run when lead ID changes
 
   // Fetch field definitions when dialog opens
   useEffect(() => {
@@ -211,14 +220,14 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
     fetchFields();
   }, [open]);
 
-  const handleChange = (field: keyof LeadFormData, value: any) => {
+  const handleChange = useCallback((field: keyof LeadFormData, value: any) => {
     setFormData((prev) => ({
       ...prev,
       [field]: value,
     }));
-  };
+  }, []);
 
-  const handleCustomFieldChange = (fieldName: string, value: any) => {
+  const handleCustomFieldChange = useCallback((fieldName: string, value: any) => {
     setFormData((prev) => ({
       ...prev,
       customFields: {
@@ -226,7 +235,23 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
         [fieldName]: value,
       },
     }));
-  };
+  }, []);
+
+  // Memoize filtered field definitions to avoid recalculating on every render
+  const generalFields = useMemo(() =>
+    fieldDefinitions.filter(def => def.section === 'general'),
+    [fieldDefinitions]
+  );
+
+  const linkedInFields = useMemo(() =>
+    fieldDefinitions.filter(def => def.section === 'linkedin'),
+    [fieldDefinitions]
+  );
+
+  const emailFields = useMemo(() =>
+    fieldDefinitions.filter(def => def.section === 'email'),
+    [fieldDefinitions]
+  );
 
   const handleSubmit = async () => {
     setLoading(true);
@@ -566,9 +591,7 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
                   </TextField>
 
                   {/* General Custom Fields */}
-                  {fieldDefinitions
-                    .filter(def => def.section === 'general')
-                    .map(def => (
+                  {generalFields.map(def => (
                       <Box key={def.id}>
                         {def.fieldType === 'text' && (
                           <TextField
@@ -664,9 +687,7 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
                   </FormControl>
 
                   {/* LinkedIn Custom Fields */}
-                  {fieldDefinitions
-                    .filter(def => def.section === 'linkedin')
-                    .map(def => (
+                  {linkedInFields.map(def => (
                       <Box key={def.id}>
                         {def.fieldType === 'text' && (
                           <TextField
@@ -754,9 +775,7 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
                   </FormControl>
 
                   {/* Email Custom Fields */}
-                  {fieldDefinitions
-                    .filter(def => def.section === 'email')
-                    .map(def => (
+                  {emailFields.map(def => (
                       <Box key={def.id}>
                         {def.fieldType === 'text' && (
                           <TextField

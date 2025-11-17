@@ -13,6 +13,14 @@ import {
   Alert,
   Button,
   ButtonGroup,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogContentText,
+  DialogActions,
+  TextField,
+  Checkbox,
+  FormControlLabel,
 } from '@mui/material';
 import {
   Add as AddIcon,
@@ -29,6 +37,7 @@ import {
   unarchiveCompany,
   getLeadCountsForAllCompanies,
   bulkUpdateCompanyFields,
+  bulkArchiveCompanies,
 } from '../../services/api/companies';
 import { CompanyDialog } from '../../components/features/companies/CompanyDialog';
 import { CompanyTable } from '../../components/features/companies/CompanyTable';
@@ -115,6 +124,11 @@ export const CompaniesPage: React.FC = () => {
   // Selection state for bulk actions
   const [selectedCompanyIds, setSelectedCompanyIds] = useState<string[]>([]);
   const [showBulkEditDialog, setShowBulkEditDialog] = useState(false);
+  const [showBulkArchiveDialog, setShowBulkArchiveDialog] = useState(false);
+  const [bulkArchiveReason, setBulkArchiveReason] = useState('');
+  const [bulkArchiving, setBulkArchiving] = useState(false);
+  const [bulkCascadeToLeads, setBulkCascadeToLeads] = useState(false);
+  const [bulkTotalLeadsCount, setBulkTotalLeadsCount] = useState(0);
 
   // Writing program analysis state
   const [selectedWritingProgramIds, setSelectedWritingProgramIds] = useState<string[]>([]);
@@ -543,6 +557,48 @@ export const CompaniesPage: React.FC = () => {
     } catch (error) {
       console.error('Error deleting companies:', error);
       alert('Failed to delete companies. Please try again.');
+    }
+  };
+
+  const handleBulkArchive = () => {
+    // Calculate total leads across selected companies
+    let totalLeads = 0;
+    selectedCompanyIds.forEach(id => {
+      totalLeads += (leadCounts.get(id) || 0);
+    });
+    setBulkTotalLeadsCount(totalLeads);
+    setShowBulkArchiveDialog(true);
+  };
+
+  const confirmBulkArchive = async () => {
+    if (!user) return;
+
+    setBulkArchiving(true);
+    try {
+      const result = await bulkArchiveCompanies(
+        selectedCompanyIds,
+        user.uid,
+        bulkArchiveReason,
+        bulkCascadeToLeads
+      );
+
+      if (result.leadsArchived > 0) {
+        setSnackbar({
+          open: true,
+          message: `Archived ${result.companiesArchived} ${result.companiesArchived > 1 ? 'companies' : 'company'} and ${result.leadsArchived} associated lead${result.leadsArchived > 1 ? 's' : ''}`,
+          severity: 'success',
+        });
+      }
+
+      handleClearSelection();
+      setBulkArchiveReason('');
+      setBulkCascadeToLeads(false);
+      setShowBulkArchiveDialog(false);
+    } catch (error) {
+      console.error('Error archiving companies:', error);
+      alert('Failed to archive companies. Please try again.');
+    } finally {
+      setBulkArchiving(false);
     }
   };
 
@@ -1053,6 +1109,7 @@ export const CompaniesPage: React.FC = () => {
                 onEditFields={handleBulkEdit}
                 onExportCSV={handleBulkExportCSV}
                 onDelete={handleBulkDelete}
+                onArchive={handleBulkArchive}
                 onClear={handleClearSelection}
               />
             ) : (
@@ -1156,6 +1213,89 @@ export const CompaniesPage: React.FC = () => {
             onSave={handleBulkEditSave}
             selectedCount={selectedCompanyIds.length}
           />
+
+          {/* Bulk Archive Dialog */}
+          <Dialog
+            open={showBulkArchiveDialog}
+            onClose={() => {
+              if (!bulkArchiving) {
+                setShowBulkArchiveDialog(false);
+                setBulkArchiveReason('');
+              }
+            }}
+            maxWidth="sm"
+            fullWidth
+          >
+            <DialogTitle sx={{ fontWeight: 700 }}>
+              Archive {selectedCompanyIds.length} {selectedCompanyIds.length === 1 ? 'Company' : 'Companies'}?
+            </DialogTitle>
+            <DialogContent>
+              <DialogContentText>
+                Are you sure you want to archive {selectedCompanyIds.length} {selectedCompanyIds.length === 1 ? 'company' : 'companies'}?
+                They will be hidden from the main list but can be restored later.
+              </DialogContentText>
+              <TextField
+                autoFocus
+                margin="dense"
+                label="Reason (optional)"
+                type="text"
+                fullWidth
+                multiline
+                rows={3}
+                value={bulkArchiveReason}
+                onChange={(e) => setBulkArchiveReason(e.target.value)}
+                disabled={bulkArchiving}
+                placeholder="Enter reason for archiving these companies..."
+                sx={{ mt: 2 }}
+              />
+              {bulkTotalLeadsCount > 0 && (
+                <FormControlLabel
+                  control={
+                    <Checkbox
+                      checked={bulkCascadeToLeads}
+                      onChange={(e) => setBulkCascadeToLeads(e.target.checked)}
+                      disabled={bulkArchiving}
+                      sx={{
+                        color: '#667eea',
+                        '&.Mui-checked': {
+                          color: '#667eea',
+                        },
+                      }}
+                    />
+                  }
+                  label={`Also archive ${bulkTotalLeadsCount} total associated lead${bulkTotalLeadsCount > 1 ? 's' : ''}`}
+                  sx={{ mt: 2 }}
+                />
+              )}
+            </DialogContent>
+            <DialogActions sx={{ px: 3, pb: 3 }}>
+              <Button
+                onClick={() => {
+                  setShowBulkArchiveDialog(false);
+                  setBulkArchiveReason('');
+                }}
+                disabled={bulkArchiving}
+                sx={{ textTransform: 'none', fontWeight: 600 }}
+              >
+                Cancel
+              </Button>
+              <Button
+                onClick={confirmBulkArchive}
+                disabled={bulkArchiving}
+                variant="contained"
+                sx={{
+                  textTransform: 'none',
+                  fontWeight: 600,
+                  bgcolor: '#f59e0b',
+                  '&:hover': {
+                    bgcolor: '#d97706',
+                  },
+                }}
+              >
+                {bulkArchiving ? <CircularProgress size={24} /> : 'Archive'}
+              </Button>
+            </DialogActions>
+          </Dialog>
 
           {/* Bulk Writing Program Analysis Dialog */}
           <BulkWritingProgramDialog

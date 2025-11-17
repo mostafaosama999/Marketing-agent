@@ -10,6 +10,7 @@ import {
   Delete as DeleteIcon,
   FileDownload as DownloadIcon,
   Close as CloseIcon,
+  Archive as ArchiveIcon,
 } from '@mui/icons-material';
 
 interface CompanyBulkActionsToolbarProps {
@@ -17,6 +18,7 @@ interface CompanyBulkActionsToolbarProps {
   onEditFields: () => void;
   onExportCSV: () => void;
   onDelete: () => void;
+  onArchive: () => void;
   onClear: () => void;
 }
 
@@ -25,6 +27,7 @@ export const CompanyBulkActionsToolbar: React.FC<CompanyBulkActionsToolbarProps>
   onEditFields,
   onExportCSV,
   onDelete,
+  onArchive,
   onClear,
 }) => {
   if (selectedCount === 0) return null;
@@ -96,6 +99,26 @@ export const CompanyBulkActionsToolbar: React.FC<CompanyBulkActionsToolbarProps>
           }}
         >
           Export CSV
+        </Button>
+
+        {/* Archive */}
+        <Button
+          variant="outlined"
+          startIcon={<ArchiveIcon />}
+          onClick={onArchive}
+          sx={{
+            color: 'white',
+            borderColor: '#f59e0b',
+            bgcolor: '#f59e0b',
+            textTransform: 'none',
+            fontWeight: 600,
+            '&:hover': {
+              borderColor: '#d97706',
+              bgcolor: '#d97706',
+            },
+          }}
+        >
+          Archive
         </Button>
 
         {/* Delete */}

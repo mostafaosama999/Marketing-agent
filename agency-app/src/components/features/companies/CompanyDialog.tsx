@@ -1,5 +1,5 @@
 // src/components/features/companies/CompanyDialog.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -124,9 +124,10 @@ export const CompanyDialog: React.FC<CompanyDialogProps> = ({
     return () => {
       unsubscribeById();
     };
-  }, [company, open, isEditMode]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [company?.id, open, isEditMode]); // Only re-run when company ID changes, not entire company object
 
-  const handleChange = (field: keyof CompanyFormData) => (
+  const handleChange = useCallback((field: keyof CompanyFormData) => (
     event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
     setFormData(prev => ({
@@ -135,7 +136,7 @@ export const CompanyDialog: React.FC<CompanyDialogProps> = ({
     }));
     setError('');
     setDuplicateWarning('');
-  };
+  }, []);
 
   const validateForm = (): boolean => {
     if (!formData.name.trim()) {

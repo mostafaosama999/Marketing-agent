@@ -33,6 +33,7 @@ function convertToCompany(id: string, data: any): Company {
     website: data.website,
     industry: data.industry,
     description: data.description,
+    ratingV2: data.ratingV2 !== undefined ? data.ratingV2 : null,
     customFields: data.customFields || {},
     createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt || new Date()),
     updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : (data.updatedAt || new Date()),
@@ -41,6 +42,7 @@ function convertToCompany(id: string, data: any): Company {
     archived: data.archived || false,
     archivedAt: data.archivedAt?.toDate ? data.archivedAt.toDate() : (data.archivedAt ? new Date(data.archivedAt) : undefined),
     archivedBy: data.archivedBy,
+    archiveReason: data.archiveReason,
     writingProgramAnalysis: data.writingProgramAnalysis ? {
       ...data.writingProgramAnalysis,
       lastAnalyzedAt: data.writingProgramAnalysis.lastAnalyzedAt?.toDate
@@ -549,20 +551,80 @@ export async function getCompaniesWithLeadCounts(): Promise<
 /**
  * Archive a company
  * Sets archived flag and metadata
+ * Optionally cascades to archive all associated leads
  */
-export async function archiveCompany(companyId: string, userId: string): Promise<void> {
+export async function archiveCompany(
+  companyId: string,
+  userId: string,
+  reason?: string,
+  cascadeToLeads: boolean = false
+): Promise<{ companyArchived: boolean; leadsArchived: number }> {
   try {
+    // Archive the company
     const companyRef = doc(db, COMPANIES_COLLECTION, companyId);
-    await updateDoc(companyRef, {
+    const updateData: any = {
       archived: true,
       archivedAt: serverTimestamp(),
       archivedBy: userId,
       updatedAt: serverTimestamp(),
-    });
+    };
+
+    // Add reason if provided
+    if (reason && reason.trim()) {
+      updateData.archiveReason = reason.trim();
+    }
+
+    await updateDoc(companyRef, updateData);
     console.log('✅ Company archived successfully:', companyId);
+
+    let leadsArchived = 0;
+
+    // Cascade to leads if requested
+    if (cascadeToLeads) {
+      const { getLeadsByCompanyId, bulkArchiveLeads } = await import('./leads');
+      const leads = await getLeadsByCompanyId(companyId);
+
+      // Filter only non-archived leads
+      const activeLeads = leads.filter(lead => !lead.archived);
+
+      if (activeLeads.length > 0) {
+        const leadIds = activeLeads.map(lead => lead.id);
+        await bulkArchiveLeads(leadIds, userId, reason, companyId);
+        leadsArchived = leadIds.length;
+        console.log(`✅ Cascaded archive to ${leadsArchived} leads`);
+      }
+    }
+
+    return { companyArchived: true, leadsArchived };
   } catch (error) {
     console.error('Error archiving company:', error);
     throw new Error('Failed to archive company');
+  }
+}
+
+/**
+ * Get archived leads that were cascaded from a specific company
+ */
+export async function getArchivedLeadsCascadedFromCompany(companyId: string): Promise<any[]> {
+  try {
+    const { getDocs, query, where, collection } = await import('firebase/firestore');
+    const leadsRef = collection(db, 'leads');
+    const q = query(
+      leadsRef,
+      where('archived', '==', true),
+      where('cascadedFrom', '==', companyId)
+    );
+
+    const snapshot = await getDocs(q);
+    const leads: any[] = [];
+    snapshot.forEach(doc => {
+      leads.push({ id: doc.id, ...doc.data() });
+    });
+
+    return leads;
+  } catch (error) {
+    console.error('Error fetching cascaded leads:', error);
+    return [];
   }
 }
 
@@ -577,6 +639,7 @@ export async function unarchiveCompany(companyId: string): Promise<void> {
       archived: false,
       archivedAt: null,
       archivedBy: null,
+      archiveReason: null,
       updatedAt: serverTimestamp(),
     });
     console.log('✅ Company unarchived successfully:', companyId);
@@ -613,6 +676,92 @@ export function subscribeToArchivedCompanies(
       callback([]);
     }
   );
+}
+
+/**
+ * Bulk archive companies
+ * @param companyIds Array of company IDs to archive
+ * @param userId User ID performing the archive
+ * @param reason Optional reason for archiving
+ * @param cascadeToLeads Whether to also archive all associated leads
+ */
+export async function bulkArchiveCompanies(
+  companyIds: string[],
+  userId: string,
+  reason?: string,
+  cascadeToLeads: boolean = false
+): Promise<{ companiesArchived: number; leadsArchived: number }> {
+  try {
+    const BATCH_SIZE = 500;
+
+    // Archive companies in batches
+    for (let i = 0; i < companyIds.length; i += BATCH_SIZE) {
+      const batchCompanyIds = companyIds.slice(i, i + BATCH_SIZE);
+      const batch = writeBatch(db);
+
+      batchCompanyIds.forEach((companyId) => {
+        const companyRef = doc(db, COMPANIES_COLLECTION, companyId);
+        const updateData: any = {
+          archived: true,
+          archivedAt: serverTimestamp(),
+          archivedBy: userId,
+          updatedAt: serverTimestamp(),
+        };
+
+        // Add reason if provided
+        if (reason && reason.trim()) {
+          updateData.archiveReason = reason.trim();
+        }
+
+        batch.update(companyRef, updateData);
+      });
+
+      await batch.commit();
+    }
+
+    console.log('✅ Companies archived successfully:', companyIds.length);
+
+    let totalLeadsArchived = 0;
+
+    // Cascade to leads if requested
+    if (cascadeToLeads) {
+      const { getLeadsByCompanyId, bulkArchiveLeads } = await import('./leads');
+
+      // Get all leads for all companies
+      const allLeads = await Promise.all(
+        companyIds.map(companyId => getLeadsByCompanyId(companyId))
+      );
+
+      // Flatten and filter only active leads
+      const leadsToArchive = allLeads.flat().filter(lead => !lead.archived);
+
+      if (leadsToArchive.length > 0) {
+        // Group leads by company for cascade tracking
+        const leadIdsByCompany = new Map<string, string[]>();
+        leadsToArchive.forEach(lead => {
+          const companyId = lead.companyId || '';
+          if (!leadIdsByCompany.has(companyId)) {
+            leadIdsByCompany.set(companyId, []);
+          }
+          leadIdsByCompany.get(companyId)!.push(lead.id);
+        });
+
+        // Archive leads for each company with cascade metadata
+        const companyLeadEntries = Array.from(leadIdsByCompany.entries());
+        for (const [companyId, leadIds] of companyLeadEntries) {
+          await bulkArchiveLeads(leadIds, userId, reason, companyId);
+          totalLeadsArchived += leadIds.length;
+        }
+
+        console.log(`✅ Cascaded archive to ${totalLeadsArchived} leads`);
+      }
+    }
+
+    return { companiesArchived: companyIds.length, leadsArchived: totalLeadsArchived };
+  } catch (error) {
+    console.error('Error bulk archiving companies:', error);
+    throw new Error('Failed to archive companies');
+  }
 }
 
 /**

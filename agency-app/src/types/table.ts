@@ -33,11 +33,12 @@ export const DEFAULT_LEADS_TABLE_COLUMNS: TableColumnConfig[] = [
 // Companies table columns
 export const DEFAULT_COMPANIES_TABLE_COLUMNS: TableColumnConfig[] = [
   { id: 'name', label: 'Company Name', sortable: true, visible: true, type: 'default', order: 0 },
-  { id: 'website', label: 'Website', sortable: true, visible: true, type: 'default', order: 1 },
-  { id: 'industry', label: 'Industry', sortable: true, visible: true, type: 'default', order: 2 },
-  { id: 'description', label: 'Description', sortable: true, visible: false, type: 'default', order: 3 },
-  { id: 'leadCount', label: 'Leads', sortable: true, visible: true, type: 'default', order: 4 },
-  { id: 'createdAt', label: 'Created', sortable: true, visible: false, type: 'default', order: 5 },
+  { id: 'ratingV2', label: 'Rating V2', sortable: true, visible: true, type: 'default', order: 1 },
+  { id: 'website', label: 'Website', sortable: true, visible: true, type: 'default', order: 2 },
+  { id: 'industry', label: 'Industry', sortable: true, visible: true, type: 'default', order: 3 },
+  { id: 'description', label: 'Description', sortable: true, visible: false, type: 'default', order: 4 },
+  { id: 'leadCount', label: 'Leads', sortable: true, visible: true, type: 'default', order: 5 },
+  { id: 'createdAt', label: 'Created', sortable: true, visible: false, type: 'default', order: 6 },
 ];
 
 // Writing Program table columns

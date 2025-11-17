@@ -64,6 +64,8 @@ export interface Lead {
   archived?: boolean;
   archivedAt?: Date;
   archivedBy?: string; // User ID who archived the lead
+  archiveReason?: string; // Optional reason for archiving
+  cascadedFrom?: string; // Company ID if archived as part of company cascade
 }
 
 // Lead form data (for create/update operations)

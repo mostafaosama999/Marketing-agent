@@ -21,6 +21,10 @@ export interface Company {
   archived?: boolean;
   archivedAt?: Date;
   archivedBy?: string; // User ID who archived the company
+  archiveReason?: string; // Optional reason for archiving
+
+  // Rating V2 - Numeric rating field
+  ratingV2?: number | null;
 
   // Offer/Pitch for lead outreach
   offer?: {
@@ -156,6 +160,7 @@ export interface CompanyFormData {
   website?: string;
   industry?: string;
   description?: string;
+  ratingV2?: number | null;
   customFields?: Record<string, any>;
 }
 
