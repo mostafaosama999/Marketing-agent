@@ -390,18 +390,28 @@ export async function updateCompanyCustomField(
  * @param companyId - The ID of the company to update
  * @param fieldName - The name of the built-in field to update
  * @param value - The new value for the field
+ * @param userId - Optional user ID to track who made the update (used for ratingV2)
  */
 export async function updateCompanyField(
   companyId: string,
   fieldName: string,
-  value: any
+  value: any,
+  userId?: string
 ): Promise<void> {
   try {
     const companyRef = doc(db, COMPANIES_COLLECTION, companyId);
-    await updateDoc(companyRef, {
+    const updateData: any = {
       [fieldName]: value,
       updatedAt: serverTimestamp(),
-    });
+    };
+
+    // Track user who updated ratingV2
+    if (fieldName === 'ratingV2' && userId) {
+      updateData.ratingV2UpdatedBy = userId;
+      updateData.ratingV2UpdatedAt = serverTimestamp();
+    }
+
+    await updateDoc(companyRef, updateData);
   } catch (error) {
     console.error('Error updating company field:', error);
     throw error;

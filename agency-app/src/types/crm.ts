@@ -25,6 +25,8 @@ export interface Company {
 
   // Rating V2 - Numeric rating field
   ratingV2?: number | null;
+  ratingV2UpdatedBy?: string; // User ID who last updated the rating
+  ratingV2UpdatedAt?: Date; // Timestamp when rating was last updated
 
   // Offer/Pitch for lead outreach
   offer?: {

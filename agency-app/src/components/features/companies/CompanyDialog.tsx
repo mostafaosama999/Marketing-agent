@@ -22,15 +22,27 @@ import {
   TableRow,
   Paper,
   Chip,
+  Accordion,
+  AccordionSummary,
+  AccordionDetails,
+  MenuItem,
 } from '@mui/material';
 import {
   LinkedIn as LinkedInIcon,
   Email as EmailIcon,
+  ExpandMore as ExpandMoreIcon,
+  CloudDownload as CloudDownloadIcon,
 } from '@mui/icons-material';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { Company, CompanyFormData } from '../../../types/crm';
 import { createCompany, updateCompany, getCompanies } from '../../../services/api/companies';
 import { subscribeToCompanyLeads, subscribeToCompanyLeadsByName } from '../../../services/api/leads';
 import { Lead } from '../../../types/lead';
+import { FieldDefinition } from '../../../types/fieldDefinitions';
+import { getFieldDefinitions } from '../../../services/api/fieldDefinitionsService';
+import { enrichOrganization } from '../../../services/api/apolloService';
 
 interface CompanyDialogProps {
   open: boolean;
@@ -64,6 +76,14 @@ export const CompanyDialog: React.FC<CompanyDialogProps> = ({
   const [companyLeads, setCompanyLeads] = useState<Lead[]>([]);
   const [leadsLoading, setLeadsLoading] = useState(false);
 
+  // Custom fields state
+  const [fieldDefinitions, setFieldDefinitions] = useState<FieldDefinition[]>([]);
+
+  // Apollo enrichment state
+  const [apolloLoading, setApolloLoading] = useState(false);
+  const [apolloError, setApolloError] = useState<string | null>(null);
+  const [apolloSuccess, setApolloSuccess] = useState<string | null>(null);
+
   const isEditMode = Boolean(company);
 
   // Populate form when company prop changes
@@ -91,6 +111,22 @@ export const CompanyDialog: React.FC<CompanyDialogProps> = ({
       setCompanyLeads([]); // Clear leads
     }
   }, [company, open]);
+
+  // Fetch field definitions when dialog opens
+  useEffect(() => {
+    const fetchFields = async () => {
+      if (open) {
+        try {
+          const definitions = await getFieldDefinitions('company');
+          setFieldDefinitions(definitions);
+        } catch (error) {
+          console.error('Error fetching field definitions:', error);
+        }
+      }
+    };
+
+    fetchFields();
+  }, [open]);
 
   // Subscribe to company leads when in edit mode
   // Try by companyId first, fallback to company name for legacy leads
@@ -137,6 +173,86 @@ export const CompanyDialog: React.FC<CompanyDialogProps> = ({
     setError('');
     setDuplicateWarning('');
   }, []);
+
+  const handleCustomFieldChange = useCallback((fieldName: string, value: any) => {
+    setFormData((prev) => ({
+      ...prev,
+      customFields: {
+        ...prev.customFields,
+        [fieldName]: value,
+      },
+    }));
+  }, []);
+
+  // Handle Apollo company enrichment
+  const handleEnrichCompany = async () => {
+    // Clear previous messages
+    setApolloError(null);
+    setApolloSuccess(null);
+
+    // Validate required fields
+    if (!formData.website) {
+      setApolloError('Website is required for enrichment');
+      return;
+    }
+
+    setApolloLoading(true);
+
+    try {
+      // Normalize website URL
+      let domain = formData.website?.trim();
+      if (domain && !domain.startsWith('http')) {
+        domain = `https://${domain}`;
+      }
+
+      // Extract domain from URL
+      const url = new URL(domain);
+      const cleanDomain = url.hostname.replace('www.', '');
+
+      const result = await enrichOrganization({
+        domain: cleanDomain,
+        companyId: company?.id, // Include company ID if editing
+      });
+
+      if (result.enriched && result.organization) {
+        const org = result.organization;
+
+        // Build description from available fields
+        const descriptionParts: string[] = [];
+        if (org.keywords && org.keywords.length > 0) {
+          descriptionParts.push(`Keywords: ${org.keywords.join(', ')}`);
+        }
+        if (org.estimated_num_employees) {
+          descriptionParts.push(`Employees: ~${org.estimated_num_employees}`);
+        }
+        if (org.founded_year) {
+          descriptionParts.push(`Founded: ${org.founded_year}`);
+        }
+
+        const enrichedDescription = descriptionParts.length > 0
+          ? descriptionParts.join(' | ')
+          : formData.description;
+
+        // Update form data with enriched information
+        setFormData((prev) => ({
+          ...prev,
+          industry: org.industry || prev.industry,
+          description: enrichedDescription || prev.description,
+        }));
+
+        setApolloSuccess(
+          `Company enriched successfully! Found data for ${org.name || formData.name}.`
+        );
+      } else {
+        setApolloError(result.error || 'No company data found');
+      }
+    } catch (error: any) {
+      console.error('Error enriching company:', error);
+      setApolloError(error.message || 'Failed to enrich company. Please try again.');
+    } finally {
+      setApolloLoading(false);
+    }
+  };
 
   const validateForm = (): boolean => {
     if (!formData.name.trim()) {
@@ -371,58 +487,168 @@ export const CompanyDialog: React.FC<CompanyDialogProps> = ({
                 </Alert>
               )}
 
+              {/* Apollo Success/Error Messages */}
+              {apolloSuccess && (
+                <Alert severity="success" sx={{ mb: 3 }} onClose={() => setApolloSuccess(null)}>
+                  {apolloSuccess}
+                </Alert>
+              )}
+              {apolloError && (
+                <Alert severity="error" sx={{ mb: 3 }} onClose={() => setApolloError(null)}>
+                  {apolloError}
+                </Alert>
+              )}
+
+              {/* Apollo Enrichment Button */}
+              <Box sx={{ mb: 3 }}>
+                <Button
+                  variant="outlined"
+                  onClick={handleEnrichCompany}
+                  disabled={apolloLoading || !formData.website}
+                  startIcon={apolloLoading ? <CircularProgress size={16} /> : <CloudDownloadIcon />}
+                  sx={{
+                    textTransform: 'none',
+                    borderColor: '#667eea',
+                    color: '#667eea',
+                    '&:hover': {
+                      borderColor: '#5568d3',
+                      bgcolor: 'rgba(102, 126, 234, 0.04)',
+                    },
+                  }}
+                >
+                  {apolloLoading ? 'Enriching...' : 'Enrich with Apollo.io'}
+                </Button>
+                <Typography variant="caption" color="text.secondary" sx={{ ml: 2 }}>
+                  Fetch company data (requires website URL)
+                </Typography>
+              </Box>
+
               <Grid container spacing={3}>
-              <Grid size={{ xs: 12 }}>
-                <TextField
-                  fullWidth
-                  required
-                  label="Company Name"
-                  value={formData.name}
-                  onChange={handleChange('name')}
-                  disabled={loading}
-                  placeholder="e.g., Acme Corporation"
-                  autoFocus
-                />
+                <Grid size={{ xs: 12 }}>
+                  <TextField
+                    fullWidth
+                    required
+                    label="Company Name"
+                    value={formData.name}
+                    onChange={handleChange('name')}
+                    disabled={loading}
+                    placeholder="e.g., Acme Corporation"
+                    autoFocus
+                  />
+                </Grid>
+
+                <Grid size={{ xs: 12 }}>
+                  <TextField
+                    fullWidth
+                    label="Website"
+                    value={formData.website}
+                    onChange={handleChange('website')}
+                    disabled={loading}
+                    placeholder="e.g., acme.com or https://acme.com"
+                    helperText="Optional - Enter domain name or full URL"
+                  />
+                </Grid>
+
+                <Grid size={{ xs: 12 }}>
+                  <TextField
+                    fullWidth
+                    label="Industry"
+                    value={formData.industry}
+                    onChange={handleChange('industry')}
+                    disabled={loading}
+                    placeholder="e.g., Technology, Healthcare, Finance"
+                    helperText="Optional - Business sector or category"
+                  />
+                </Grid>
+
+                <Grid size={{ xs: 12 }}>
+                  <TextField
+                    fullWidth
+                    multiline
+                    rows={4}
+                    label="Description"
+                    value={formData.description}
+                    onChange={handleChange('description')}
+                    disabled={loading}
+                    placeholder="Optional notes about this company..."
+                    helperText="Optional - Any additional information"
+                  />
+                </Grid>
               </Grid>
 
-              <Grid size={{ xs: 12 }}>
-                <TextField
-                  fullWidth
-                  label="Website"
-                  value={formData.website}
-                  onChange={handleChange('website')}
-                  disabled={loading}
-                  placeholder="e.g., acme.com or https://acme.com"
-                  helperText="Optional - Enter domain name or full URL"
-                />
-              </Grid>
-
-              <Grid size={{ xs: 12 }}>
-                <TextField
-                  fullWidth
-                  label="Industry"
-                  value={formData.industry}
-                  onChange={handleChange('industry')}
-                  disabled={loading}
-                  placeholder="e.g., Technology, Healthcare, Finance"
-                  helperText="Optional - Business sector or category"
-                />
-              </Grid>
-
-              <Grid size={{ xs: 12 }}>
-                <TextField
-                  fullWidth
-                  multiline
-                  rows={4}
-                  label="Description"
-                  value={formData.description}
-                  onChange={handleChange('description')}
-                  disabled={loading}
-                  placeholder="Optional notes about this company..."
-                  helperText="Optional - Any additional information"
-                />
-              </Grid>
-            </Grid>
+              {/* Custom Fields Accordion */}
+              {fieldDefinitions.length > 0 && (
+                <Box sx={{ mt: 3 }}>
+                  <Accordion>
+                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                      <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '16px' }}>
+                        Custom Fields ({fieldDefinitions.length})
+                      </Typography>
+                    </AccordionSummary>
+                    <AccordionDetails>
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        {fieldDefinitions.map(def => (
+                          <Box key={def.id}>
+                            {def.fieldType === 'text' && (
+                              <TextField
+                                label={def.label}
+                                value={formData.customFields?.[def.name] || ''}
+                                onChange={(e) => handleCustomFieldChange(def.name, e.target.value)}
+                                fullWidth
+                                disabled={loading}
+                              />
+                            )}
+                            {def.fieldType === 'number' && (
+                              <TextField
+                                label={def.label}
+                                type="number"
+                                value={formData.customFields?.[def.name] || ''}
+                                onChange={(e) => handleCustomFieldChange(def.name, e.target.value)}
+                                fullWidth
+                                disabled={loading}
+                              />
+                            )}
+                            {def.fieldType === 'date' && (
+                              <LocalizationProvider dateAdapter={AdapterDateFns}>
+                                <DatePicker
+                                  label={def.label}
+                                  value={formData.customFields?.[def.name] ? new Date(formData.customFields[def.name]) : null}
+                                  onChange={(date) => handleCustomFieldChange(def.name, date?.toISOString())}
+                                  disabled={loading}
+                                  slotProps={{
+                                    textField: {
+                                      fullWidth: true,
+                                    },
+                                  }}
+                                />
+                              </LocalizationProvider>
+                            )}
+                            {def.fieldType === 'dropdown' && (
+                              <TextField
+                                select
+                                label={def.label}
+                                value={formData.customFields?.[def.name] || ''}
+                                onChange={(e) => handleCustomFieldChange(def.name, e.target.value)}
+                                fullWidth
+                                disabled={loading}
+                              >
+                                <MenuItem value="">
+                                  <em>None</em>
+                                </MenuItem>
+                                {def.options?.map(option => (
+                                  <MenuItem key={option} value={option}>
+                                    {option}
+                                  </MenuItem>
+                                ))}
+                              </TextField>
+                            )}
+                          </Box>
+                        ))}
+                      </Box>
+                    </AccordionDetails>
+                  </Accordion>
+                </Box>
+              )}
             </Box>
           )}
 

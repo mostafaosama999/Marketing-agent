@@ -47,6 +47,7 @@ import { FieldDefinition } from '../../../types/fieldDefinitions';
 import { getFieldDefinitions } from '../../../services/api/fieldDefinitionsService';
 import { updateCompanyCustomField, updateCompanyField, updateCompany } from '../../../services/api/companies';
 import { bulkFindWritingPrograms, bulkAnalyzeWritingPrograms } from '../../../services/api/bulkWritingProgramService';
+import { useAuth } from '../../../contexts/AuthContext';
 
 interface CompanyTableProps {
   companies: Array<Company & { leadCount: number }>;
@@ -69,6 +70,9 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
   onSelectAll,
   onFindCompetitors,
 }) => {
+  // Get current user for tracking updates
+  const { userProfile } = useAuth();
+
   // Filter to only show visible columns
   const displayColumns = visibleColumns.filter(col => col.visible);
 
@@ -201,7 +205,8 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
         await updateCompanyField(
           selectedCompanyForRating.id,
           'ratingV2',
-          newRating
+          newRating,
+          userProfile?.uid // Pass the current user's ID to track who made the update
         );
       } catch (error) {
         console.error('Error updating rating:', error);
