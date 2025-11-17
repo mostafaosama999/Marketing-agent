@@ -15,6 +15,7 @@ import {
   FileDownload as DownloadIcon,
   Close as CloseIcon,
   ChangeCircle as ChangeCircleIcon,
+  Archive as ArchiveIcon,
 } from '@mui/icons-material';
 import { LeadStatus } from '../../../types/lead';
 import { usePipelineConfigContext } from '../../../contexts/PipelineConfigContext';
@@ -24,6 +25,7 @@ interface BulkActionsToolbarProps {
   onChangeStatus: (status: LeadStatus) => void;
   onEditFields: () => void;
   onExportCSV: () => void;
+  onArchive: () => void;
   onDelete: () => void;
   onClear: () => void;
   isDeleting?: boolean;
@@ -34,6 +36,7 @@ export const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
   onChangeStatus,
   onEditFields,
   onExportCSV,
+  onArchive,
   onDelete,
   onClear,
   isDeleting = false,
@@ -145,6 +148,27 @@ export const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
           }}
         >
           Export CSV
+        </Button>
+
+        {/* Archive */}
+        <Button
+          variant="outlined"
+          startIcon={<ArchiveIcon />}
+          onClick={onArchive}
+          disabled={isDeleting}
+          sx={{
+            color: 'white',
+            borderColor: '#f59e0b',
+            bgcolor: '#f59e0b',
+            textTransform: 'none',
+            fontWeight: 600,
+            '&:hover': {
+              borderColor: '#d97706',
+              bgcolor: '#d97706',
+            },
+          }}
+        >
+          Archive
         </Button>
 
         {/* Delete */}

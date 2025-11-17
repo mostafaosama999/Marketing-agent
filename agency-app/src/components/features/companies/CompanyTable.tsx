@@ -605,7 +605,15 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
 
       case 'website':
         return (
-          <TableCell key={columnId}>
+          <TableCell
+            key={columnId}
+            sx={{
+              maxWidth: '180px',
+              overflow: 'hidden',
+              textOverflow: 'ellipsis',
+              whiteSpace: 'nowrap',
+            }}
+          >
             {company.website ? (
               <Link
                 href={company.website}
@@ -617,6 +625,10 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
                   lineHeight: 1.2,
                   color: '#667eea',
                   textDecoration: 'none',
+                  display: 'block',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
                   '&:hover': {
                     textDecoration: 'underline',
                   },
@@ -888,7 +900,15 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
 
           if (isUrl) {
             return (
-              <TableCell key={columnId}>
+              <TableCell
+                key={columnId}
+                sx={{
+                  maxWidth: '200px',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
+                }}
+              >
                 <Link
                   href={value as string}
                   target="_blank"
@@ -899,6 +919,10 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
                     lineHeight: 1.2,
                     color: '#667eea',
                     textDecoration: 'none',
+                    display: 'block',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap',
                     '&:hover': {
                       textDecoration: 'underline',
                     },
@@ -970,7 +994,7 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
                   align={column.id === 'leadCount' ? 'center' : 'left'}
                   sx={{
                     py: 0,
-                    px: 1,
+                    px: 0.75,
                     fontSize: '10px',
                     fontWeight: column.id === 'ratingV2' ? 700 : 600,
                     color: column.id === 'ratingV2' ? '#667eea' : '#64748b',
@@ -1022,7 +1046,7 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
                 align="right"
                 sx={{
                   py: 0,
-                  px: 1,
+                  px: 0.75,
                   fontSize: '10px',
                   fontWeight: 600,
                   color: '#64748b',
@@ -1067,7 +1091,7 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
                       '& .MuiTableCell-root': {
                         borderBottom: '1px solid #e0e0e0',
                         py: 0,
-                        px: 1,
+                        px: 0.75,
                         height: '32px',
                       },
                     }}

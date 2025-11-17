@@ -19,6 +19,7 @@ import {
   DialogActions,
   DialogContentText,
   CircularProgress,
+  TextField,
 } from '@mui/material';
 import { Add as AddIcon, UploadFile as UploadFileIcon, Archive as ArchiveIcon } from '@mui/icons-material';
 import { serverTimestamp } from 'firebase/firestore';
@@ -52,6 +53,7 @@ import {
   updateLeadStatus,
   deleteLead,
   bulkDeleteLeads,
+  bulkArchiveLeads,
   archiveLead,
   unarchiveLead,
   deleteCustomFieldFromAllLeads,
@@ -132,6 +134,11 @@ function CRMBoard() {
 
   // Bulk edit dialog state
   const [showBulkEditDialog, setShowBulkEditDialog] = useState(false);
+
+  // Bulk archive dialog state
+  const [showBulkArchiveDialog, setShowBulkArchiveDialog] = useState(false);
+  const [bulkArchiveReason, setBulkArchiveReason] = useState('');
+  const [bulkArchiving, setBulkArchiving] = useState(false);
 
   // Bulk delete dialog and loading state
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
@@ -896,6 +903,33 @@ function CRMBoard() {
     }
   };
 
+  // Open bulk archive dialog
+  const handleBulkArchive = () => {
+    if (selectedLeadIds.length === 0) return;
+    setShowBulkArchiveDialog(true);
+  };
+
+  // Confirm and execute bulk archive
+  const confirmBulkArchive = async () => {
+    if (selectedLeadIds.length === 0 || !user) return;
+
+    setBulkArchiving(true);
+
+    try {
+      await bulkArchiveLeads(selectedLeadIds, user.uid, bulkArchiveReason);
+
+      showAlert(`Successfully archived ${selectedLeadIds.length} lead${selectedLeadIds.length > 1 ? 's' : ''}`);
+      setSelectedLeadIds([]);
+      setBulkArchiveReason('');
+      setShowBulkArchiveDialog(false);
+    } catch (error) {
+      console.error('Error archiving leads:', error);
+      showAlert('Failed to archive some leads. Please try again.');
+    } finally {
+      setBulkArchiving(false);
+    }
+  };
+
   // Open bulk delete confirmation dialog
   const handleBulkDelete = () => {
     if (selectedLeadIds.length === 0) return;
@@ -1276,6 +1310,7 @@ function CRMBoard() {
                 onChangeStatus={handleBulkChangeStatus}
                 onEditFields={handleBulkEditFields}
                 onExportCSV={handleBulkExportCSV}
+                onArchive={handleBulkArchive}
                 onDelete={handleBulkDelete}
                 onClear={handleClearSelection}
                 isDeleting={bulkDeleting}
@@ -1389,6 +1424,70 @@ function CRMBoard() {
           onSave={handleBulkEditSave}
           selectedCount={selectedLeadIds.length}
         />
+
+        {/* Bulk Archive Confirmation Dialog */}
+        <Dialog
+          open={showBulkArchiveDialog}
+          onClose={() => {
+            if (!bulkArchiving) {
+              setShowBulkArchiveDialog(false);
+              setBulkArchiveReason('');
+            }
+          }}
+          maxWidth="sm"
+          fullWidth
+        >
+          <DialogTitle sx={{ fontWeight: 700 }}>
+            Archive {selectedLeadIds.length} Lead{selectedLeadIds.length > 1 ? 's' : ''}?
+          </DialogTitle>
+          <DialogContent>
+            <DialogContentText>
+              Are you sure you want to archive {selectedLeadIds.length} lead{selectedLeadIds.length > 1 ? 's' : ''}?
+              They will be hidden from the main list but can be restored later.
+            </DialogContentText>
+            <TextField
+              autoFocus
+              margin="dense"
+              label="Reason (optional)"
+              type="text"
+              fullWidth
+              multiline
+              rows={3}
+              value={bulkArchiveReason}
+              onChange={(e) => setBulkArchiveReason(e.target.value)}
+              disabled={bulkArchiving}
+              placeholder="Enter reason for archiving these leads..."
+              sx={{ mt: 2 }}
+            />
+          </DialogContent>
+          <DialogActions sx={{ px: 3, pb: 3 }}>
+            <Button
+              onClick={() => {
+                setShowBulkArchiveDialog(false);
+                setBulkArchiveReason('');
+              }}
+              disabled={bulkArchiving}
+              sx={{ textTransform: 'none', fontWeight: 600 }}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={confirmBulkArchive}
+              disabled={bulkArchiving}
+              variant="contained"
+              sx={{
+                textTransform: 'none',
+                fontWeight: 600,
+                bgcolor: '#f59e0b',
+                '&:hover': {
+                  bgcolor: '#d97706',
+                },
+              }}
+            >
+              {bulkArchiving ? <CircularProgress size={24} /> : 'Archive'}
+            </Button>
+          </DialogActions>
+        </Dialog>
 
         {/* Bulk Delete Confirmation Dialog */}
         <Dialog
