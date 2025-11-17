@@ -14,6 +14,7 @@ export function getCompanyFilterableFields(companies: Company[]): FilterableFiel
     { name: 'website', label: 'Website', type: 'text', isCustomField: false },
     { name: 'industry', label: 'Industry', type: 'text', isCustomField: false },
     { name: 'description', label: 'Description', type: 'text', isCustomField: false },
+    { name: 'ratingV2', label: 'Rating V2', type: 'number', isCustomField: false },
     { name: 'createdAt', label: 'Created Date', type: 'date', isCustomField: false },
     { name: 'updatedAt', label: 'Updated Date', type: 'date', isCustomField: false },
   ];

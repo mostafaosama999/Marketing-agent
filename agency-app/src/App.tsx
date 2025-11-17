@@ -12,7 +12,7 @@ import GmailCallback from './pages/auth/GmailCallback';
 import TeamManagement from './pages/team/TeamManagement';
 import TeamMemberPerformance from './pages/team/TeamMemberPerformance';
 import ProjectMonitoring from './pages/analytics/ProjectMonitoring';
-import LeadAnalytics from './pages/analytics/LeadAnalytics';
+import AnalyticsPage from './pages/analytics/AnalyticsPage';
 import OutboundAnalytics from './pages/analytics/OutboundAnalytics';
 import InboundGeneration from './pages/analytics/InboundGeneration';
 import CompaniesPage from './pages/companies/CompaniesPage';
@@ -88,7 +88,7 @@ function AppContent() {
           <Route path="/leads/:leadId" element={<LeadDetailPage />} />
           <Route path="/team" element={<TeamManagement />} />
           <Route path="/team-member/:userId" element={<TeamMemberPerformance />} />
-          <Route path="/analytics" element={<LeadAnalytics />} />
+          <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/analytics/outbound" element={<OutboundAnalytics />} />
           <Route path="/inbound-generation" element={<InboundGeneration />} />
           <Route path="/auth/gmail/callback" element={<GmailCallback />} />
