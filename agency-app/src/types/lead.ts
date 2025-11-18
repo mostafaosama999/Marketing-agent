@@ -53,6 +53,10 @@ export interface Lead {
       status: 'not_sent' | 'sent' | 'opened' | 'replied' | 'refused' | 'no_response';
       sentAt?: Date;
       profileUrl?: string;
+      connectionRequest?: {
+        status: 'not_sent' | 'sent' | 'accepted' | 'rejected';
+        sentAt?: Date;
+      };
     };
     email?: {
       status: 'not_sent' | 'sent' | 'opened' | 'replied' | 'bounced' | 'refused' | 'no_response';
@@ -78,9 +82,13 @@ export interface LeadFormData {
   customFields?: Record<string, any>;
   outreach?: {
     linkedIn?: {
-      status: 'not_sent' | 'sent' | 'opened' | 'replied' | 'refused' | 'no_response';
+      status: 'not_sent' | 'sent' | 'sent' | 'opened' | 'replied' | 'refused' | 'no_response';
       sentAt?: Date;
       profileUrl?: string;
+      connectionRequest?: {
+        status: 'not_sent' | 'sent' | 'accepted' | 'rejected';
+        sentAt?: Date;
+      };
     };
     email?: {
       status: 'not_sent' | 'sent' | 'opened' | 'replied' | 'bounced' | 'refused' | 'no_response';

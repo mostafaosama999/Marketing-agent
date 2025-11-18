@@ -1,5 +1,5 @@
 // src/components/features/companies/CompanyDialog.tsx
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -127,6 +127,22 @@ export const CompanyDialog: React.FC<CompanyDialogProps> = ({
 
     fetchFields();
   }, [open]);
+
+  // Filter custom fields by section
+  const generalFields = useMemo(() =>
+    fieldDefinitions.filter(def => def.section === 'general'),
+    [fieldDefinitions]
+  );
+
+  const linkedInFields = useMemo(() =>
+    fieldDefinitions.filter(def => def.section === 'linkedin'),
+    [fieldDefinitions]
+  );
+
+  const emailFields = useMemo(() =>
+    fieldDefinitions.filter(def => def.section === 'email'),
+    [fieldDefinitions]
+  );
 
   // Subscribe to company leads when in edit mode
   // Try by companyId first, fallback to company name for legacy leads
@@ -439,6 +455,71 @@ export const CompanyDialog: React.FC<CompanyDialogProps> = ({
     });
   };
 
+  // Helper function to render custom field inputs
+  const renderCustomField = (def: FieldDefinition) => {
+    switch (def.fieldType) {
+      case 'text':
+        return (
+          <TextField
+            label={def.label}
+            value={formData.customFields?.[def.name] || ''}
+            onChange={(e) => handleCustomFieldChange(def.name, e.target.value)}
+            fullWidth
+            disabled={loading}
+          />
+        );
+      case 'number':
+        return (
+          <TextField
+            label={def.label}
+            type="number"
+            value={formData.customFields?.[def.name] || ''}
+            onChange={(e) => handleCustomFieldChange(def.name, e.target.value)}
+            fullWidth
+            disabled={loading}
+          />
+        );
+      case 'date':
+        return (
+          <LocalizationProvider dateAdapter={AdapterDateFns}>
+            <DatePicker
+              label={def.label}
+              value={formData.customFields?.[def.name] ? new Date(formData.customFields[def.name]) : null}
+              onChange={(date) => handleCustomFieldChange(def.name, date?.toISOString() || '')}
+              disabled={loading}
+              slotProps={{
+                textField: {
+                  fullWidth: true,
+                },
+              }}
+            />
+          </LocalizationProvider>
+        );
+      case 'dropdown':
+        return (
+          <TextField
+            select
+            label={def.label}
+            value={formData.customFields?.[def.name] || ''}
+            onChange={(e) => handleCustomFieldChange(def.name, e.target.value)}
+            fullWidth
+            disabled={loading}
+          >
+            <MenuItem value="">
+              <em>None</em>
+            </MenuItem>
+            {def.options?.map(option => (
+              <MenuItem key={option} value={option}>
+                {option}
+              </MenuItem>
+            ))}
+          </TextField>
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
     <Dialog
       open={open}
@@ -576,77 +657,68 @@ export const CompanyDialog: React.FC<CompanyDialogProps> = ({
                 </Grid>
               </Grid>
 
-              {/* Custom Fields Accordion */}
+              {/* Custom Fields Accordions - Organized by Section */}
               {fieldDefinitions.length > 0 && (
-                <Box sx={{ mt: 3 }}>
-                  <Accordion>
-                    <AccordionSummary expandIcon={<ExpandMoreIcon />}>
-                      <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '16px' }}>
-                        Custom Fields ({fieldDefinitions.length})
-                      </Typography>
-                    </AccordionSummary>
-                    <AccordionDetails>
-                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
-                        {fieldDefinitions.map(def => (
-                          <Box key={def.id}>
-                            {def.fieldType === 'text' && (
-                              <TextField
-                                label={def.label}
-                                value={formData.customFields?.[def.name] || ''}
-                                onChange={(e) => handleCustomFieldChange(def.name, e.target.value)}
-                                fullWidth
-                                disabled={loading}
-                              />
-                            )}
-                            {def.fieldType === 'number' && (
-                              <TextField
-                                label={def.label}
-                                type="number"
-                                value={formData.customFields?.[def.name] || ''}
-                                onChange={(e) => handleCustomFieldChange(def.name, e.target.value)}
-                                fullWidth
-                                disabled={loading}
-                              />
-                            )}
-                            {def.fieldType === 'date' && (
-                              <LocalizationProvider dateAdapter={AdapterDateFns}>
-                                <DatePicker
-                                  label={def.label}
-                                  value={formData.customFields?.[def.name] ? new Date(formData.customFields[def.name]) : null}
-                                  onChange={(date) => handleCustomFieldChange(def.name, date?.toISOString())}
-                                  disabled={loading}
-                                  slotProps={{
-                                    textField: {
-                                      fullWidth: true,
-                                    },
-                                  }}
-                                />
-                              </LocalizationProvider>
-                            )}
-                            {def.fieldType === 'dropdown' && (
-                              <TextField
-                                select
-                                label={def.label}
-                                value={formData.customFields?.[def.name] || ''}
-                                onChange={(e) => handleCustomFieldChange(def.name, e.target.value)}
-                                fullWidth
-                                disabled={loading}
-                              >
-                                <MenuItem value="">
-                                  <em>None</em>
-                                </MenuItem>
-                                {def.options?.map(option => (
-                                  <MenuItem key={option} value={option}>
-                                    {option}
-                                  </MenuItem>
-                                ))}
-                              </TextField>
-                            )}
-                          </Box>
-                        ))}
-                      </Box>
-                    </AccordionDetails>
-                  </Accordion>
+                <Box sx={{ mt: 3, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                  {/* General Information Accordion */}
+                  {generalFields.length > 0 && (
+                    <Accordion>
+                      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                        <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '16px' }}>
+                          General Information ({generalFields.length})
+                        </Typography>
+                      </AccordionSummary>
+                      <AccordionDetails>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          {generalFields.map(def => (
+                            <Box key={def.id}>
+                              {renderCustomField(def)}
+                            </Box>
+                          ))}
+                        </Box>
+                      </AccordionDetails>
+                    </Accordion>
+                  )}
+
+                  {/* LinkedIn Outreach Accordion */}
+                  {linkedInFields.length > 0 && (
+                    <Accordion>
+                      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                        <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '16px' }}>
+                          LinkedIn Outreach ({linkedInFields.length})
+                        </Typography>
+                      </AccordionSummary>
+                      <AccordionDetails>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          {linkedInFields.map(def => (
+                            <Box key={def.id}>
+                              {renderCustomField(def)}
+                            </Box>
+                          ))}
+                        </Box>
+                      </AccordionDetails>
+                    </Accordion>
+                  )}
+
+                  {/* Email Outreach Accordion */}
+                  {emailFields.length > 0 && (
+                    <Accordion>
+                      <AccordionSummary expandIcon={<ExpandMoreIcon />}>
+                        <Typography variant="h6" sx={{ fontWeight: 600, fontSize: '16px' }}>
+                          Email Outreach ({emailFields.length})
+                        </Typography>
+                      </AccordionSummary>
+                      <AccordionDetails>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                          {emailFields.map(def => (
+                            <Box key={def.id}>
+                              {renderCustomField(def)}
+                            </Box>
+                          ))}
+                        </Box>
+                      </AccordionDetails>
+                    </Accordion>
+                  )}
                 </Box>
               )}
             </Box>

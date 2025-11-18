@@ -677,6 +677,10 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
                       onChange={(e) => setLinkedInStatus(e.target.value as any)}
                       label="LinkedIn Status"
                     >
+                      <MenuItem value="">
+                        <em>Clear / Not Set</em>
+                      </MenuItem>
+                      <Divider />
                       <MenuItem value="not_sent">Not Sent</MenuItem>
                       <MenuItem value="sent">Sent</MenuItem>
                       <MenuItem value="opened">Opened</MenuItem>
@@ -764,6 +768,10 @@ export const LeadDialog: React.FC<LeadDialogProps> = ({
                       onChange={(e) => setEmailStatus(e.target.value as any)}
                       label="Email Outreach Status"
                     >
+                      <MenuItem value="">
+                        <em>Clear / Not Set</em>
+                      </MenuItem>
+                      <Divider />
                       <MenuItem value="not_sent">Not Sent</MenuItem>
                       <MenuItem value="sent">Sent</MenuItem>
                       <MenuItem value="opened">Opened</MenuItem>

@@ -83,6 +83,12 @@ function convertToLead(id: string, data: any): Lead {
                 status: data.outreach.linkedIn.status,
                 sentAt: safeToDate(data.outreach.linkedIn.sentAt),
                 profileUrl: data.outreach.linkedIn.profileUrl,
+                connectionRequest: data.outreach.linkedIn.connectionRequest
+                  ? {
+                      status: data.outreach.linkedIn.connectionRequest.status,
+                      sentAt: safeToDate(data.outreach.linkedIn.connectionRequest.sentAt),
+                    }
+                  : undefined,
               }
             : undefined,
           email: data.outreach.email

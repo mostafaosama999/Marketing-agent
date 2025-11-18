@@ -13,7 +13,6 @@ import Grid from '@mui/material/GridLegacy';
 import { BarChart } from '@mui/x-charts/BarChart';
 import {
   Business as BusinessIcon,
-  TrendingUp as TrendingUpIcon,
   Timeline as TimelineIcon,
   Archive as ArchiveIcon,
   Public as PublicIcon,
@@ -190,7 +189,6 @@ const CompanyAnalytics: React.FC = () => {
   // Calculate basic stats
   const totalCompanies = companies.length;
   const totalArchivedCompanies = archivedCompanies.length;
-  const companiesWithWebsite = companies.filter(c => c.website).length;
   const companiesWithIndustry = companies.filter(c => c.industry).length;
   const averageRating = companies.length > 0
     ? (companies.reduce((sum, c) => sum + (c.ratingV2 || 0), 0) / companies.length).toFixed(1)
@@ -246,17 +244,28 @@ const CompanyAnalytics: React.FC = () => {
 
     companies.forEach(company => {
       // Check all possible field name variations
-      const companyType = company.customFields?.['Company Type']
+      const rawType = company.customFields?.['Company Type']
         || company.customFields?.['company_type']
         || company.customFields?.companyType
         || 'Unknown';
-      typeCounts[companyType] = (typeCounts[companyType] || 0) + 1;
+
+      // Normalize to lowercase to merge case variations (e.g., "Not yet" and "Not Yet")
+      let normalizedType = rawType.toString().trim().toLowerCase();
+
+      // Merge "not yet" and "unknown" into one category
+      if (normalizedType === 'not yet' || normalizedType === 'unknown') {
+        normalizedType = 'not yet / unknown';
+      }
+
+      typeCounts[normalizedType] = (typeCounts[normalizedType] || 0) + 1;
     });
 
     // Convert to array and sort by count (descending)
     return Object.entries(typeCounts)
       .map(([type, count]) => ({
-        type,
+        type: type === 'not yet / unknown'
+          ? 'Not yet / Unknown'  // Special case for merged category
+          : type.charAt(0).toUpperCase() + type.slice(1), // Capitalize first letter for display
         count,
       }))
       .sort((a, b) => b.count - a.count);
@@ -341,7 +350,7 @@ const CompanyAnalytics: React.FC = () => {
 
             {/* Stats Cards */}
             <Grid container spacing={3} sx={{ mb: 4 }}>
-              <Grid item xs={12} sm={6} md={3}>
+              <Grid item xs={12} sm={6} md={4}>
                 <StatCard
                   title="Total Companies"
                   value={totalCompanies}
@@ -349,7 +358,7 @@ const CompanyAnalytics: React.FC = () => {
                   color="#667eea"
                 />
               </Grid>
-              <Grid item xs={12} sm={6} md={3}>
+              <Grid item xs={12} sm={6} md={4}>
                 <StatCard
                   title="Archived Companies"
                   value={totalArchivedCompanies}
@@ -357,16 +366,7 @@ const CompanyAnalytics: React.FC = () => {
                   color="#ef4444"
                 />
               </Grid>
-              <Grid item xs={12} sm={6} md={3}>
-                <StatCard
-                  title="With Website"
-                  value={companiesWithWebsite}
-                  icon={<TrendingUpIcon sx={{ fontSize: 24, color: '#10b981' }} />}
-                  color="#10b981"
-                  trend={totalCompanies > 0 ? `${Math.round((companiesWithWebsite / totalCompanies) * 100)}%` : '0%'}
-                />
-              </Grid>
-              <Grid item xs={12} sm={6} md={3}>
+              <Grid item xs={12} sm={6} md={4}>
                 <StatCard
                   title="Avg Rating"
                   value={averageRating}
@@ -526,7 +526,7 @@ const CompanyAnalytics: React.FC = () => {
 
             {/* Distribution Charts - Row 2 */}
             <Grid container spacing={3} sx={{ mb: 4 }}>
-              <Grid item xs={12} md={6}>
+              <Grid item xs={12}>
                 {/* Company Type Distribution Chart */}
                 <Card
                   sx={{
@@ -563,6 +563,7 @@ const CompanyAnalytics: React.FC = () => {
                           dataKey: 'type',
                           scaleType: 'band',
                           label: 'Company Type',
+                          tickLabelInterval: () => true,
                         }]}
                         yAxis={[{ label: 'Number of Companies' }]}
                         series={[
@@ -573,7 +574,7 @@ const CompanyAnalytics: React.FC = () => {
                             valueFormatter: (value) => value?.toString() || '0',
                           },
                         ]}
-                        margin={{ left: 80, right: 20, top: 20, bottom: 150 }}
+                        margin={{ left: 80, right: 20, top: 20, bottom: 100 }}
                         grid={{ vertical: true, horizontal: true }}
                         onItemClick={handleCompanyTypeClick}
                         sx={{
@@ -587,7 +588,7 @@ const CompanyAnalytics: React.FC = () => {
                           '& .MuiChartsAxis-tickLabel': {
                             fill: '#475569',
                             fontWeight: 500,
-                            fontSize: '12px',
+                            fontSize: '11px',
                           },
                           '& .MuiBarElement-root': {
                             cursor: 'pointer',

@@ -1,5 +1,5 @@
 // src/pages/leads/LeadDetailPage.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom';
 import {
   Box,
@@ -41,9 +41,13 @@ import {
   ContentCopy as CopyIcon,
   Check as CheckIcon,
 } from '@mui/icons-material';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { Lead, LeadFormData, LeadStatusChange } from '../../types/lead';
 import { getLead, updateLead, deleteLead, archiveLead, unarchiveLead } from '../../services/api/leads';
 import { leadTimelineService } from '../../services/api/leadSubcollections';
+import { Timestamp } from 'firebase/firestore';
 import { useAuth } from '../../contexts/AuthContext';
 import { usePipelineConfigContext } from '../../contexts/PipelineConfigContext';
 import { fetchEmail } from '../../services/api/apolloService';
@@ -54,6 +58,8 @@ import { Company } from '../../types/crm';
 import { getSettings } from '../../services/api/settings';
 import { replaceTemplateVariables } from '../../services/api/templateVariablesService';
 import { SafeHtmlRenderer, copyHtmlToClipboard } from '../../utils/htmlHelpers';
+import { FieldDefinition } from '../../types/fieldDefinitions';
+import { getFieldDefinitions } from '../../services/api/fieldDefinitionsService';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -110,6 +116,9 @@ export const LeadDetailPage: React.FC = () => {
   // Company state (for fetching offer)
   const [company, setCompany] = useState<Company | null>(null);
 
+  // Field definitions state
+  const [fieldDefinitions, setFieldDefinitions] = useState<FieldDefinition[]>([]);
+
   // Form state
   const [formData, setFormData] = useState<LeadFormData>({
     name: '',
@@ -123,6 +132,7 @@ export const LeadDetailPage: React.FC = () => {
   // Outreach tracking state
   const [linkedInStatus, setLinkedInStatus] = useState<'not_sent' | 'sent' | 'opened' | 'replied' | 'refused' | 'no_response'>('not_sent');
   const [linkedInProfileUrl, setLinkedInProfileUrl] = useState('');
+  const [connectionRequestStatus, setConnectionRequestStatus] = useState<'not_sent' | 'sent' | 'accepted' | 'rejected'>('not_sent');
   const [emailStatus, setEmailStatus] = useState<'not_sent' | 'sent' | 'opened' | 'replied' | 'bounced' | 'refused' | 'no_response'>('not_sent');
 
   // Offer template state (fetched from global settings)
@@ -180,9 +190,11 @@ export const LeadDetailPage: React.FC = () => {
         if (leadData.outreach?.linkedIn) {
           setLinkedInStatus(leadData.outreach.linkedIn.status);
           setLinkedInProfileUrl(leadData.outreach.linkedIn.profileUrl || '');
+          setConnectionRequestStatus(leadData.outreach.linkedIn.connectionRequest?.status || 'not_sent');
         } else {
           setLinkedInStatus('not_sent');
           setLinkedInProfileUrl('');
+          setConnectionRequestStatus('not_sent');
         }
 
         if (leadData.outreach?.email) {
@@ -248,6 +260,61 @@ export const LeadDetailPage: React.FC = () => {
     loadTemplate();
   }, []);
 
+  // Fetch field definitions
+  useEffect(() => {
+    const fetchFields = async () => {
+      try {
+        const definitions = await getFieldDefinitions('lead');
+        setFieldDefinitions(definitions);
+      } catch (error) {
+        console.error('Error fetching field definitions:', error);
+      }
+    };
+
+    fetchFields();
+  }, []);
+
+  // Filter field definitions by section
+  const generalFields = useMemo(() =>
+    fieldDefinitions.filter(def => def.section === 'general'),
+    [fieldDefinitions]
+  );
+
+  const linkedInFields = useMemo(() =>
+    fieldDefinitions.filter(def => def.section === 'linkedin'),
+    [fieldDefinitions]
+  );
+
+  const emailFields = useMemo(() =>
+    fieldDefinitions.filter(def => def.section === 'email'),
+    [fieldDefinitions]
+  );
+
+  // Merge field definitions with actual custom field keys to show all fields (like table does)
+  const allGeneralCustomFields = useMemo(() => {
+    // Get field names from definitions
+    const definedFieldNames = new Set(generalFields.map(def => def.name));
+
+    // Get all custom field keys from formData, excluding linkedin/email prefixed fields
+    const actualFieldNames = Object.keys(formData.customFields || {})
+      .filter(key => !key.startsWith('linkedin_') && !key.startsWith('email_'));
+
+    // Create entries for fields that exist in data but not in definitions
+    const undefinedFields = actualFieldNames
+      .filter(name => !definedFieldNames.has(name))
+      .map(name => ({
+        id: `auto_${name}`,
+        name,
+        label: name.split('_').map(word => word.charAt(0).toUpperCase() + word.slice(1)).join(' '),
+        fieldType: 'text' as const,
+        section: 'general' as const,
+        entityType: 'lead' as const,
+      }));
+
+    // Combine defined fields and undefined fields
+    return [...generalFields, ...undefinedFields];
+  }, [generalFields, formData.customFields]);
+
   const handleChange = (field: keyof LeadFormData, value: any) => {
     setFormData((prev) => ({
       ...prev,
@@ -266,6 +333,71 @@ export const LeadDetailPage: React.FC = () => {
       return 'email';
     }
     return null;
+  };
+
+  // Helper function to render custom field inputs
+  const renderCustomField = (def: FieldDefinition) => {
+    switch (def.fieldType) {
+      case 'text':
+        return (
+          <TextField
+            label={def.label}
+            value={formData.customFields?.[def.name] || ''}
+            onChange={(e) => handleCustomFieldChange(def.name, e.target.value)}
+            fullWidth
+            disabled={saving}
+          />
+        );
+      case 'number':
+        return (
+          <TextField
+            label={def.label}
+            type="number"
+            value={formData.customFields?.[def.name] || ''}
+            onChange={(e) => handleCustomFieldChange(def.name, e.target.value)}
+            fullWidth
+            disabled={saving}
+          />
+        );
+      case 'date':
+        return (
+          <LocalizationProvider dateAdapter={AdapterDateFns}>
+            <DatePicker
+              label={def.label}
+              value={formData.customFields?.[def.name] ? new Date(formData.customFields[def.name]) : null}
+              onChange={(date) => handleCustomFieldChange(def.name, date?.toISOString() || '')}
+              disabled={saving}
+              slotProps={{
+                textField: {
+                  fullWidth: true,
+                },
+              }}
+            />
+          </LocalizationProvider>
+        );
+      case 'dropdown':
+        return (
+          <TextField
+            select
+            label={def.label}
+            value={formData.customFields?.[def.name] || ''}
+            onChange={(e) => handleCustomFieldChange(def.name, e.target.value)}
+            fullWidth
+            disabled={saving}
+          >
+            <MenuItem value="">
+              <em>None</em>
+            </MenuItem>
+            {def.options?.map(option => (
+              <MenuItem key={option} value={option}>
+                {option}
+              </MenuItem>
+            ))}
+          </TextField>
+        );
+      default:
+        return null;
+    }
   };
 
   // Handler for custom field changes with auto-status detection
@@ -336,7 +468,7 @@ export const LeadDetailPage: React.FC = () => {
       const outreachData: any = {};
 
       // Add LinkedIn data if status is not 'not_sent' or if profileUrl is filled
-      if (finalLinkedInStatus !== 'not_sent' || linkedInProfileUrl) {
+      if (finalLinkedInStatus !== 'not_sent' || linkedInProfileUrl || connectionRequestStatus !== 'not_sent') {
         outreachData.linkedIn = {
           status: finalLinkedInStatus,
         };
@@ -348,15 +480,41 @@ export const LeadDetailPage: React.FC = () => {
         if (finalLinkedInStatus !== 'not_sent') {
           // If there's already a sentAt, preserve it; otherwise set current date
           if (previousSentAt) {
-            outreachData.linkedIn.sentAt = previousSentAt;
+            outreachData.linkedIn.sentAt = Timestamp.fromDate(previousSentAt instanceof Date ? previousSentAt : new Date(previousSentAt));
           } else if (previousLinkedInStatus === 'not_sent') {
             // Status just changed from 'not_sent', set current date
-            outreachData.linkedIn.sentAt = new Date();
+            outreachData.linkedIn.sentAt = Timestamp.now();
           }
         }
 
         if (linkedInProfileUrl?.trim()) {
           outreachData.linkedIn.profileUrl = linkedInProfileUrl.trim();
+        }
+
+        // Add connection request data if status is not 'not_sent'
+        console.log('[DEBUG SAVE] Connection request status:', connectionRequestStatus);
+        if (connectionRequestStatus !== 'not_sent') {
+          const previousConnectionStatus = lead?.outreach?.linkedIn?.connectionRequest?.status || 'not_sent';
+          const previousConnectionSentAt = lead?.outreach?.linkedIn?.connectionRequest?.sentAt;
+          console.log('[DEBUG SAVE] Previous connection status:', previousConnectionStatus);
+          console.log('[DEBUG SAVE] Previous connection sentAt:', previousConnectionSentAt);
+
+          outreachData.linkedIn.connectionRequest = {
+            status: connectionRequestStatus,
+          };
+
+          // Auto-set sentAt if status changed from 'not_sent' to 'sent'
+          if (previousConnectionSentAt) {
+            const timestampDate = Timestamp.fromDate(previousConnectionSentAt instanceof Date ? previousConnectionSentAt : new Date(previousConnectionSentAt));
+            outreachData.linkedIn.connectionRequest.sentAt = timestampDate;
+            console.log('[DEBUG SAVE] Preserving existing sentAt as Timestamp:', timestampDate);
+          } else if (previousConnectionStatus === 'not_sent') {
+            // Status just changed from 'not_sent', set current date
+            const newTimestamp = Timestamp.now();
+            outreachData.linkedIn.connectionRequest.sentAt = newTimestamp;
+            console.log('[DEBUG SAVE] Setting NEW sentAt as Timestamp (status changed from not_sent):', newTimestamp.toDate());
+          }
+          console.log('[DEBUG SAVE] Final connectionRequest object:', outreachData.linkedIn.connectionRequest);
         }
       }
 
@@ -372,10 +530,10 @@ export const LeadDetailPage: React.FC = () => {
 
         // If there's already a sentAt, preserve it; otherwise set current date
         if (previousSentAt) {
-          outreachData.email.sentAt = previousSentAt;
+          outreachData.email.sentAt = Timestamp.fromDate(previousSentAt instanceof Date ? previousSentAt : new Date(previousSentAt));
         } else if (previousEmailStatus === 'not_sent') {
           // Status just changed from 'not_sent', set current date
-          outreachData.email.sentAt = new Date();
+          outreachData.email.sentAt = Timestamp.now();
         }
       }
 
@@ -388,7 +546,34 @@ export const LeadDetailPage: React.FC = () => {
         dataToSave.outreach = outreachData;
       }
 
+      console.log('[DEBUG SAVE] Complete outreachData being saved:', JSON.stringify(outreachData, null, 2));
+      console.log('[DEBUG SAVE] Complete dataToSave:', JSON.stringify(dataToSave, null, 2));
+
       await updateLead(lead.id, dataToSave);
+      console.log('[DEBUG SAVE] Lead updated successfully, ID:', lead.id);
+
+      // Verify the save by fetching the lead again
+      setTimeout(async () => {
+        try {
+          const verifyLead = await getLead(lead.id);
+          if (verifyLead) {
+            console.log('[DEBUG VERIFY] Lead after save:', {
+              id: verifyLead.id,
+              name: verifyLead.name,
+              hasOutreach: !!verifyLead.outreach,
+              hasLinkedIn: !!verifyLead.outreach?.linkedIn,
+              linkedInStatus: verifyLead.outreach?.linkedIn?.status,
+              hasConnectionRequest: !!verifyLead.outreach?.linkedIn?.connectionRequest,
+              connectionRequestStatus: verifyLead.outreach?.linkedIn?.connectionRequest?.status,
+              connectionRequestSentAt: verifyLead.outreach?.linkedIn?.connectionRequest?.sentAt,
+            });
+          } else {
+            console.error('[DEBUG VERIFY] Lead not found after save');
+          }
+        } catch (e) {
+          console.error('[DEBUG VERIFY] Failed to verify lead:', e);
+        }
+      }, 1000);
 
       // Update local state (including auto-set statuses)
       setLead({ ...lead, ...dataToSave });
@@ -1023,8 +1208,8 @@ export const LeadDetailPage: React.FC = () => {
                 ))}
               </TextField>
 
-              {/* Custom Fields Section - Exclude LinkedIn/Email fields (they appear in Outreach tab) */}
-              {formData.customFields && Object.keys(formData.customFields).filter(key => !key.startsWith('linkedin_') && !key.startsWith('email_')).length > 0 && (
+              {/* Custom Fields Section - Show all custom fields (definitions + actual data) */}
+              {allGeneralCustomFields.length > 0 && (
                 <>
                   <Box sx={{ borderTop: '1px solid', borderColor: 'divider', pt: 2, mt: 1 }}>
                     <Typography
@@ -1039,63 +1224,63 @@ export const LeadDetailPage: React.FC = () => {
                     </Typography>
                   </Box>
 
-                  {Object.keys(formData.customFields)
-                    .filter((key) => !key.startsWith('linkedin_') && !key.startsWith('email_'))
-                    .sort()
-                    .map((fieldName) => {
-                    const fieldLabel = fieldName
-                      .split('_')
-                      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-                      .join(' ');
-
-                    const fieldValue = formData.customFields?.[fieldName] ?? '';
-
-                    // Determine field type based on field name
-                    const isNumberField = fieldName.toLowerCase().includes('rating') ||
-                                         fieldName.toLowerCase().includes('count') ||
-                                         fieldName.toLowerCase().includes('score') ||
-                                         fieldName.toLowerCase().includes('value');
-
-                    const isUrlField = fieldName.toLowerCase().includes('link') ||
-                                      fieldName.toLowerCase().includes('url') ||
-                                      fieldName.toLowerCase().includes('website');
-
-                    return (
-                      <TextField
-                        key={fieldName}
-                        fullWidth
-                        label={fieldLabel}
-                        value={fieldValue}
-                        onChange={(e) => {
-                          const value = isNumberField ? e.target.value.replace(/[^0-9]/g, '') : e.target.value;
-                          setFormData({
-                            ...formData,
-                            customFields: {
-                              ...formData.customFields,
-                              [fieldName]: value,
-                            },
-                          });
-                        }}
-                        disabled={saving}
-                        type={isNumberField ? 'number' : 'text'}
-                        placeholder={
-                          isNumberField
-                            ? 'Enter a number'
-                            : isUrlField
-                            ? 'https://example.com'
-                            : `Enter ${fieldLabel.toLowerCase()}`
-                        }
-                        helperText={
-                          isUrlField
-                            ? 'URL to the resource'
-                            : isNumberField
-                            ? 'Numeric value'
-                            : undefined
-                        }
-                        sx={{ mb: 2 }}
-                      />
-                    );
-                  })}
+                  {allGeneralCustomFields.map(def => (
+                    <Box key={def.id} sx={{ mb: 2 }}>
+                      {def.fieldType === 'text' && (
+                        <TextField
+                          label={def.label}
+                          value={formData.customFields?.[def.name] || ''}
+                          onChange={(e) => handleCustomFieldChange(def.name, e.target.value)}
+                          fullWidth
+                          disabled={saving}
+                        />
+                      )}
+                      {def.fieldType === 'number' && (
+                        <TextField
+                          label={def.label}
+                          type="number"
+                          value={formData.customFields?.[def.name] || ''}
+                          onChange={(e) => handleCustomFieldChange(def.name, e.target.value)}
+                          fullWidth
+                          disabled={saving}
+                        />
+                      )}
+                      {def.fieldType === 'date' && (
+                        <LocalizationProvider dateAdapter={AdapterDateFns}>
+                          <DatePicker
+                            label={def.label}
+                            value={formData.customFields?.[def.name] ? new Date(formData.customFields[def.name]) : null}
+                            onChange={(date) => handleCustomFieldChange(def.name, date?.toISOString() || '')}
+                            disabled={saving}
+                            slotProps={{
+                              textField: {
+                                fullWidth: true,
+                              },
+                            }}
+                          />
+                        </LocalizationProvider>
+                      )}
+                      {def.fieldType === 'dropdown' && (
+                        <TextField
+                          select
+                          label={def.label}
+                          value={formData.customFields?.[def.name] || ''}
+                          onChange={(e) => handleCustomFieldChange(def.name, e.target.value)}
+                          fullWidth
+                          disabled={saving}
+                        >
+                          <MenuItem value="">
+                            <em>None</em>
+                          </MenuItem>
+                          {def.options?.map(option => (
+                            <MenuItem key={option} value={option}>
+                              {option}
+                            </MenuItem>
+                          ))}
+                        </TextField>
+                      )}
+                    </Box>
+                  ))}
                 </>
               )}
 
@@ -1245,6 +1430,10 @@ export const LeadDetailPage: React.FC = () => {
                         label="Status"
                         disabled={saving}
                       >
+                        <MenuItem value="">
+                          <em>Clear / Not Set</em>
+                        </MenuItem>
+                        <Divider />
                         <MenuItem value="not_sent">Not Sent</MenuItem>
                         <MenuItem value="sent">Sent</MenuItem>
                         <MenuItem value="opened">Opened</MenuItem>
@@ -1264,6 +1453,27 @@ export const LeadDetailPage: React.FC = () => {
                       placeholder="https://linkedin.com/in/..."
                       disabled={saving}
                     />
+                  </Grid>
+
+                  <Grid size={{ xs: 12 }}>
+                    <FormControl fullWidth>
+                      <InputLabel>Connection Request Status</InputLabel>
+                      <Select
+                        value={connectionRequestStatus}
+                        onChange={(e) => setConnectionRequestStatus(e.target.value as any)}
+                        label="Connection Request Status"
+                        disabled={saving}
+                      >
+                        <MenuItem value="">
+                          <em>Clear / Not Set</em>
+                        </MenuItem>
+                        <Divider />
+                        <MenuItem value="not_sent">Not Sent</MenuItem>
+                        <MenuItem value="sent">Sent</MenuItem>
+                        <MenuItem value="accepted">Accepted</MenuItem>
+                        <MenuItem value="rejected">Rejected</MenuItem>
+                      </Select>
+                    </FormControl>
                   </Grid>
 
                   {/* LinkedIn Custom Fields from CSV Import */}
@@ -1288,6 +1498,13 @@ export const LeadDetailPage: React.FC = () => {
                         </Grid>
                       );
                     })}
+
+                  {/* LinkedIn Custom Fields from Field Definitions */}
+                  {linkedInFields.map(def => (
+                    <Grid size={{ xs: 12 }} key={def.id}>
+                      {renderCustomField(def)}
+                    </Grid>
+                  ))}
                 </Grid>
               </Box>
 
@@ -1312,6 +1529,10 @@ export const LeadDetailPage: React.FC = () => {
                         label="Status"
                         disabled={saving}
                       >
+                        <MenuItem value="">
+                          <em>Clear / Not Set</em>
+                        </MenuItem>
+                        <Divider />
                         <MenuItem value="not_sent">Not Sent</MenuItem>
                         <MenuItem value="sent">Sent</MenuItem>
                         <MenuItem value="opened">Opened</MenuItem>
@@ -1345,6 +1566,13 @@ export const LeadDetailPage: React.FC = () => {
                         </Grid>
                       );
                     })}
+
+                  {/* Email Custom Fields from Field Definitions */}
+                  {emailFields.map(def => (
+                    <Grid size={{ xs: 12 }} key={def.id}>
+                      {renderCustomField(def)}
+                    </Grid>
+                  ))}
                 </Grid>
               </Box>
             </Box>

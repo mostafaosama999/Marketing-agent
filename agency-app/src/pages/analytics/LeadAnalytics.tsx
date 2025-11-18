@@ -170,6 +170,43 @@ const LeadAnalytics: React.FC = () => {
     return null;
   };
 
+  // Helper: Get LinkedIn connection request date from custom fields or outreach object
+  const getConnectionRequestDate = (lead: Lead): Date | null => {
+    console.log('[DEBUG] Checking connection request date for lead:', lead.name, lead.id);
+
+    // Check custom fields first (linkedin_connection_request_date)
+    if (lead.customFields?.linkedin_connection_request_date) {
+      console.log('[DEBUG] Found custom field linkedin_connection_request_date:', lead.customFields.linkedin_connection_request_date);
+      try {
+        const date = new Date(lead.customFields.linkedin_connection_request_date);
+        console.log('[DEBUG] Parsed custom field date:', date);
+        return date;
+      } catch (e) {
+        console.warn('Invalid connection request date in custom fields:', lead.customFields.linkedin_connection_request_date);
+      }
+    }
+
+    // Fall back to outreach.linkedIn.connectionRequest.sentAt
+    console.log('[DEBUG] Checking outreach object:', {
+      hasOutreach: !!lead.outreach,
+      hasLinkedIn: !!lead.outreach?.linkedIn,
+      hasConnectionRequest: !!lead.outreach?.linkedIn?.connectionRequest,
+      connectionRequestStatus: lead.outreach?.linkedIn?.connectionRequest?.status,
+      connectionRequestSentAt: lead.outreach?.linkedIn?.connectionRequest?.sentAt,
+    });
+
+    if (lead.outreach?.linkedIn?.connectionRequest?.sentAt) {
+      const date = lead.outreach.linkedIn.connectionRequest.sentAt instanceof Date
+        ? lead.outreach.linkedIn.connectionRequest.sentAt
+        : new Date(lead.outreach.linkedIn.connectionRequest.sentAt);
+      console.log('[DEBUG] Found connection request sentAt:', date);
+      return date;
+    }
+
+    console.log('[DEBUG] No connection request date found for lead:', lead.name);
+    return null;
+  };
+
   // Helper: Check if lead has LinkedIn response
   const hasLinkedInResponse = (lead: Lead): boolean => {
     if (lead.customFields?.linkedin_lead_response) {
@@ -344,6 +381,7 @@ const LeadAnalytics: React.FC = () => {
   const outreachActivityData = useMemo(() => {
     const dailyLinkedIn: { [date: string]: number } = {};
     const dailyEmail: { [date: string]: number } = {};
+    const dailyConnection: { [date: string]: number } = {};
 
     // For 'all time', use a date far in the past
     const cutoffDate = outreachDayRange === 'all'
@@ -385,6 +423,26 @@ const LeadAnalytics: React.FC = () => {
       }
     });
 
+    // Aggregate LinkedIn connection requests by day
+    console.log('[DEBUG] Starting connection request aggregation, total leads:', leads.length);
+    let connectionCount = 0;
+    leads.forEach(lead => {
+      const connectionDate = getConnectionRequestDate(lead);
+      if (connectionDate && connectionDate >= cutoffDate) {
+        connectionCount++;
+        const dateStr = getDateString(connectionDate);
+        dailyConnection[dateStr] = (dailyConnection[dateStr] || 0) + 1;
+        console.log('[DEBUG] Adding connection for lead:', lead.name, 'Date:', connectionDate, 'DateStr:', dateStr, 'Count:', dailyConnection[dateStr]);
+
+        // Track earliest date
+        if (!earliestDate || connectionDate < earliestDate) {
+          earliestDate = connectionDate;
+        }
+      }
+    });
+    console.log('[DEBUG] Total connection requests found:', connectionCount);
+    console.log('[DEBUG] dailyConnection aggregation:', dailyConnection);
+
     // Generate array of dates for the selected range
     const dates: string[] = [];
     const today = new Date();
@@ -408,11 +466,14 @@ const LeadAnalytics: React.FC = () => {
       }
     }
 
-    return dates.map(date => ({
+    const result = dates.map(date => ({
       label: formatDateLabel(date),
       linkedIn: dailyLinkedIn[date] || 0,
       email: dailyEmail[date] || 0,
+      connection: dailyConnection[date] || 0,
     }));
+    console.log('[DEBUG] Final outreachActivityData:', result);
+    return result;
   }, [leads, outreachDayRange]);
 
   return (
@@ -770,7 +831,7 @@ const LeadAnalytics: React.FC = () => {
                     Daily Outreach Activity
                   </Typography>
                   <Typography variant="body2" sx={{ color: '#64748b', mb: 4 }}>
-                    LinkedIn and email outreach trends{outreachDayRange === 'all' ? ' (all time)' : ` over the last ${outreachDayRange} days`}
+                    LinkedIn, email, and connection request trends{outreachDayRange === 'all' ? ' (all time)' : ` over the last ${outreachDayRange} days`}
                   </Typography>
 
                   <Box sx={{ height: 400 }}>
@@ -781,7 +842,7 @@ const LeadAnalytics: React.FC = () => {
                       series={[
                         {
                           dataKey: 'linkedIn',
-                          label: 'LinkedIn',
+                          label: 'LinkedIn Outreach',
                           color: '#0077b5',
                           curve: 'monotoneX',
                         },
@@ -789,6 +850,12 @@ const LeadAnalytics: React.FC = () => {
                           dataKey: 'email',
                           label: 'Email',
                           color: '#ea4335',
+                          curve: 'monotoneX',
+                        },
+                        {
+                          dataKey: 'connection',
+                          label: 'LinkedIn Connections',
+                          color: '#667eea',
                           curve: 'monotoneX',
                         },
                       ]}

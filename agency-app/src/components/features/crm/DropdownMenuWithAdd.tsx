@@ -147,6 +147,21 @@ export const DropdownMenuWithAdd: React.FC<DropdownMenuWithAddProps> = ({
 
   return (
     <>
+      {/* Clear option */}
+      <MenuItem
+        onClick={() => onSelect('')}
+        sx={{
+          fontStyle: 'italic',
+          color: 'text.secondary',
+          fontSize: '14px',
+        }}
+      >
+        <em>Clear / Not Set</em>
+      </MenuItem>
+
+      {/* Divider after clear option */}
+      {options.length > 0 && <Divider sx={{ my: 0.5 }} />}
+
       {/* Render existing options */}
       {options.map((option) => (
         <DropdownFieldManager

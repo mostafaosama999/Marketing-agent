@@ -1,5 +1,5 @@
 // src/pages/companies/CompanyDetailPage.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useParams, useNavigate, useLocation, useSearchParams, Link } from 'react-router-dom';
 import {
   Box,
@@ -28,6 +28,7 @@ import {
   Snackbar,
   Checkbox,
   FormControlLabel,
+  MenuItem,
 } from '@mui/material';
 import {
   ArrowBack as ArrowBackIcon,
@@ -40,6 +41,9 @@ import {
   Search as SearchIcon,
   CompareArrows as CompareArrowsIcon,
 } from '@mui/icons-material';
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
+import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { Company, CompanyFormData } from '../../types/crm';
 import { getStatusLabel, getStatusColor } from '../../components/features/companies/CompanyStatusBadge';
 import {
@@ -75,6 +79,8 @@ import {
   getBlogUrlFieldMapping,
 } from '../../services/api/blogUrlFieldMappingService';
 import { useAuth } from '../../contexts/AuthContext';
+import { FieldDefinition } from '../../types/fieldDefinitions';
+import { getFieldDefinitions } from '../../services/api/fieldDefinitionsService';
 
 export const CompanyDetailPage: React.FC = () => {
   const { companyId } = useParams<{ companyId: string }>();
@@ -90,6 +96,9 @@ export const CompanyDetailPage: React.FC = () => {
   const [error, setError] = useState('');
   const [duplicateWarning, setDuplicateWarning] = useState('');
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+
+  // Field definitions state
+  const [fieldDefinitions, setFieldDefinitions] = useState<FieldDefinition[]>([]);
 
   // Form data
   const [formData, setFormData] = useState<CompanyFormData>({
@@ -232,6 +241,20 @@ export const CompanyDetailPage: React.FC = () => {
     loadCompanies();
   }, []);
 
+  // Fetch field definitions
+  useEffect(() => {
+    const fetchFields = async () => {
+      try {
+        const definitions = await getFieldDefinitions('company');
+        setFieldDefinitions(definitions);
+      } catch (error) {
+        console.error('Error fetching field definitions:', error);
+      }
+    };
+
+    fetchFields();
+  }, []);
+
   // Detect unsaved changes
   useEffect(() => {
     if (!company) return;
@@ -284,6 +307,12 @@ export const CompanyDetailPage: React.FC = () => {
     };
   }, [company]);
 
+  // Filter field definitions for company entity type
+  const companyFields = useMemo(() =>
+    fieldDefinitions.filter(def => def.entityType === 'company'),
+    [fieldDefinitions]
+  );
+
   const handleChange = (field: keyof CompanyFormData) => (
     event: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => {
@@ -293,6 +322,16 @@ export const CompanyDetailPage: React.FC = () => {
     }));
     setError('');
     setDuplicateWarning('');
+  };
+
+  const handleCustomFieldChange = (fieldName: string, value: any) => {
+    setFormData((prev) => ({
+      ...prev,
+      customFields: {
+        ...prev.customFields,
+        [fieldName]: value,
+      },
+    }));
   };
 
   const validateForm = (): boolean => {
@@ -1243,8 +1282,8 @@ export const CompanyDetailPage: React.FC = () => {
                 />
               </Grid>
 
-              {/* Custom Fields Section */}
-              {formData.customFields && Object.keys(formData.customFields).length > 0 && (
+              {/* Custom Fields Section - Show if field definitions exist */}
+              {companyFields.length > 0 && (
                 <>
                   <Grid size={{ xs: 12 }}>
                     <Box sx={{ borderTop: '1px solid', borderColor: 'divider', pt: 2, mt: 1 }}>
@@ -1261,59 +1300,63 @@ export const CompanyDetailPage: React.FC = () => {
                     </Box>
                   </Grid>
 
-                  {Object.keys(formData.customFields).sort().map((fieldName) => {
-                    const fieldLabel = fieldName
-                      .split('_')
-                      .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
-                      .join(' ');
-
-                    const fieldValue = formData.customFields?.[fieldName] ?? '';
-
-                    // Determine field type based on field name
-                    const isNumberField = fieldName.toLowerCase().includes('rating') ||
-                                         fieldName.toLowerCase().includes('count') ||
-                                         fieldName.toLowerCase().includes('score');
-
-                    const isUrlField = fieldName.toLowerCase().includes('link') ||
-                                      fieldName.toLowerCase().includes('url') ||
-                                      fieldName.toLowerCase().includes('website');
-
-                    return (
-                      <Grid size={{ xs: 12, md: isUrlField ? 12 : 6 }} key={fieldName}>
+                  {companyFields.map(def => (
+                    <Grid size={{ xs: 12, md: 6 }} key={def.id}>
+                      {def.fieldType === 'text' && (
                         <TextField
+                          label={def.label}
+                          value={formData.customFields?.[def.name] || ''}
+                          onChange={(e) => handleCustomFieldChange(def.name, e.target.value)}
                           fullWidth
-                          label={fieldLabel}
-                          value={fieldValue}
-                          onChange={(e) => {
-                            const value = isNumberField ? e.target.value.replace(/[^0-9]/g, '') : e.target.value;
-                            setFormData({
-                              ...formData,
-                              customFields: {
-                                ...formData.customFields,
-                                [fieldName]: value,
-                              },
-                            });
-                          }}
                           disabled={saving}
-                          type={isNumberField ? 'number' : 'text'}
-                          placeholder={
-                            isNumberField
-                              ? 'Enter a number'
-                              : isUrlField
-                              ? 'https://example.com'
-                              : `Enter ${fieldLabel.toLowerCase()}`
-                          }
-                          helperText={
-                            isUrlField
-                              ? 'URL to the resource'
-                              : isNumberField
-                              ? 'Numeric value'
-                              : undefined
-                          }
                         />
-                      </Grid>
-                    );
-                  })}
+                      )}
+                      {def.fieldType === 'number' && (
+                        <TextField
+                          label={def.label}
+                          type="number"
+                          value={formData.customFields?.[def.name] || ''}
+                          onChange={(e) => handleCustomFieldChange(def.name, e.target.value)}
+                          fullWidth
+                          disabled={saving}
+                        />
+                      )}
+                      {def.fieldType === 'date' && (
+                        <LocalizationProvider dateAdapter={AdapterDateFns}>
+                          <DatePicker
+                            label={def.label}
+                            value={formData.customFields?.[def.name] ? new Date(formData.customFields[def.name]) : null}
+                            onChange={(date) => handleCustomFieldChange(def.name, date?.toISOString() || '')}
+                            disabled={saving}
+                            slotProps={{
+                              textField: {
+                                fullWidth: true,
+                              },
+                            }}
+                          />
+                        </LocalizationProvider>
+                      )}
+                      {def.fieldType === 'dropdown' && (
+                        <TextField
+                          select
+                          label={def.label}
+                          value={formData.customFields?.[def.name] || ''}
+                          onChange={(e) => handleCustomFieldChange(def.name, e.target.value)}
+                          fullWidth
+                          disabled={saving}
+                        >
+                          <MenuItem value="">
+                            <em>None</em>
+                          </MenuItem>
+                          {def.options?.map(option => (
+                            <MenuItem key={option} value={option}>
+                              {option}
+                            </MenuItem>
+                          ))}
+                        </TextField>
+                      )}
+                    </Grid>
+                  ))}
                 </>
               )}
             </Grid>
