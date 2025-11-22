@@ -114,6 +114,9 @@ export const CompetitorWorkflowDialog: React.FC<CompetitorWorkflowDialogProps> =
   const [currentStep, setCurrentStep] = useState<WorkflowStep>('finding');
   const [competitors, setCompetitors] = useState<CompetitorWithEnrichment[]>([]);
 
+  // Excluded competitors tracking (for smart regeneration)
+  const [excludedCompetitors, setExcludedCompetitors] = useState<Array<{name: string; website: string}>>([]);
+
   // Step toggles
   const [skipEnrichment, setSkipEnrichment] = useState(false);
   const [skipBlogAnalysis, setSkipBlogAnalysis] = useState(false);
@@ -156,9 +159,10 @@ export const CompetitorWorkflowDialog: React.FC<CompetitorWorkflowDialogProps> =
   }, [open, company.id]);
 
   // STEP 1: Find Competitors
-  const handleFindCompetitors = async () => {
+  const handleFindCompetitors = async (isRegenerate: boolean = false) => {
     console.log('=== CompetitorWorkflowDialog: handleFindCompetitors ===');
     console.log('Timestamp:', new Date().toISOString());
+    console.log('Is Regenerate:', isRegenerate);
     console.log('Company:', {
       id: company.id,
       name: company.name,
@@ -176,15 +180,42 @@ export const CompetitorWorkflowDialog: React.FC<CompetitorWorkflowDialogProps> =
     setError(null);
 
     try {
+      // For regenerate: calculate how many new competitors we need
+      let deselectedCompetitors: CompetitorWithEnrichment[] = [];
+      let selectedCompetitors: CompetitorWithEnrichment[] = [];
+      let count = 5; // Default
+
+      if (isRegenerate) {
+        deselectedCompetitors = competitors.filter(c => !c.selected);
+        selectedCompetitors = competitors.filter(c => c.selected);
+        count = deselectedCompetitors.length > 0 ? deselectedCompetitors.length : 5;
+
+        // Add deselected competitors to exclude list
+        deselectedCompetitors.forEach(comp => {
+          setExcludedCompetitors(prev => [
+            ...prev,
+            { name: comp.name, website: comp.website }
+          ]);
+        });
+
+        console.log(`Regenerating: Replacing ${count} deselected competitors`);
+        console.log(`Keeping ${selectedCompetitors.length} selected competitors`);
+      }
+
       const requestPayload = {
         companyId: company.id,
         companyName: company.name,
         website: company.website || '',
         description: company.description || '',
         industry: company.industry || '',
+        excludeCompanies: isRegenerate ? excludedCompetitors.concat(
+          deselectedCompetitors.map(c => ({ name: c.name, website: c.website }))
+        ) : [],
+        count: count,
       };
 
       console.log('Calling findCompetitors with payload:', requestPayload);
+      console.log('Excluded competitors count:', requestPayload.excludeCompanies.length);
 
       const response = await findCompetitors(requestPayload);
 
@@ -205,7 +236,12 @@ export const CompetitorWorkflowDialog: React.FC<CompetitorWorkflowDialogProps> =
         saveStatus: 'idle',
       }));
 
-      setCompetitors(enrichedCompetitors);
+      // For regenerate: merge with selected competitors
+      if (isRegenerate) {
+        setCompetitors([...selectedCompetitors, ...enrichedCompetitors]);
+      } else {
+        setCompetitors(enrichedCompetitors);
+      }
 
       // Track AI search cost
       if (response.costInfo) {
@@ -259,6 +295,14 @@ export const CompetitorWorkflowDialog: React.FC<CompetitorWorkflowDialogProps> =
   };
 
   const handleDelete = (id: string) => {
+    // Add to excluded list before deleting
+    const competitorToDelete = competitors.find(comp => comp.id === id);
+    if (competitorToDelete) {
+      setExcludedCompetitors(prev => [
+        ...prev,
+        { name: competitorToDelete.name, website: competitorToDelete.website }
+      ]);
+    }
     setCompetitors(prev => prev.filter(comp => comp.id !== id));
   };
 
@@ -899,6 +943,13 @@ export const CompetitorWorkflowDialog: React.FC<CompetitorWorkflowDialogProps> =
         {/* STEP 3: ENRICHING */}
         {currentStep === 'enriching' && (
           <Box>
+            {/* Header with selection summary */}
+            <Box sx={{ mb: 3, display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+              <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                Enriching competitors ({selectedCount} of {competitors.length} selected)
+              </Typography>
+            </Box>
+
             {/* Progress Bar */}
             <Box sx={{ mb: 3 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
@@ -939,6 +990,18 @@ export const CompetitorWorkflowDialog: React.FC<CompetitorWorkflowDialogProps> =
               <Table>
                 <TableHead sx={{ bgcolor: '#f7fafc' }}>
                   <TableRow>
+                    <TableCell padding="checkbox">
+                      <Checkbox
+                        checked={allSelected}
+                        indeterminate={someSelected}
+                        onChange={(e) => handleSelectAll(e.target.checked)}
+                        sx={{
+                          color: '#667eea',
+                          '&.Mui-checked': { color: '#667eea' },
+                          '&.MuiCheckbox-indeterminate': { color: '#667eea' },
+                        }}
+                      />
+                    </TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Company</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Employees</TableCell>
@@ -947,8 +1010,24 @@ export const CompetitorWorkflowDialog: React.FC<CompetitorWorkflowDialogProps> =
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {competitors.filter(c => c.selected).map((comp) => (
-                    <TableRow key={comp.id}>
+                  {competitors.map((comp) => (
+                    <TableRow
+                      key={comp.id}
+                      sx={{
+                        opacity: comp.selected ? 1 : 0.5,
+                        transition: 'opacity 0.2s',
+                      }}
+                    >
+                      <TableCell padding="checkbox">
+                        <Checkbox
+                          checked={comp.selected}
+                          onChange={() => handleToggleSelect(comp.id)}
+                          sx={{
+                            color: '#667eea',
+                            '&.Mui-checked': { color: '#667eea' },
+                          }}
+                        />
+                      </TableCell>
                       <TableCell>
                         <Typography variant="body2" sx={{ fontWeight: 500 }}>
                           {comp.name}
@@ -1078,6 +1157,13 @@ export const CompetitorWorkflowDialog: React.FC<CompetitorWorkflowDialogProps> =
         {/* STEP 3.5: CONFIRM URLS */}
         {currentStep === 'confirmUrls' && (
           <Box>
+            {/* Header with selection summary */}
+            <Box sx={{ mb: 3, display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+              <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                Confirm blog URLs ({selectedCount} of {competitors.length} selected)
+              </Typography>
+            </Box>
+
             <Alert severity="info" sx={{ mb: 3 }}>
               <Typography variant="body2" sx={{ fontWeight: 500, mb: 1 }}>
                 Review and confirm blog URLs before analysis
@@ -1100,6 +1186,18 @@ export const CompetitorWorkflowDialog: React.FC<CompetitorWorkflowDialogProps> =
               <Table>
                 <TableHead sx={{ bgcolor: '#f7fafc' }}>
                   <TableRow>
+                    <TableCell padding="checkbox">
+                      <Checkbox
+                        checked={allSelected}
+                        indeterminate={someSelected}
+                        onChange={(e) => handleSelectAll(e.target.checked)}
+                        sx={{
+                          color: '#667eea',
+                          '&.Mui-checked': { color: '#667eea' },
+                          '&.MuiCheckbox-indeterminate': { color: '#667eea' },
+                        }}
+                      />
+                    </TableCell>
                     <TableCell sx={{ fontWeight: 600, width: '22%' }}>Company</TableCell>
                     <TableCell sx={{ fontWeight: 600, width: '28%' }}>Website</TableCell>
                     <TableCell sx={{ fontWeight: 600, width: '40%' }}>Blog URL</TableCell>
@@ -1107,8 +1205,24 @@ export const CompetitorWorkflowDialog: React.FC<CompetitorWorkflowDialogProps> =
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {competitors.filter(c => c.selected).map((comp) => (
-                    <TableRow key={comp.id}>
+                  {competitors.map((comp) => (
+                    <TableRow
+                      key={comp.id}
+                      sx={{
+                        opacity: comp.selected ? 1 : 0.5,
+                        transition: 'opacity 0.2s',
+                      }}
+                    >
+                      <TableCell padding="checkbox">
+                        <Checkbox
+                          checked={comp.selected}
+                          onChange={() => handleToggleSelect(comp.id)}
+                          sx={{
+                            color: '#667eea',
+                            '&.Mui-checked': { color: '#667eea' },
+                          }}
+                        />
+                      </TableCell>
                       <TableCell>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
                           <BusinessIcon sx={{ fontSize: '18px', color: '#667eea' }} />
@@ -1202,6 +1316,13 @@ export const CompetitorWorkflowDialog: React.FC<CompetitorWorkflowDialogProps> =
         {/* STEP 4: ANALYZING */}
         {currentStep === 'analyzing' && (
           <Box>
+            {/* Header with selection summary */}
+            <Box sx={{ mb: 3, display: 'flex', gap: 2, alignItems: 'center', flexWrap: 'wrap' }}>
+              <Typography variant="body1" sx={{ fontWeight: 500 }}>
+                Analyzing blogs ({selectedCount} of {competitors.length} selected)
+              </Typography>
+            </Box>
+
             {/* Progress Bar */}
             <Box sx={{ mb: 3 }}>
               <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}>
@@ -1253,6 +1374,18 @@ export const CompetitorWorkflowDialog: React.FC<CompetitorWorkflowDialogProps> =
               <Table>
                 <TableHead sx={{ bgcolor: '#f7fafc' }}>
                   <TableRow>
+                    <TableCell padding="checkbox">
+                      <Checkbox
+                        checked={allSelected}
+                        indeterminate={someSelected}
+                        onChange={(e) => handleSelectAll(e.target.checked)}
+                        sx={{
+                          color: '#667eea',
+                          '&.Mui-checked': { color: '#667eea' },
+                          '&.MuiCheckbox-indeterminate': { color: '#667eea' },
+                        }}
+                      />
+                    </TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Company</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Blog URL</TableCell>
                     <TableCell sx={{ fontWeight: 600 }}>Status</TableCell>
@@ -1262,8 +1395,24 @@ export const CompetitorWorkflowDialog: React.FC<CompetitorWorkflowDialogProps> =
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {competitors.filter(c => c.selected).map((comp) => (
-                    <TableRow key={comp.id}>
+                  {competitors.map((comp) => (
+                    <TableRow
+                      key={comp.id}
+                      sx={{
+                        opacity: comp.selected ? 1 : 0.5,
+                        transition: 'opacity 0.2s',
+                      }}
+                    >
+                      <TableCell padding="checkbox">
+                        <Checkbox
+                          checked={comp.selected}
+                          onChange={() => handleToggleSelect(comp.id)}
+                          sx={{
+                            color: '#667eea',
+                            '&.Mui-checked': { color: '#667eea' },
+                          }}
+                        />
+                      </TableCell>
                       <TableCell>
                         <Typography variant="body2" sx={{ fontWeight: 500 }}>
                           {comp.name}
@@ -1755,9 +1904,12 @@ export const CompetitorWorkflowDialog: React.FC<CompetitorWorkflowDialogProps> =
           {currentStep === 'review' && (
             <Button
               startIcon={<RefreshIcon />}
-              onClick={handleFindCompetitors}
+              onClick={() => handleFindCompetitors(true)}
+              disabled={loading}
             >
-              Regenerate
+              {competitors.filter(c => !c.selected).length > 0
+                ? `Replace ${competitors.filter(c => !c.selected).length} deselected`
+                : 'Regenerate All'}
             </Button>
           )}
 

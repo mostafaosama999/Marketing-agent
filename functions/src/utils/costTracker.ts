@@ -62,7 +62,9 @@ export type ServiceType =
   | "linkedin-analytics-extraction"
   | "competitor-posts-extraction"
   | "linkedin-post-from-trend"
-  | "linkedin-meme-image";
+  | "linkedin-meme-image"
+  | "linkedin-post-ideas-rag"
+  | "linkedin-post-from-idea-rag";
 
 export interface ApiCostRecord {
   userId: string;

@@ -239,6 +239,8 @@ export const LEAD_STATUS_TO_LABEL: Record<LeadStatus, string> = {
   'nurture': 'Nurture',
   'won': 'Won',
   'lost': 'Refused',
+  'previous_client': 'Previous Client',
+  'existing_client': 'Existing Client',
 };
 
 /**

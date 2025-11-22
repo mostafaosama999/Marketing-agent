@@ -29,6 +29,7 @@ interface AdvancedFiltersModalProps<T = Lead> {
   data: T[];
   entityType?: 'lead' | 'company';
   pipelineStages?: LeadStatus[]; // Optional pipeline stages for lead status field
+  initialRules?: FilterRule[]; // Current active filter rules to display
 }
 
 export const AdvancedFiltersModal = <T extends Lead | Company = Lead>({
@@ -39,10 +40,21 @@ export const AdvancedFiltersModal = <T extends Lead | Company = Lead>({
   data,
   entityType = 'lead',
   pipelineStages,
+  initialRules,
 }: AdvancedFiltersModalProps<T>) => {
   const [rules, setRules] = useState<FilterRule[]>([]);
   const [fields, setFields] = useState<FilterableField[]>([]);
   const [fieldsLoaded, setFieldsLoaded] = useState(false);
+
+  // Initialize rules from initialRules prop when modal opens
+  useEffect(() => {
+    if (open && initialRules && initialRules.length > 0) {
+      setRules(initialRules);
+    } else if (open && (!initialRules || initialRules.length === 0)) {
+      // Reset to empty if no initial rules
+      setRules([]);
+    }
+  }, [open, initialRules]);
 
   // Load filterable fields from actual data (leads or companies)
   useEffect(() => {

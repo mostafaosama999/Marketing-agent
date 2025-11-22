@@ -1427,7 +1427,7 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
           }
         }}
       >
-        {(['new_lead', 'qualified', 'contacted', 'follow_up', 'nurture', 'won', 'lost'] as LeadStatus[]).map((status) => (
+        {(['new_lead', 'qualified', 'contacted', 'follow_up', 'nurture', 'won', 'lost', 'previous_client', 'existing_client'] as LeadStatus[]).map((status) => (
           <MenuItem
             key={status}
             onClick={() => handleStatusChange(status)}

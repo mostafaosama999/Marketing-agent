@@ -82,6 +82,8 @@ const getStatusColor = (status: LeadStatus): string => {
     nurture: '#00bcd4',
     won: '#4caf50',
     lost: '#f44336',
+    previous_client: '#607d8b',
+    existing_client: '#009688',
   };
   return colors[status] || '#9e9e9e';
 };

@@ -1,7 +1,7 @@
 // CRM Lead management types
 
 // Lead status type (pipeline stages)
-export type LeadStatus = 'new_lead' | 'qualified' | 'contacted' | 'follow_up' | 'nurture' | 'won' | 'lost';
+export type LeadStatus = 'new_lead' | 'qualified' | 'contacted' | 'follow_up' | 'nurture' | 'won' | 'lost' | 'previous_client' | 'existing_client';
 
 // Main Lead interface
 export interface Lead {
@@ -26,6 +26,8 @@ export interface Lead {
     nurture?: string;
     won?: string;
     lost?: string;
+    previous_client?: string;
+    existing_client?: string;
   };
 
   // State Durations (cumulative time in each state)
@@ -37,6 +39,8 @@ export interface Lead {
     nurture?: number;
     won?: number;
     lost?: number;
+    previous_client?: number;
+    existing_client?: number;
   };
 
   // Apollo enrichment tracking
@@ -111,6 +115,8 @@ export interface LeadTimeline {
     nurture?: string;
     won?: string;
     lost?: string;
+    previous_client?: string;
+    existing_client?: string;
   };
 
   // Cumulative state durations (in days)
@@ -122,6 +128,8 @@ export interface LeadTimeline {
     nurture?: number;
     won?: number;
     lost?: number;
+    previous_client?: number;
+    existing_client?: number;
   };
 
   // Detailed status change log

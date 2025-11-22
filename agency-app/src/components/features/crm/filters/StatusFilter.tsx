@@ -57,9 +57,19 @@ const STATUS_CONFIG: Record<LeadStatus, { label: string; icon: string; color: st
     icon: '❌',
     color: '#f44336',
   },
+  previous_client: {
+    label: 'Previous Client',
+    icon: '👤',
+    color: '#607d8b',
+  },
+  existing_client: {
+    label: 'Existing Client',
+    icon: '🤝',
+    color: '#009688',
+  },
 };
 
-const ALL_STATUSES: LeadStatus[] = ['new_lead', 'qualified', 'contacted', 'follow_up', 'nurture', 'won', 'lost'];
+const ALL_STATUSES: LeadStatus[] = ['new_lead', 'qualified', 'contacted', 'follow_up', 'nurture', 'won', 'lost', 'previous_client', 'existing_client'];
 
 export const StatusFilter: React.FC<StatusFilterProps> = ({
   selectedStatuses,

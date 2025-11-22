@@ -13,6 +13,10 @@ export interface PostIdea {
   whyThisWorks: string; // Reference to analytics insights
   targetAudience: string; // Specific audience description
   estimatedWordCount: string; // e.g., "140-160 words"
+
+  // RAG-enhanced fields (optional)
+  primaryTrendIndex?: number; // Index of the most relevant trend for this idea
+  relatedTrendIndices?: number[]; // Indices of other related trends
 }
 
 /**
@@ -42,8 +46,13 @@ export interface PostIdeasSession {
 
   // Analysis insights
   analyticsInsights: AnalyticsInsights;
-  aiTrends: string[]; // Top AI trends identified from newsletters
+  aiTrends: string[]; // Top AI trends identified from newsletters (legacy)
+  aiTrendsWithSources?: TrendWithSource[]; // Enhanced trends with citations (RAG)
   competitorInsights: string[]; // Key insights from competitor analysis
+
+  // Competitor analysis details (for post generation context)
+  competitorOverusedTopics?: string[];
+  competitorContentGaps?: string[];
 
   // Metadata
   dataSourceCounts: {
@@ -58,6 +67,10 @@ export interface PostIdeasSession {
     competitorAnalysis: number;
     ideaGeneration: number;
   };
+
+  // RAG metadata (optional)
+  ragEnabled?: boolean;
+  retrievedChunksCount?: number;
 }
 
 /**
@@ -114,6 +127,25 @@ export interface AnalyticsAnalysisResponse {
  */
 export interface NewsletterTrendsResponse {
   trends: string[]; // Array of trend descriptions
+}
+
+/**
+ * Enhanced trend with source citation (for RAG-based retrieval)
+ */
+export interface TrendWithSource {
+  trend: string;
+  sourceSubject: string;
+  sourceFrom: string;
+  sourceDate: string;
+  relevantSnippet: string;
+  relevanceScore: number;
+}
+
+/**
+ * RAG-enhanced newsletter trends response
+ */
+export interface EnhancedNewsletterTrendsResponse {
+  trends: TrendWithSource[];
 }
 
 /**

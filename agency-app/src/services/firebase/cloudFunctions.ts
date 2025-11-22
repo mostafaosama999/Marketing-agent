@@ -350,6 +350,8 @@ export interface FindCompetitorsRequest {
   website?: string;
   description?: string;
   industry?: string;
+  excludeCompanies?: Array<{ name: string; website: string }>;
+  count?: number;
 }
 
 export interface Competitor {

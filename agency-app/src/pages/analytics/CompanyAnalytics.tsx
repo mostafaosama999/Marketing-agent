@@ -8,6 +8,11 @@ import {
   CircularProgress,
   ThemeProvider,
   createTheme,
+  Select,
+  MenuItem,
+  FormControl,
+  InputLabel,
+  Chip,
 } from '@mui/material';
 import Grid from '@mui/material/GridLegacy';
 import { BarChart } from '@mui/x-charts/BarChart';
@@ -15,16 +20,22 @@ import {
   Business as BusinessIcon,
   Timeline as TimelineIcon,
   Archive as ArchiveIcon,
-  Public as PublicIcon,
   Category as CategoryIcon,
   Star as StarIcon,
   Assignment as AssignmentIcon,
+  FilterList as FilterListIcon,
+  TrendingUp as TrendingUpIcon,
+  Warning as WarningIcon,
+  People as PeopleIcon,
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { subscribeToCompanies, subscribeToArchivedCompanies } from '../../services/api/companies';
 import { Company } from '../../types/crm';
 import { LeadStatus } from '../../types/lead';
 import { getStatusLabel, getStatusColor } from '../../components/features/companies/CompanyStatusBadge';
+
+// Client statuses to exclude from analytics (these are existing/previous clients, not prospects)
+const CLIENT_STATUSES: LeadStatus[] = ['previous_client', 'existing_client'];
 
 // Modern theme
 const modernTheme = createTheme({
@@ -165,6 +176,7 @@ const CompanyAnalytics: React.FC = () => {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [archivedCompanies, setArchivedCompanies] = useState<Company[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedRating, setSelectedRating] = useState<number | 'all'>('all');
   const navigate = useNavigate();
 
   // Subscribe to active companies
@@ -186,63 +198,104 @@ const CompanyAnalytics: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  // Calculate basic stats
-  const totalCompanies = companies.length;
+  // Filter out client companies (previous_client, existing_client) from analytics
+  const analyticsCompanies = useMemo(() => {
+    return companies.filter(c => !CLIENT_STATUSES.includes(c.status as LeadStatus));
+  }, [companies]);
+
+  // Count of excluded client companies (for transparency)
+  const excludedClientCount = useMemo(() => {
+    return companies.filter(c => CLIENT_STATUSES.includes(c.status as LeadStatus)).length;
+  }, [companies]);
+
+  // Calculate basic stats (using analyticsCompanies - excludes clients)
+  const totalCompanies = analyticsCompanies.length;
   const totalArchivedCompanies = archivedCompanies.length;
-  const companiesWithIndustry = companies.filter(c => c.industry).length;
-  const averageRating = companies.length > 0
-    ? (companies.reduce((sum, c) => sum + (c.ratingV2 || 0), 0) / companies.length).toFixed(1)
+  const companiesWithIndustry = analyticsCompanies.filter(c => c.industry).length;
+  const averageRating = analyticsCompanies.length > 0
+    ? (analyticsCompanies.reduce((sum, c) => sum + (c.ratingV2 || 0), 0) / analyticsCompanies.length).toFixed(1)
     : '0';
 
-  // Rating distribution (0-10, where 0 = Archived)
-  const ratingDistribution = useMemo(() => {
-    // Start with archived companies as rating 0
-    const counts = [
-      {
-        rating: '0 (Archived)',
-        count: archivedCompanies.length,
-      },
-    ];
+  // Filtered companies by rating (for Status chart) - uses analyticsCompanies (excludes clients)
+  const filteredCompaniesByRating = useMemo(() => {
+    if (selectedRating === 'all') return analyticsCompanies;
+    return analyticsCompanies.filter(c => c.ratingV2 === selectedRating);
+  }, [analyticsCompanies, selectedRating]);
 
-    // Add ratings 1-10
+  // High-quality uncontacted companies counter (rating > 6, status = new_lead or qualified)
+  // Uses analyticsCompanies (excludes clients)
+  const highQualityUncontactedCount = useMemo(() => {
+    return analyticsCompanies.filter(c =>
+      c.ratingV2 &&
+      c.ratingV2 > 6 &&
+      (c.status === 'new_lead' || c.status === 'qualified')
+    ).length;
+  }, [analyticsCompanies]);
+
+  // Get alert styling based on high-quality uncontacted count
+  const getAlertStyle = (count: number) => {
+    if (count >= 10) {
+      return {
+        textColor: '#16a34a',
+        IconComponent: TrendingUpIcon,
+        message: 'You have enough high-quality leads to contact',
+        status: 'good',
+      };
+    } else if (count >= 5) {
+      return {
+        textColor: '#d97706',
+        IconComponent: WarningIcon,
+        message: 'Consider finding more high-quality leads',
+        status: 'warning',
+      };
+    } else {
+      return {
+        textColor: '#dc2626',
+        IconComponent: WarningIcon,
+        message: 'Low inventory - find more high-quality leads urgently',
+        status: 'critical',
+      };
+    }
+  };
+
+  const alertStyle = getAlertStyle(highQualityUncontactedCount);
+
+  // Handle high-quality uncontacted counter click
+  const handleHighQualityUncontactedClick = () => {
+    navigate('/companies?rating=7,8,9,10&status=new_lead,qualified');
+  };
+
+  // Rating distribution (1-10 only, excluding archived, no rating, and client statuses)
+  const ratingDistribution = useMemo(() => {
+    const counts: { rating: string; count: number }[] = [];
+
+    // Add ratings 1-10 only (exclude 0/no rating, archived, and client statuses)
     const ratingOrder = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
     ratingOrder.forEach(rating => {
-      const count = companies.filter(c => c.ratingV2 === rating).length;
+      const count = analyticsCompanies.filter(c => c.ratingV2 === rating).length;
       counts.push({
         rating: rating.toString(),
         count,
       });
     });
 
-    // Add "No Rating" category for active companies without rating
-    const noRatingCount = companies.filter(c => !c.ratingV2 || c.ratingV2 === null).length;
-    counts.push({
-      rating: 'No Rating',
-      count: noRatingCount,
-    });
-
     return counts;
-  }, [companies, archivedCompanies]);
+  }, [analyticsCompanies]);
 
   // Handle rating bar click
   const handleRatingClick = (event: any, itemData: any) => {
     if (itemData?.axisValue) {
       const rating = itemData.axisValue;
-      // Handle archived companies (rating "0 (Archived)")
-      if (rating.startsWith('0')) {
-        navigate(`/companies?archived=true`);
-      } else {
-        navigate(`/companies?rating=${rating}`);
-      }
+      navigate(`/companies?rating=${rating}`);
     }
   };
 
-  // Company type distribution (from customFields)
+  // Company type distribution (from customFields, filtered by rating)
   const companyTypeDistribution = useMemo(() => {
     // Count companies by type
     const typeCounts: Record<string, number> = {};
 
-    companies.forEach(company => {
+    filteredCompaniesByRating.forEach(company => {
       // Check all possible field name variations
       const rawType = company.customFields?.['Company Type']
         || company.customFields?.['company_type']
@@ -269,23 +322,24 @@ const CompanyAnalytics: React.FC = () => {
         count,
       }))
       .sort((a, b) => b.count - a.count);
-  }, [companies]);
+  }, [filteredCompaniesByRating]);
 
   // Handle company type bar click
   const handleCompanyTypeClick = (event: any, itemData: any) => {
     if (itemData?.axisValue) {
       const type = itemData.axisValue;
-      navigate(`/companies?companyType=${type}`);
+      const ratingParam = selectedRating !== 'all' ? `&rating=${selectedRating}` : '';
+      navigate(`/companies?companyType=${type}${ratingParam}`);
     }
   };
 
-  // Status distribution
+  // Status distribution (filtered by rating)
   const statusDistribution = useMemo(() => {
     const allStatuses: LeadStatus[] = ['new_lead', 'qualified', 'contacted', 'follow_up', 'nurture', 'won', 'lost'];
 
     return allStatuses
       .map(status => {
-        const count = companies.filter(c => c.status === status).length;
+        const count = filteredCompaniesByRating.filter(c => c.status === status).length;
         return {
           status: getStatusLabel(status),
           count: count,
@@ -294,7 +348,7 @@ const CompanyAnalytics: React.FC = () => {
         };
       })
       .filter(item => item.count > 0); // Only show statuses that have companies
-  }, [companies]);
+  }, [filteredCompaniesByRating]);
 
   // Handle status bar chart click
   const handleStatusClick = (event: any, itemData: any) => {
@@ -303,7 +357,8 @@ const CompanyAnalytics: React.FC = () => {
       // Find the status ID from the label
       const statusItem = statusDistribution.find(s => s.status === statusLabel);
       if (statusItem) {
-        navigate(`/companies?status=${statusItem.statusId}`);
+        const ratingParam = selectedRating !== 'all' ? `&rating=${selectedRating}` : '';
+        navigate(`/companies?status=${statusItem.statusId}${ratingParam}`);
       }
     }
   };
@@ -350,7 +405,7 @@ const CompanyAnalytics: React.FC = () => {
 
             {/* Stats Cards */}
             <Grid container spacing={3} sx={{ mb: 4 }}>
-              <Grid item xs={12} sm={6} md={4}>
+              <Grid item xs={12} sm={6} md={3}>
                 <StatCard
                   title="Total Companies"
                   value={totalCompanies}
@@ -358,7 +413,15 @@ const CompanyAnalytics: React.FC = () => {
                   color="#667eea"
                 />
               </Grid>
-              <Grid item xs={12} sm={6} md={4}>
+              <Grid item xs={12} sm={6} md={3}>
+                <StatCard
+                  title="Existing/Previous Clients"
+                  value={excludedClientCount}
+                  icon={<PeopleIcon sx={{ fontSize: 24, color: '#009688' }} />}
+                  color="#009688"
+                />
+              </Grid>
+              <Grid item xs={12} sm={6} md={3}>
                 <StatCard
                   title="Archived Companies"
                   value={totalArchivedCompanies}
@@ -366,7 +429,7 @@ const CompanyAnalytics: React.FC = () => {
                   color="#ef4444"
                 />
               </Grid>
-              <Grid item xs={12} sm={6} md={4}>
+              <Grid item xs={12} sm={6} md={3}>
                 <StatCard
                   title="Avg Rating"
                   value={averageRating}
@@ -376,9 +439,9 @@ const CompanyAnalytics: React.FC = () => {
               </Grid>
             </Grid>
 
-            {/* Distribution Charts - Row 1 */}
+            {/* Top Section - Rating Distribution (Full Width) */}
             <Grid container spacing={3} sx={{ mb: 4 }}>
-              <Grid item xs={12} md={6}>
+              <Grid item xs={12}>
                 {/* Rating Distribution Chart */}
                 <Card
                   sx={{
@@ -448,8 +511,123 @@ const CompanyAnalytics: React.FC = () => {
                   </CardContent>
                 </Card>
               </Grid>
-              <Grid item xs={12} md={6}>
-                {/* Status Distribution Chart */}
+            </Grid>
+
+            {/* Bottom Section - Status Distribution with Rating Filter */}
+            <Grid container spacing={3} sx={{ mb: 4 }}>
+              {/* Rating Filter Toolbar */}
+              <Grid item xs={12}>
+                <Card
+                  sx={{
+                    background: 'rgba(255, 255, 255, 0.9)',
+                    borderRadius: 3,
+                    backdropFilter: 'blur(20px)',
+                    border: '1px solid rgba(226, 232, 240, 0.5)',
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08)',
+                  }}
+                >
+                  <CardContent sx={{ p: 3 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                      <FilterListIcon sx={{ color: '#667eea', fontSize: 24 }} />
+                      <Typography
+                        variant="h6"
+                        sx={{ color: '#1e293b', fontWeight: 600, flex: 1 }}
+                      >
+                        Filter by Rating
+                      </Typography>
+                      <FormControl sx={{ minWidth: 200 }}>
+                        <InputLabel id="rating-filter-label">Rating</InputLabel>
+                        <Select
+                          labelId="rating-filter-label"
+                          value={selectedRating}
+                          label="Rating"
+                          onChange={(e) => setSelectedRating(e.target.value as number | 'all')}
+                          sx={{
+                            '& .MuiOutlinedInput-notchedOutline': {
+                              borderColor: '#e2e8f0',
+                            },
+                            '&:hover .MuiOutlinedInput-notchedOutline': {
+                              borderColor: '#667eea',
+                            },
+                            '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
+                              borderColor: '#667eea',
+                            },
+                          }}
+                        >
+                          <MenuItem value="all">All Ratings</MenuItem>
+                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((rating) => (
+                            <MenuItem key={rating} value={rating}>
+                              Rating {rating}
+                            </MenuItem>
+                          ))}
+                        </Select>
+                      </FormControl>
+                      {selectedRating !== 'all' && (
+                        <Chip
+                          label={`Showing ${filteredCompaniesByRating.length} companies with rating ${selectedRating}`}
+                          sx={{
+                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                            color: 'white',
+                            fontWeight: 600,
+                          }}
+                        />
+                      )}
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {/* High-Quality Uncontacted Companies Alert */}
+              <Grid item xs={12}>
+                <Card
+                  onClick={handleHighQualityUncontactedClick}
+                  sx={{
+                    background: 'rgba(255, 255, 255, 0.9)',
+                    borderRadius: 3,
+                    backdropFilter: 'blur(20px)',
+                    border: '1px solid rgba(226, 232, 240, 0.5)',
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08)',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <CardContent sx={{ p: 3 }}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                      <Box
+                        sx={{
+                          width: 48,
+                          height: 48,
+                          borderRadius: 2,
+                          background: `linear-gradient(135deg, ${alertStyle.textColor}15 0%, ${alertStyle.textColor}25 100%)`,
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                        }}
+                      >
+                        <alertStyle.IconComponent sx={{ fontSize: 24, color: alertStyle.textColor }} />
+                      </Box>
+                    </Box>
+                    <Typography variant="h4" sx={{ color: '#1e293b', mb: 0.5, fontWeight: 700 }}>
+                      {highQualityUncontactedCount}
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500, mb: 1 }}>
+                      High-Quality Uncontacted Companies
+                    </Typography>
+                    <Typography
+                      variant="body2"
+                      sx={{
+                        color: alertStyle.textColor,
+                        fontWeight: 600,
+                        fontSize: '12px',
+                      }}
+                    >
+                      {alertStyle.message}
+                    </Typography>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {/* Status Distribution Chart */}
+              <Grid item xs={12}>
                 <Card
                   sx={{
                     background: 'rgba(255, 255, 255, 0.9)',
@@ -524,7 +702,7 @@ const CompanyAnalytics: React.FC = () => {
               </Grid>
             </Grid>
 
-            {/* Distribution Charts - Row 2 */}
+            {/* Company Type Distribution - Row 3 */}
             <Grid container spacing={3} sx={{ mb: 4 }}>
               <Grid item xs={12}>
                 {/* Company Type Distribution Chart */}

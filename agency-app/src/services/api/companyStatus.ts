@@ -41,6 +41,8 @@ export async function calculateCompanyStatus(companyId: string): Promise<LeadSta
       nurture: 0,
       won: 0,
       lost: 0,
+      previous_client: 0,
+      existing_client: 0,
     };
 
     activeLeads.forEach((doc) => {
@@ -89,6 +91,8 @@ const STATUS_ADVANCEMENT_ORDER: Record<LeadStatus, number> = {
   nurture: 4,
   won: 5,
   lost: 5, // Won and Lost are considered equally advanced (terminal states)
+  previous_client: 6, // Client statuses are most advanced (post-conversion)
+  existing_client: 6,
 };
 
 /**

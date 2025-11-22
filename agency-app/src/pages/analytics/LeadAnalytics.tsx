@@ -56,6 +56,8 @@ const STATUS_LABELS: Record<LeadStatus, string> = {
   nurture: 'Nurture',
   won: 'Won',
   lost: 'Refused',
+  previous_client: 'Previous Client',
+  existing_client: 'Existing Client',
 };
 
 // Status colors
@@ -67,6 +69,8 @@ const STATUS_COLORS: Record<LeadStatus, string> = {
   nurture: '#00bcd4',
   won: '#4caf50',
   lost: '#f44336',
+  previous_client: '#607d8b',
+  existing_client: '#009688',
 };
 
 const LeadAnalytics: React.FC = () => {

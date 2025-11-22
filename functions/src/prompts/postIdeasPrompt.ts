@@ -542,3 +542,240 @@ Mood: Thought-provoking, professional, innovative, forward-thinking
 
 Format: Landscape orientation (1200x630px ideal for LinkedIn)`;
 
+// ============================================
+// RAG-ENHANCED PROMPTS
+// ============================================
+
+/**
+ * RAG-enhanced prompt for extracting trends from retrieved newsletter chunks
+ * Uses semantically retrieved content instead of brute-force analysis
+ */
+export function getRAGNewsletterTrendsPrompt(
+  retrievedChunks: Array<{
+    text: string;
+    subject: string;
+    from: string;
+    date: string;
+    relevanceScore: number;
+  }>
+): string {
+  const chunksData = retrievedChunks
+    .map((chunk, idx) => `
+[Source ${idx + 1}] (Relevance: ${(chunk.relevanceScore * 100).toFixed(0)}%)
+From: ${chunk.from}
+Subject: ${chunk.subject}
+Date: ${new Date(chunk.date).toLocaleDateString()}
+Content:
+${chunk.text}
+`)
+    .join('\n---\n');
+
+  return `${SYSTEM_PROMPT}
+
+ANALYZE RETRIEVED NEWSLETTER CONTENT (RAG-Enhanced)
+
+These newsletter excerpts were semantically retrieved as the most relevant content for LinkedIn post generation.
+Each source includes a relevance score indicating how well it matches current AI trends.
+
+RETRIEVED NEWSLETTER CONTENT:
+${chunksData}
+
+From these ${retrievedChunks.length} retrieved excerpts, extract 5 AI trends that would make excellent LinkedIn posts.
+
+For each trend, you MUST:
+1. Identify the specific trend or insight
+2. Cite the source (which newsletter it came from)
+3. Extract a relevant snippet that supports the trend
+4. Explain the practical business implication
+
+Return a JSON object with this structure:
+{
+  "trends": [
+    {
+      "trend": "Concise description of the AI trend (1-2 sentences)",
+      "sourceSubject": "The email subject line",
+      "sourceFrom": "The sender name/email",
+      "sourceDate": "The date string",
+      "relevantSnippet": "A 1-2 sentence quote from the source that supports this trend",
+      "relevanceScore": 0.85
+    },
+    // ... 4 more trends
+  ]
+}
+
+Focus on trends that:
+- Are backed by specific evidence from the sources
+- Have clear practical implications for business leaders
+- Can be turned into actionable LinkedIn posts
+- Are differentiated and not generic AI hype`;
+}
+
+/**
+ * RAG-enhanced prompt for generating post ideas with trend-idea affinity
+ */
+export function getRAGPostIdeasPrompt(
+  analyticsInsights: any,
+  trendsWithSources: Array<{
+    trend: string;
+    sourceSubject: string;
+    sourceFrom: string;
+    relevantSnippet: string;
+  }>,
+  competitorInsights: any
+): string {
+  const trendsData = trendsWithSources
+    .map((t, idx) => `
+[Trend ${idx + 1}]: ${t.trend}
+Source: "${t.sourceSubject}" from ${t.sourceFrom}
+Evidence: "${t.relevantSnippet}"
+`)
+    .join('\n');
+
+  return `${SYSTEM_PROMPT}
+
+GENERATE 5 STRATEGIC LINKEDIN POST IDEAS (RAG-Enhanced)
+
+You have analyzed all three required inputs. Now generate 5 high-impact LinkedIn post ideas.
+Each idea should be explicitly linked to one of the AI trends identified.
+
+INPUTS ANALYZED:
+
+1. LINKEDIN ANALYTICS INSIGHTS:
+- Top Topics: ${analyticsInsights.topTopics.join(', ')}
+- Best Word Count: ${analyticsInsights.bestWordCountRange}
+- Tone Style: ${analyticsInsights.toneStyle}
+- Structure Patterns: ${analyticsInsights.structurePatterns.join('; ')}
+- Top Hashtags: ${analyticsInsights.topHashtags.join(', ')}
+
+2. AI TRENDS WITH SOURCES:
+${trendsData}
+
+3. COMPETITOR INSIGHTS:
+Key Insights: ${competitorInsights.insights.join('; ')}
+Overused Topics: ${competitorInsights.overusedTopics.join('; ')}
+Content Gaps: ${competitorInsights.contentGaps.join('; ')}
+
+TASK: Generate 5 strategic post ideas, each linked to a specific trend.
+
+Each idea MUST include:
+
+1. **HOOK**: 12-18 words, attention-grabbing but not clickbait
+2. **POST STYLE**: E.g., Listicle, Contrarian Insight, Mini Case Study
+3. **TOPIC & ANGLE**: 1-2 sentences explaining the post
+4. **WHY THIS WORKS**: Reference to analytics insights
+5. **TARGET AUDIENCE**: Specific audience
+6. **ESTIMATED WORD COUNT**: Based on analytics
+7. **PRIMARY TREND INDEX**: Which trend (0-4) this idea is based on
+8. **RELATED TREND INDICES**: Other trends (0-4) that could be referenced
+
+Return a JSON object:
+{
+  "ideas": [
+    {
+      "hook": "12-18 word headline",
+      "postStyle": "Style name",
+      "topicAndAngle": "1-2 sentence explanation",
+      "whyThisWorks": "Reference to analytics",
+      "targetAudience": "Specific audience",
+      "estimatedWordCount": "e.g., 140-160 words",
+      "primaryTrendIndex": 0,
+      "relatedTrendIndices": [1, 3]
+    },
+    // ... 4 more ideas
+  ]
+}
+
+Requirements:
+- Each idea MUST reference at least one trend from the sources
+- Avoid the overused topics from competitor analysis
+- Exploit the content gaps identified
+- Match the user's proven writing style`;
+}
+
+/**
+ * RAG-enhanced prompt for generating full post with all context
+ */
+export function getRAGFullPostPrompt(
+  idea: any,
+  analyticsInsights: any,
+  allTrends: Array<{
+    trend: string;
+    sourceSubject: string;
+    sourceFrom: string;
+    relevantSnippet: string;
+  }>,
+  competitorInsights: {
+    insights: string[];
+    overusedTopics: string[];
+    contentGaps: string[];
+  }
+): string {
+  // Get primary and related trends
+  const primaryTrend = allTrends[idea.primaryTrendIndex] || allTrends[0];
+  const relatedTrends = (idea.relatedTrendIndices || [])
+    .map((idx: number) => allTrends[idx])
+    .filter(Boolean);
+
+  const trendsContext = [primaryTrend, ...relatedTrends]
+    .map((t, idx) => `
+${idx === 0 ? 'PRIMARY' : 'RELATED'} TREND: ${t.trend}
+Source: "${t.sourceSubject}" from ${t.sourceFrom}
+Quote: "${t.relevantSnippet}"
+`)
+    .join('\n');
+
+  return `${SYSTEM_PROMPT}
+
+WRITE FULL LINKEDIN POST (RAG-Enhanced)
+
+The user has selected this post idea:
+
+SELECTED IDEA:
+- Hook: ${idea.hook}
+- Style: ${idea.postStyle}
+- Topic & Angle: ${idea.topicAndAngle}
+- Target Audience: ${idea.targetAudience}
+- Word Count: ${idea.estimatedWordCount}
+
+USER'S WRITING STYLE (from analytics):
+- Tone: ${analyticsInsights.toneStyle}
+- Structure Patterns: ${analyticsInsights.structurePatterns.join('; ')}
+- Top Hashtags: ${analyticsInsights.topHashtags.join(', ')}
+
+AI TRENDS CONTEXT (from newsletters):
+${trendsContext}
+
+COMPETITOR CONTEXT:
+- Avoid these overused topics: ${competitorInsights.overusedTopics.join(', ')}
+- Exploit these content gaps: ${competitorInsights.contentGaps.join(', ')}
+
+TASK: Write the complete LinkedIn post.
+
+CRITICAL REQUIREMENTS:
+
+1. **WORD COUNT**: Your post MUST be ${idea.estimatedWordCount}. NON-NEGOTIABLE.
+
+2. **USE THE TREND SOURCES**:
+   - Reference insights from the newsletter sources
+   - You can cite the source naturally (e.g., "According to recent reports..." or "As noted in [source]...")
+   - Use the quote/snippet as inspiration but don't copy verbatim
+
+3. **DIFFERENTIATE FROM COMPETITORS**:
+   - Avoid the overused topics listed above
+   - Exploit the content gaps for unique angles
+
+4. **Tone & Voice**: Match ${analyticsInsights.toneStyle}
+
+5. **Structure**: Follow ${analyticsInsights.structurePatterns.join('; ')}
+
+6. **Hashtags**: Include 3-5 relevant hashtags
+
+Return a JSON object:
+{
+  "content": "The full LinkedIn post text with line breaks",
+  "hashtags": ["hashtag1", "hashtag2", "hashtag3", "hashtag4", "hashtag5"]
+}
+
+IMPORTANT: Return ONLY the JSON object.`;
+}
+

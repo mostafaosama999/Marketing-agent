@@ -1250,6 +1250,7 @@ export const CompaniesPage: React.FC = () => {
             onClearFilters={handleClearAllFilters}
             data={companies}
             entityType="company"
+            initialRules={advancedFilterRules}
           />
 
           {/* Save Preset Dialog */}

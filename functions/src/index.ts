@@ -61,3 +61,10 @@ export {getLinkedInGenerationJob} from "./linkedinGeneration/getLinkedInGenerati
 // Export new post ideas generation functions
 export {generatePostIdeas} from "./linkedinGeneration/generatePostIdeas";
 export {generatePostFromIdea} from "./linkedinGeneration/generatePostFromIdea";
+
+// Export RAG-enhanced post ideas generation functions
+export {generatePostIdeasRAG} from "./linkedinGeneration/generatePostIdeasRAG";
+export {generatePostFromIdeaRAG} from "./linkedinGeneration/generatePostFromIdeaRAG";
+
+// Export RAG indexing functions
+export {indexNewsletters, indexSingleNewsletter, getRAGStatus} from "./rag/ragFunctions";

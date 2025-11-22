@@ -41,6 +41,14 @@ const STATUS_CONFIG: Record<LeadStatus, { label: string; color: string }> = {
     label: 'Refused',
     color: '#f44336',
   },
+  previous_client: {
+    label: 'Previous Client',
+    color: '#607d8b',
+  },
+  existing_client: {
+    label: 'Existing Client',
+    color: '#009688',
+  },
 };
 
 export const CompanyStatusBadge: React.FC<CompanyStatusBadgeProps> = ({

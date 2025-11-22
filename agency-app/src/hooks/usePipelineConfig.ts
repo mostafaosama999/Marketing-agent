@@ -84,6 +84,8 @@ export function usePipelineConfig(): UsePipelineConfigReturn {
         nurture: 'Nurture',
         won: 'Won',
         lost: 'Refused',
+        previous_client: 'Previous Client',
+        existing_client: 'Existing Client',
       };
     }
     return stagesToLabelMap(config.stages);

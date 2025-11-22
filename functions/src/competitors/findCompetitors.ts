@@ -14,6 +14,8 @@ export interface FindCompetitorsRequest {
   website?: string;
   description?: string;
   industry?: string;
+  excludeCompanies?: Array<{ name: string; website: string }>;
+  count?: number;
 }
 
 export interface Competitor {
@@ -46,7 +48,9 @@ function buildCompetitorPrompt(
   companyName: string,
   website: string,
   description: string,
-  industry: string
+  industry: string,
+  excludeCompanies: Array<{ name: string; website: string }>,
+  count: number
 ): { systemPrompt: string; userPrompt: string } {
   const systemPrompt = `You are a competitive intelligence analyst specializing in B2B SaaS and technology markets.
 
@@ -72,16 +76,24 @@ Exclude companies that:
 
 Provide factual, research-based insights about competitive overlap.`;
 
-  const userPrompt = `Analyze the following company and identify 5 direct competitors:
+  // Build exclusion section if there are companies to exclude
+  let exclusionSection = "";
+  if (excludeCompanies && excludeCompanies.length > 0) {
+    exclusionSection = `\n\n**Companies to EXCLUDE (do NOT suggest these):**\n${excludeCompanies
+      .map((c, idx) => `${idx + 1}. ${c.name} (${c.website})`)
+      .join("\n")}\n\nIMPORTANT: Do NOT include any of the companies listed above in your response. Find different competitors.`;
+  }
+
+  const userPrompt = `Analyze the following company and identify ${count} direct competitors:
 
 **Company to Analyze:**
 - Name: ${companyName}
 - Website: ${website || "Not provided"}
 - Description: ${description || "Not provided"}
-- Industry: ${industry || "Not provided"}
+- Industry: ${industry || "Not provided"}${exclusionSection}
 
 **Your Task:**
-Find 5 competitors that:
+Find ${count} competitors that:
 1. Serve similar customers or market segments
 2. Offer similar products/services or solve similar problems
 3. Are of similar company size and business model
@@ -111,10 +123,11 @@ Return ONLY a JSON object in this exact format:
 
 IMPORTANT:
 - Return ONLY the JSON object, no additional text or markdown
-- Find exactly 5 competitors
+- Find exactly ${count} competitors
 - Ensure all competitors are real, active companies
 - Base competitive overlap on the company's actual industry and business model
-- Prioritize companies with similar size, stage, and target market`;
+- Prioritize companies with similar size, stage, and target market
+${excludeCompanies.length > 0 ? "- DO NOT include any of the excluded companies listed above" : ""}`;
 
   return {systemPrompt, userPrompt};
 }
@@ -150,7 +163,15 @@ export const findCompetitorsV2 = functions
       console.log("Authentication verified for user:", context.auth.uid);
 
       // Validate input
-      const {companyId, companyName, website, description, industry} = data;
+      const {
+        companyId,
+        companyName,
+        website,
+        description,
+        industry,
+        excludeCompanies = [],
+        count = 5,
+      } = data;
       console.log("Validating input parameters...");
 
       if (!companyId || typeof companyId !== "string") {
@@ -170,6 +191,8 @@ export const findCompetitorsV2 = functions
       }
 
       console.log("Input validation passed");
+      console.log("Exclude companies count:", excludeCompanies.length);
+      console.log("Requested competitor count:", count);
 
       // Get OpenAI API key from environment config
       console.log("Retrieving OpenAI API key from config...");
@@ -205,7 +228,9 @@ export const findCompetitorsV2 = functions
         companyName,
         website || "",
         description || "",
-        industry || ""
+        industry || "",
+        excludeCompanies,
+        count
       );
       console.log("Prompts built - System prompt length:", systemPrompt.length);
       console.log("Prompts built - User prompt length:", userPrompt.length);

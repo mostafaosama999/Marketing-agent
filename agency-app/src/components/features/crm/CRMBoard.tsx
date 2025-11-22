@@ -1415,6 +1415,7 @@ function CRMBoard() {
           data={leads}
           entityType="lead"
           pipelineStages={stages.map(s => s.id)}
+          initialRules={advancedFilterRules}
         />
 
         {/* Bulk Edit Dialog */}

@@ -33,6 +33,8 @@ const STATUS_LABELS: Record<LeadStatus, string> = {
   nurture: 'Nurture',
   won: 'Won',
   lost: 'Refused',
+  previous_client: 'Previous Client',
+  existing_client: 'Existing Client',
 };
 
 export const ActiveFiltersBar: React.FC<ActiveFiltersBarProps> = ({
