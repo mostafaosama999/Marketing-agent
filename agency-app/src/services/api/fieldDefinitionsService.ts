@@ -13,9 +13,12 @@ import {
   getDocs,
   updateDoc,
   deleteDoc,
+  deleteField,
   query,
   where,
   Timestamp,
+  writeBatch,
+  getCountFromServer,
 } from 'firebase/firestore';
 import { db } from '../firebase/firestore';
 import {
@@ -26,6 +29,19 @@ import {
 } from '../../types/fieldDefinitions';
 
 const COLLECTION_NAME = 'fieldDefinitions';
+const LEADS_COLLECTION = 'leads';
+const COMPANIES_COLLECTION = 'entities';
+const BATCH_SIZE = 500; // Firestore batch limit
+
+/**
+ * Progress callback type for batch operations
+ */
+export type BatchProgressCallback = (progress: {
+  current: number;
+  total: number;
+  currentEntity: 'leads' | 'companies';
+  phase: 'preparing' | 'processing' | 'finalizing' | 'completed' | 'error';
+}) => void;
 
 /**
  * Create a new field definition
@@ -68,6 +84,7 @@ export const getFieldDefinition = async (
   const data = docSnap.data();
   return {
     ...data,
+    id: docSnap.id, // Use document ID as the field id
     createdAt: data.createdAt?.toDate(),
     updatedAt: data.updatedAt?.toDate(),
   } as FieldDefinition;
@@ -99,10 +116,11 @@ export const getFieldDefinitions = async (
 
   const querySnapshot = await getDocs(q);
 
-  return querySnapshot.docs.map(doc => {
-    const data = doc.data();
+  return querySnapshot.docs.map(docSnap => {
+    const data = docSnap.data();
     return {
       ...data,
+      id: docSnap.id, // Use document ID as the field id
       createdAt: data.createdAt?.toDate(),
       updatedAt: data.updatedAt?.toDate(),
     } as FieldDefinition;
@@ -261,4 +279,321 @@ export const mergeDropdownOptions = async (
   await updateDropdownOptions(fieldId, mergedOptions, userId);
 
   return mergedOptions;
+};
+
+/**
+ * Get count of records that will be affected by a field operation
+ */
+export const getAffectedRecordCount = async (
+  entityType: EntityType
+): Promise<number> => {
+  const collectionName = entityType === 'lead' ? LEADS_COLLECTION : COMPANIES_COLLECTION;
+  const collectionRef = collection(db, collectionName);
+  const snapshot = await getCountFromServer(collectionRef);
+  return snapshot.data().count;
+};
+
+/**
+ * Get count of records that have a value for a specific field
+ * This gives a more accurate representation of what will be affected by edit/delete
+ */
+export const getFieldValueCount = async (
+  entityType: EntityType,
+  fieldName: string,
+  isDefaultField: boolean
+): Promise<number> => {
+  const collectionName = entityType === 'lead' ? LEADS_COLLECTION : COMPANIES_COLLECTION;
+  const collectionRef = collection(db, collectionName);
+
+  // For default fields, query where the field is not null
+  // For custom fields, we need to check customFields.fieldName
+  // Firestore doesn't support != null directly, so we query where field exists
+  // by checking if it's greater than empty string (for strings) or using a workaround
+
+  if (isDefaultField) {
+    // For default fields, query where field != null
+    // We use a workaround: count all docs and subtract those where field is null/undefined
+    // Actually, Firestore doesn't have a "not null" query, so we need to fetch and count
+    const snapshot = await getDocs(collectionRef);
+    let count = 0;
+    snapshot.docs.forEach(doc => {
+      const data = doc.data();
+      if (data[fieldName] !== undefined && data[fieldName] !== null && data[fieldName] !== '') {
+        count++;
+      }
+    });
+    return count;
+  } else {
+    // For custom fields, check customFields.fieldName
+    const snapshot = await getDocs(collectionRef);
+    let count = 0;
+    snapshot.docs.forEach(doc => {
+      const data = doc.data();
+      const customFields = data.customFields || {};
+      if (customFields[fieldName] !== undefined && customFields[fieldName] !== null && customFields[fieldName] !== '') {
+        count++;
+      }
+    });
+    return count;
+  }
+};
+
+/**
+ * Rename a field across all records with data migration
+ * For custom fields: renames key in customFields object
+ * For default fields: renames top-level property
+ */
+export const renameFieldWithDataMigration = async (
+  entityType: EntityType,
+  oldFieldName: string,
+  newFieldName: string,
+  isDefaultField: boolean,
+  userId: string,
+  onProgress?: BatchProgressCallback
+): Promise<void> => {
+  const collectionName = entityType === 'lead' ? LEADS_COLLECTION : COMPANIES_COLLECTION;
+  const currentEntity = entityType === 'lead' ? 'leads' : 'companies';
+
+  // Phase 1: Preparing
+  onProgress?.({
+    current: 0,
+    total: 0,
+    currentEntity,
+    phase: 'preparing',
+  });
+
+  // Get all documents
+  const collectionRef = collection(db, collectionName);
+  const snapshot = await getDocs(collectionRef);
+  const total = snapshot.docs.length;
+
+  if (total === 0) {
+    // No records to update, just update the field definition
+    if (!isDefaultField) {
+      const oldFieldId = generateFieldId(entityType, oldFieldName);
+      const existingDef = await getFieldDefinition(oldFieldId);
+      if (existingDef) {
+        // Create new field definition with new name
+        const newFieldId = generateFieldId(entityType, newFieldName);
+        const newLabel = newFieldName
+          .split('_')
+          .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+          .join(' ');
+
+        await setDoc(doc(db, COLLECTION_NAME, newFieldId), {
+          ...existingDef,
+          id: newFieldId,
+          name: newFieldName,
+          label: newLabel,
+          updatedAt: Timestamp.now(),
+          updatedBy: userId,
+        });
+
+        // Delete old field definition
+        await deleteDoc(doc(db, COLLECTION_NAME, oldFieldId));
+      }
+    }
+
+    onProgress?.({
+      current: 0,
+      total: 0,
+      currentEntity,
+      phase: 'completed',
+    });
+    return;
+  }
+
+  // Phase 2: Processing in batches
+  let processed = 0;
+
+  for (let i = 0; i < snapshot.docs.length; i += BATCH_SIZE) {
+    const batch = writeBatch(db);
+    const batchDocs = snapshot.docs.slice(i, Math.min(i + BATCH_SIZE, snapshot.docs.length));
+
+    for (const docSnapshot of batchDocs) {
+      const docRef = doc(db, collectionName, docSnapshot.id);
+      const data = docSnapshot.data();
+
+      if (isDefaultField) {
+        // For default fields: rename top-level property
+        if (data[oldFieldName] !== undefined) {
+          batch.update(docRef, {
+            [newFieldName]: data[oldFieldName],
+            [oldFieldName]: deleteField(),
+            updatedAt: Timestamp.now(),
+          });
+        }
+      } else {
+        // For custom fields: rename key in customFields object
+        const customFields = data.customFields || {};
+        if (customFields[oldFieldName] !== undefined) {
+          batch.update(docRef, {
+            [`customFields.${newFieldName}`]: customFields[oldFieldName],
+            [`customFields.${oldFieldName}`]: deleteField(),
+            updatedAt: Timestamp.now(),
+          });
+        }
+      }
+    }
+
+    await batch.commit();
+    processed += batchDocs.length;
+
+    onProgress?.({
+      current: processed,
+      total,
+      currentEntity,
+      phase: 'processing',
+    });
+  }
+
+  // Phase 3: Finalizing - update field definition
+  onProgress?.({
+    current: processed,
+    total,
+    currentEntity,
+    phase: 'finalizing',
+  });
+
+  if (!isDefaultField) {
+    const oldFieldId = generateFieldId(entityType, oldFieldName);
+    const existingDef = await getFieldDefinition(oldFieldId);
+
+    if (existingDef) {
+      // Create new field definition with new name
+      const newFieldId = generateFieldId(entityType, newFieldName);
+      const newLabel = newFieldName
+        .split('_')
+        .map(w => w.charAt(0).toUpperCase() + w.slice(1))
+        .join(' ');
+
+      await setDoc(doc(db, COLLECTION_NAME, newFieldId), {
+        ...existingDef,
+        id: newFieldId,
+        name: newFieldName,
+        label: newLabel,
+        createdAt: existingDef.createdAt ? Timestamp.fromDate(existingDef.createdAt) : Timestamp.now(),
+        updatedAt: Timestamp.now(),
+        updatedBy: userId,
+      });
+
+      // Delete old field definition
+      await deleteDoc(doc(db, COLLECTION_NAME, oldFieldId));
+    }
+  }
+
+  // Phase 4: Completed
+  onProgress?.({
+    current: processed,
+    total,
+    currentEntity,
+    phase: 'completed',
+  });
+};
+
+/**
+ * Delete a field from all records
+ * For custom fields: removes key from customFields object
+ * For default fields: removes top-level property
+ */
+export const deleteFieldWithDataRemoval = async (
+  entityType: EntityType,
+  fieldName: string,
+  isDefaultField: boolean,
+  onProgress?: BatchProgressCallback
+): Promise<void> => {
+  const collectionName = entityType === 'lead' ? LEADS_COLLECTION : COMPANIES_COLLECTION;
+  const currentEntity = entityType === 'lead' ? 'leads' : 'companies';
+
+  // Phase 1: Preparing
+  onProgress?.({
+    current: 0,
+    total: 0,
+    currentEntity,
+    phase: 'preparing',
+  });
+
+  // Get all documents
+  const collectionRef = collection(db, collectionName);
+  const snapshot = await getDocs(collectionRef);
+  const total = snapshot.docs.length;
+
+  if (total === 0) {
+    // No records to update, just delete the field definition
+    if (!isDefaultField) {
+      const fieldId = generateFieldId(entityType, fieldName);
+      await deleteDoc(doc(db, COLLECTION_NAME, fieldId));
+    }
+
+    onProgress?.({
+      current: 0,
+      total: 0,
+      currentEntity,
+      phase: 'completed',
+    });
+    return;
+  }
+
+  // Phase 2: Processing in batches
+  let processed = 0;
+
+  for (let i = 0; i < snapshot.docs.length; i += BATCH_SIZE) {
+    const batch = writeBatch(db);
+    const batchDocs = snapshot.docs.slice(i, Math.min(i + BATCH_SIZE, snapshot.docs.length));
+
+    for (const docSnapshot of batchDocs) {
+      const docRef = doc(db, collectionName, docSnapshot.id);
+      const data = docSnapshot.data();
+
+      if (isDefaultField) {
+        // For default fields: remove top-level property
+        if (data[fieldName] !== undefined) {
+          batch.update(docRef, {
+            [fieldName]: deleteField(),
+            updatedAt: Timestamp.now(),
+          });
+        }
+      } else {
+        // For custom fields: remove key from customFields object
+        const customFields = data.customFields || {};
+        if (customFields[fieldName] !== undefined) {
+          batch.update(docRef, {
+            [`customFields.${fieldName}`]: deleteField(),
+            updatedAt: Timestamp.now(),
+          });
+        }
+      }
+    }
+
+    await batch.commit();
+    processed += batchDocs.length;
+
+    onProgress?.({
+      current: processed,
+      total,
+      currentEntity,
+      phase: 'processing',
+    });
+  }
+
+  // Phase 3: Finalizing - delete field definition
+  onProgress?.({
+    current: processed,
+    total,
+    currentEntity,
+    phase: 'finalizing',
+  });
+
+  if (!isDefaultField) {
+    const fieldId = generateFieldId(entityType, fieldName);
+    await deleteDoc(doc(db, COLLECTION_NAME, fieldId));
+  }
+
+  // Phase 4: Completed
+  onProgress?.({
+    current: processed,
+    total,
+    currentEntity,
+    phase: 'completed',
+  });
 };

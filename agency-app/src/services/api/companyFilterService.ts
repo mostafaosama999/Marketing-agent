@@ -3,11 +3,18 @@
 
 import { Company } from '../../types/crm';
 import { FilterRule, FilterableField } from '../../types/filter';
+import { getFieldDefinitions } from './fieldDefinitionsService';
+import { FieldDefinition } from '../../types/fieldDefinitions';
 
 /**
  * Get all filterable fields from standard Company fields + custom fields from actual companies
+ * @param companies - Array of companies to extract fields from
+ * @param fieldDefinitions - Optional pre-fetched field definitions to use labels from
  */
-export function getCompanyFilterableFields(companies: Company[]): FilterableField[] {
+export function getCompanyFilterableFields(
+  companies: Company[],
+  fieldDefinitions?: FieldDefinition[]
+): FilterableField[] {
   // Standard company fields
   const standardFields: FilterableField[] = [
     { name: 'name', label: 'Name', type: 'text', isCustomField: false },
@@ -60,15 +67,43 @@ export function getCompanyFilterableFields(companies: Company[]): FilterableFiel
     }
   });
 
+  // Create a lookup map for field definitions if provided
+  const fieldDefMap = fieldDefinitions
+    ? new Map(fieldDefinitions.map(def => [def.name, def]))
+    : new Map<string, FieldDefinition>();
+
   // Create filterable fields for each custom field
   const customFilterableFields: FilterableField[] = Array.from(customFieldNames)
     .sort()
-    .map(fieldName => ({
-      name: fieldName,
-      label: fieldName.charAt(0).toUpperCase() + fieldName.slice(1).replace(/_/g, ' '),
-      type: 'text' as const,
-      isCustomField: true,
-    }));
+    .map(fieldName => {
+      const fieldDef = fieldDefMap.get(fieldName);
+
+      // Use label from field definition if available, otherwise generate from field name
+      const label = fieldDef?.label ||
+        (fieldName.charAt(0).toUpperCase() + fieldName.slice(1).replace(/_/g, ' '));
+
+      // Determine field type from definition
+      const fieldType = fieldDef?.fieldType;
+      let type: 'text' | 'number' | 'date' | 'select' = 'text';
+      let options: string[] | undefined;
+
+      if (fieldType === 'dropdown' && fieldDef?.options) {
+        type = 'select';
+        options = fieldDef.options;
+      } else if (fieldType === 'number') {
+        type = 'number';
+      } else if (fieldType === 'date') {
+        type = 'date';
+      }
+
+      return {
+        name: fieldName,
+        label,
+        type,
+        options,
+        isCustomField: true,
+      };
+    });
 
   // Check if any companies have Apollo/Blog/WritingProgram data
   const hasApolloData = companies.some(c => c.apolloEnrichment);
@@ -262,4 +297,21 @@ export function applyCompanyAdvancedFilters(companies: Company[], rules: FilterR
 
     return result;
   });
+}
+
+/**
+ * Async version of getCompanyFilterableFields that fetches field definitions from Firestore
+ * @param companies - Array of companies to extract fields from
+ */
+export async function getCompanyFilterableFieldsAsync(
+  companies: Company[]
+): Promise<FilterableField[]> {
+  try {
+    const fieldDefinitions = await getFieldDefinitions('company');
+    return getCompanyFilterableFields(companies, fieldDefinitions);
+  } catch (error) {
+    console.error('Error fetching field definitions for company filters:', error);
+    // Fallback to without field definitions
+    return getCompanyFilterableFields(companies);
+  }
 }

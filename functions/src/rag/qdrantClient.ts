@@ -6,6 +6,7 @@
  */
 
 import { QdrantClient } from '@qdrant/js-client-rest';
+import * as functions from 'firebase-functions';
 
 // Collection names for different content sources
 export const COLLECTIONS = {
@@ -23,20 +24,21 @@ let qdrantClient: QdrantClient | null = null;
 
 /**
  * Get or create Qdrant client instance
- * Uses environment variables for configuration
+ * Uses Firebase config for configuration
  */
 export function getQdrantClient(): QdrantClient {
   if (!qdrantClient) {
-    const url = process.env.QDRANT_URL;
-    const apiKey = process.env.QDRANT_API_KEY;
+    // Try Firebase config first, then environment variables
+    const url = functions.config().qdrant?.url || process.env.QDRANT_URL;
+    const apiKey = functions.config().qdrant?.api_key || process.env.QDRANT_API_KEY;
 
     if (!url) {
-      throw new Error('QDRANT_URL environment variable is required');
+      throw new Error('Qdrant URL not configured. Set qdrant.url in Firebase config.');
     }
 
     qdrantClient = new QdrantClient({
       url,
-      apiKey, // Optional for local development
+      apiKey,
     });
   }
 
@@ -100,7 +102,7 @@ export interface NewsletterPayload {
   chunkIndex: number;
   text: string;
   subject: string;
-  from: string;
+  from: string | { name: string; email: string };
   date: string;
   userId: string;
   sourceType: 'newsletter';

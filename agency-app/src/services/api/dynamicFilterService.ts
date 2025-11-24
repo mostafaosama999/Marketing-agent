@@ -2,6 +2,8 @@
 // Service for dynamically generating filter options from lead data
 
 import { Lead } from '../../types/lead';
+import { getFieldDefinitions } from './fieldDefinitionsService';
+import { FieldDefinition } from '../../types/fieldDefinitions';
 
 /**
  * Extract unique values for a custom field from leads
@@ -62,13 +64,16 @@ export interface FilterConfig {
 
 export function getFilterConfig(
   fieldName: string,
-  leads: Lead[]
+  leads: Lead[],
+  fieldDefinition?: FieldDefinition
 ): FilterConfig | null {
   if (!isFieldFilterable(fieldName, leads)) {
     return null;
   }
 
-  const label = fieldName.charAt(0).toUpperCase() + fieldName.slice(1).replace(/_/g, ' ');
+  // Use label from field definition if available, otherwise generate from field name
+  const label = fieldDefinition?.label ||
+    (fieldName.charAt(0).toUpperCase() + fieldName.slice(1).replace(/_/g, ' '));
 
   // Extract unique values for this field
   const options = getUniqueValuesForField(leads, fieldName);
@@ -84,9 +89,12 @@ export function getFilterConfig(
 
 /**
  * Get all filterable custom fields with their configurations from actual leads data
+ * @param leads Array of leads
+ * @param fieldDefinitions Optional pre-fetched field definitions to use labels from
  */
 export function getFilterableFields(
-  leads: Lead[]
+  leads: Lead[],
+  fieldDefinitions?: FieldDefinition[]
 ): FilterConfig[] {
   const filterConfigs: FilterConfig[] = [];
 
@@ -100,15 +108,37 @@ export function getFilterableFields(
     }
   });
 
+  // Create a lookup map for field definitions if provided
+  const fieldDefMap = fieldDefinitions
+    ? new Map(fieldDefinitions.map(def => [def.name, def]))
+    : new Map<string, FieldDefinition>();
+
   // Create filter configs for each custom field
   for (const fieldName of Array.from(customFieldNames).sort()) {
-    const config = getFilterConfig(fieldName, leads);
+    const fieldDef = fieldDefMap.get(fieldName);
+    const config = getFilterConfig(fieldName, leads, fieldDef);
     if (config) {
       filterConfigs.push(config);
     }
   }
 
   return filterConfigs;
+}
+
+/**
+ * Async version that fetches field definitions from Firestore
+ */
+export async function getFilterableFieldsAsync(
+  leads: Lead[]
+): Promise<FilterConfig[]> {
+  try {
+    const fieldDefinitions = await getFieldDefinitions('lead');
+    return getFilterableFields(leads, fieldDefinitions);
+  } catch (error) {
+    console.error('Error fetching field definitions for dynamic filters:', error);
+    // Fallback to without field definitions
+    return getFilterableFields(leads);
+  }
 }
 
 /**

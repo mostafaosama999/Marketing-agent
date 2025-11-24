@@ -6,6 +6,7 @@
  */
 
 import OpenAI from 'openai';
+import * as functions from 'firebase-functions';
 import { EMBEDDING_DIMENSION } from './qdrantClient';
 
 // Model configuration
@@ -20,12 +21,14 @@ let openaiClient: OpenAI | null = null;
 
 /**
  * Get or create OpenAI client instance
+ * Uses Firebase config first, falls back to environment variable
  */
 function getOpenAIClient(): OpenAI {
   if (!openaiClient) {
-    const apiKey = process.env.OPENAI_API_KEY;
+    // Try Firebase config first, then environment variable
+    const apiKey = functions.config().openai?.key || process.env.OPENAI_API_KEY;
     if (!apiKey) {
-      throw new Error('OPENAI_API_KEY environment variable is required');
+      throw new Error('OpenAI API key not configured. Set openai.key in Firebase config or OPENAI_API_KEY env var.');
     }
     openaiClient = new OpenAI({ apiKey });
   }
@@ -157,16 +160,21 @@ function chunkBySentences(text: string, maxChunkSize: number): string[] {
 export function prepareNewsletterForEmbedding(
   subject: string,
   body: string,
-  from: string
+  from: string | { name: string; email: string }
 ): string {
+  // Format from field
+  const fromStr = typeof from === 'string'
+    ? from
+    : `${from.name} <${from.email}>`;
+
   // Clean and structure the content
-  const cleanBody = body
+  const cleanBody = (body || '')
     .replace(/\s+/g, ' ')
     .replace(/\[.*?\]/g, '') // Remove markdown links
     .replace(/https?:\/\/\S+/g, '') // Remove URLs
     .trim();
 
-  return `Subject: ${subject}\nFrom: ${from}\n\n${cleanBody}`;
+  return `Subject: ${subject}\nFrom: ${fromStr}\n\n${cleanBody}`;
 }
 
 /**

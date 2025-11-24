@@ -124,7 +124,7 @@ export const indexSingleNewsletter = functions
       // Ensure collection exists
       await ensureCollection(COLLECTIONS.NEWSLETTERS);
 
-      // Get the newsletter
+      // Get the newsletter (newsletters are at newsletters/emails/items)
       const db = admin.firestore();
       const newsletterDoc = await db
         .collection('newsletters')

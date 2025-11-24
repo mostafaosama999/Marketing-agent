@@ -25,14 +25,18 @@ const db = admin.firestore();
 
 /**
  * Newsletter document structure from Firestore
+ * Based on the Gmail sync structure
  */
 interface NewsletterDoc {
   id: string;
   subject: string;
-  from: string;
+  from: {
+    name: string;
+    email: string;
+  };
   body: string;
-  date: admin.firestore.Timestamp | Date | string;
-  userId?: string;
+  receivedAt?: admin.firestore.Timestamp | Date | string;
+  date?: admin.firestore.Timestamp | Date | string;
   indexed?: boolean;
   indexedAt?: admin.firestore.Timestamp;
 }
@@ -82,8 +86,8 @@ export async function indexNewsletter(
     const embeddings = await embedTexts(chunks);
     const estimatedCost = estimateEmbeddingCost(chunks);
 
-    // Parse date
-    const dateStr = parseDate(newsletter.date);
+    // Parse date (use receivedAt if available, fallback to date)
+    const dateStr = parseDate(newsletter.receivedAt || newsletter.date);
 
     // Prepare points for Qdrant
     const points = chunks.map((chunk, index) => ({
@@ -104,12 +108,17 @@ export async function indexNewsletter(
     // Upsert to Qdrant
     await upsertVectors(COLLECTIONS.NEWSLETTERS, points);
 
-    // Mark as indexed in Firestore
-    await db.collection('newsletters').doc(newsletter.id).update({
-      indexed: true,
-      indexedAt: admin.firestore.FieldValue.serverTimestamp(),
-      chunkCount: chunks.length,
-    });
+    // Mark as indexed in Firestore (newsletters are at newsletters/emails/items)
+    await db
+      .collection('newsletters')
+      .doc('emails')
+      .collection('items')
+      .doc(newsletter.id)
+      .update({
+        indexed: true,
+        indexedAt: admin.firestore.FieldValue.serverTimestamp(),
+        chunkCount: chunks.length,
+      });
 
     // Store chunk references in Firestore for tracking
     const batch = db.batch();
@@ -217,12 +226,17 @@ export async function removeNewsletterFromIndex(emailId: string): Promise<void> 
     }
     await batch.commit();
 
-    // Update newsletter document
-    await db.collection('newsletters').doc(emailId).update({
-      indexed: false,
-      indexedAt: admin.firestore.FieldValue.delete(),
-      chunkCount: admin.firestore.FieldValue.delete(),
-    });
+    // Update newsletter document (newsletters are at newsletters/emails/items)
+    await db
+      .collection('newsletters')
+      .doc('emails')
+      .collection('items')
+      .doc(emailId)
+      .update({
+        indexed: false,
+        indexedAt: admin.firestore.FieldValue.delete(),
+        chunkCount: admin.firestore.FieldValue.delete(),
+      });
   } catch (error) {
     console.error(`Error removing newsletter ${emailId} from index:`, error);
     throw error;
@@ -231,14 +245,17 @@ export async function removeNewsletterFromIndex(emailId: string): Promise<void> 
 
 /**
  * Get unindexed newsletters for a user
+ * Newsletters are stored at: newsletters/emails/items
  */
 export async function getUnindexedNewsletters(
   userId: string,
   limit: number = 100
 ): Promise<NewsletterDoc[]> {
+  // Newsletters are stored in a subcollection: newsletters/emails/items
   const snapshot = await db
     .collection('newsletters')
-    .where('userId', '==', userId)
+    .doc('emails')
+    .collection('items')
     .where('indexed', '!=', true)
     .limit(limit)
     .get();
@@ -251,13 +268,17 @@ export async function getUnindexedNewsletters(
 
 /**
  * Get all newsletters for a user (for initial indexing)
+ * Newsletters are stored at: newsletters/emails/items
  */
 export async function getAllNewslettersForUser(
   userId: string
 ): Promise<NewsletterDoc[]> {
+  // Newsletters are stored in a subcollection: newsletters/emails/items
+  // Note: userId is not stored per email, they're all in the same collection
   const snapshot = await db
     .collection('newsletters')
-    .where('userId', '==', userId)
+    .doc('emails')
+    .collection('items')
     .get();
 
   return snapshot.docs.map(doc => ({
@@ -274,9 +295,11 @@ export async function getIndexingStats(userId: string): Promise<{
   indexedNewsletters: number;
   totalChunks: number;
 }> {
+  // Newsletters are stored in a subcollection: newsletters/emails/items
   const newslettersSnapshot = await db
     .collection('newsletters')
-    .where('userId', '==', userId)
+    .doc('emails')
+    .collection('items')
     .get();
 
   const embeddingsSnapshot = await db

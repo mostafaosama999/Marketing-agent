@@ -108,6 +108,11 @@ export async function buildLeadsTableColumns(leads: Lead[]): Promise<TableColumn
 
     const fieldDefMap = new Map(fieldDefinitions.map(def => [def.name, def]));
 
+    // Also include field names from field definitions (even if no leads have data yet)
+    fieldDefinitions.forEach(def => {
+      customFieldNames.add(def.name);
+    });
+
     // Create column configs for each custom field
     const customFieldColumns: TableColumnConfig[] = Array.from(customFieldNames)
       .sort()
@@ -115,15 +120,21 @@ export async function buildLeadsTableColumns(leads: Lead[]): Promise<TableColumn
         const totalIndex = columns.length + index;
         const fieldDef = fieldDefMap.get(fieldName);
 
-        // Clean up label by removing section prefixes (linkedin_, email_)
-        const cleanFieldName = fieldName
-          .replace(/^linkedin_/, '')
-          .replace(/^email_/, '');
+        // Use label from field definition if available, otherwise generate from field name
+        let label: string;
+        if (fieldDef?.label) {
+          label = fieldDef.label;
+        } else {
+          // Clean up label by removing section prefixes (linkedin_, email_)
+          const cleanFieldName = fieldName
+            .replace(/^linkedin_/, '')
+            .replace(/^email_/, '');
 
-        const label = cleanFieldName
-          .split('_')
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-          .join(' ');
+          label = cleanFieldName
+            .split('_')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+        }
 
         // Get field type and section from field definition, or use defaults
         const fieldType: 'dropdown' | 'text' = fieldDef?.fieldType === 'dropdown' ? 'dropdown' : 'text';
@@ -178,6 +189,11 @@ export async function buildCompaniesTableColumns(companies: Company[]): Promise<
     const fieldDefinitions = await getFieldDefinitions('company');
     const fieldDefMap = new Map(fieldDefinitions.map(def => [def.name, def]));
 
+    // Also include field names from field definitions (even if no companies have data yet)
+    fieldDefinitions.forEach(def => {
+      customFieldNames.add(def.name);
+    });
+
     // Create column configs for each custom field
     const customFieldColumns: TableColumnConfig[] = Array.from(customFieldNames)
       .sort()
@@ -185,15 +201,21 @@ export async function buildCompaniesTableColumns(companies: Company[]): Promise<
         const totalIndex = columns.length + index;
         const fieldDef = fieldDefMap.get(fieldName);
 
-        // Clean up label by removing section prefixes (linkedin_, email_)
-        const cleanFieldName = fieldName
-          .replace(/^linkedin_/, '')
-          .replace(/^email_/, '');
+        // Use label from field definition if available, otherwise generate from field name
+        let label: string;
+        if (fieldDef?.label) {
+          label = fieldDef.label;
+        } else {
+          // Clean up label by removing section prefixes (linkedin_, email_)
+          const cleanFieldName = fieldName
+            .replace(/^linkedin_/, '')
+            .replace(/^email_/, '');
 
-        const label = cleanFieldName
-          .split('_')
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-          .join(' ');
+          label = cleanFieldName
+            .split('_')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+        }
 
         // Get field type and section from field definition, or use defaults
         const fieldType: 'dropdown' | 'text' = fieldDef?.fieldType === 'dropdown' ? 'dropdown' : 'text';
@@ -265,15 +287,21 @@ export async function buildWritingProgramTableColumns(companies: Company[]): Pro
         const totalIndex = columns.length + index;
         const fieldDef = fieldDefMap.get(fieldName);
 
-        // Clean up label by removing prefixes
-        const cleanFieldName = fieldName
-          .replace(/^linkedin_/, '')
-          .replace(/^email_/, '');
+        // Use label from field definition if available, otherwise generate from field name
+        let label: string;
+        if (fieldDef?.label) {
+          label = fieldDef.label;
+        } else {
+          // Clean up label by removing prefixes
+          const cleanFieldName = fieldName
+            .replace(/^linkedin_/, '')
+            .replace(/^email_/, '');
 
-        const label = cleanFieldName
-          .split('_')
-          .map(word => word.charAt(0).toUpperCase() + word.slice(1))
-          .join(' ');
+          label = cleanFieldName
+            .split('_')
+            .map(word => word.charAt(0).toUpperCase() + word.slice(1))
+            .join(' ');
+        }
 
         // Get field type from definition, or default to text
         const fieldType: 'dropdown' | 'text' = fieldDef?.fieldType === 'dropdown' ? 'dropdown' : 'text';

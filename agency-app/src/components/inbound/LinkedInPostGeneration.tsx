@@ -11,11 +11,16 @@ import {
   Alert,
   Snackbar,
   Chip,
+  Switch,
+  FormControlLabel,
+  Tooltip,
 } from '@mui/material';
 import {
   CheckCircle as CheckCircleIcon,
   Error as ErrorIcon,
   Lightbulb as LightbulbIcon,
+  Memory as MemoryIcon,
+  Storage as StorageIcon,
 } from '@mui/icons-material';
 import {LinkedInGenerationJob} from '../../types/linkedInGeneration';
 import {PostIdeasSession} from '../../types/postIdeas';
@@ -29,6 +34,11 @@ import {
   generatePostIdeas,
   generatePostFromIdea,
   subscribeToLatestSession,
+  getRAGStatus,
+  indexNewslettersForRAG,
+  generatePostIdeasRAG,
+  generatePostFromIdeaRAG,
+  RAGStatusResponse,
 } from '../../services/api/postIdeasService';
 import GeneratedPostCard from './GeneratedPostCard';
 import PostIdeaCard from './PostIdeaCard';
@@ -49,6 +59,11 @@ const LinkedInPostGeneration: React.FC<LinkedInPostGenerationProps> = ({
   const [currentJob, setCurrentJob] = useState<LinkedInGenerationJob | null>(null);
   const [generatedPosts, setGeneratedPosts] = useState<LinkedInGenerationJob[]>([]);
 
+  // RAG Mode
+  const [useRAG, setUseRAG] = useState(false);
+  const [ragStatus, setRagStatus] = useState<RAGStatusResponse | null>(null);
+  const [indexing, setIndexing] = useState(false);
+
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
     message: string;
@@ -65,6 +80,19 @@ const LinkedInPostGeneration: React.FC<LinkedInPostGenerationProps> = ({
 
     return () => unsubscribe();
   }, [userId]);
+
+  // Fetch RAG status on mount
+  useEffect(() => {
+    const fetchRAGStatus = async () => {
+      const status = await getRAGStatus();
+      setRagStatus(status);
+      // Auto-enable RAG if ready
+      if (status.isReady) {
+        setUseRAG(true);
+      }
+    };
+    fetchRAGStatus();
+  }, []);
 
   // Subscribe to generation history
   useEffect(() => {
@@ -121,6 +149,33 @@ const LinkedInPostGeneration: React.FC<LinkedInPostGenerationProps> = ({
     return () => unsubscribe();
   }, [userId, currentJob]);
 
+  // Handler: Index newsletters for RAG
+  const handleIndexNewsletters = async () => {
+    setIndexing(true);
+    try {
+      const result = await indexNewslettersForRAG();
+      setSnackbar({
+        open: true,
+        message: `${result.message} - ${result.details?.totalChunks || 0} chunks created`,
+        severity: 'success',
+      });
+      // Refresh RAG status
+      const status = await getRAGStatus();
+      setRagStatus(status);
+      if (status.isReady) {
+        setUseRAG(true);
+      }
+    } catch (error) {
+      setSnackbar({
+        open: true,
+        message: `Indexing failed: ${error instanceof Error ? error.message : 'Unknown error'}`,
+        severity: 'error',
+      });
+    } finally {
+      setIndexing(false);
+    }
+  };
+
   // Handler: Generate 5 Post Ideas
   const handleGenerateIdeas = async () => {
     if (!userId) {
@@ -135,12 +190,13 @@ const LinkedInPostGeneration: React.FC<LinkedInPostGenerationProps> = ({
     setGeneratingIdeas(true);
 
     try {
-      const response = await generatePostIdeas();
+      // Use RAG or legacy based on toggle
+      const response = useRAG ? await generatePostIdeasRAG() : await generatePostIdeas();
 
       if (response.success) {
         setSnackbar({
           open: true,
-          message: `Generated ${response.dataSourceCounts?.linkedInPosts} LinkedIn posts, ${response.dataSourceCounts?.newsletterEmails} newsletters, ${response.dataSourceCounts?.competitorPosts} competitor posts analyzed`,
+          message: `${useRAG ? '[RAG] ' : ''}Generated ${response.dataSourceCounts?.linkedInPosts} LinkedIn posts, ${response.dataSourceCounts?.newsletterEmails} newsletters, ${response.dataSourceCounts?.competitorPosts} competitor posts analyzed`,
           severity: 'success',
         });
       } else {
@@ -175,7 +231,11 @@ const LinkedInPostGeneration: React.FC<LinkedInPostGenerationProps> = ({
     setGeneratingPost(true);
 
     try {
-      const response = await generatePostFromIdea(currentSession.id, ideaId);
+      // Use RAG or legacy based on session type (check if session was created with RAG)
+      const sessionIsRAG = (currentSession as any).ragEnabled;
+      const response = sessionIsRAG
+        ? await generatePostFromIdeaRAG(currentSession.id, ideaId)
+        : await generatePostFromIdea(currentSession.id, ideaId);
 
       if (response.success) {
         // Set current job ID to start monitoring
@@ -279,6 +339,78 @@ const LinkedInPostGeneration: React.FC<LinkedInPostGenerationProps> = ({
           </Box>
         </Box>
 
+        {/* RAG Mode Toggle */}
+        <Box sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+          mb: 3,
+          p: 2,
+          borderRadius: 2,
+          backgroundColor: useRAG ? '#f0fdf4' : '#f8fafc',
+          border: useRAG ? '1px solid #86efac' : '1px solid #e2e8f0',
+        }}>
+          <MemoryIcon sx={{ color: useRAG ? '#22c55e' : '#94a3b8', fontSize: 28 }} />
+          <Box sx={{ flex: 1 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                RAG Mode (Semantic Search)
+              </Typography>
+              {ragStatus?.isReady && (
+                <Chip
+                  label="Ready"
+                  size="small"
+                  sx={{ backgroundColor: '#dcfce7', color: '#166534', fontWeight: 600, height: 20 }}
+                />
+              )}
+            </Box>
+            <Typography variant="caption" sx={{ color: '#64748b' }}>
+              {ragStatus?.isReady
+                ? `${ragStatus.stats.indexedNewsletters} newsletters indexed (${ragStatus.stats.totalChunks} chunks)`
+                : 'Index newsletters for better context retrieval'}
+            </Typography>
+          </Box>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={useRAG}
+                onChange={(e) => setUseRAG(e.target.checked)}
+                disabled={!ragStatus?.isReady}
+                sx={{
+                  '& .MuiSwitch-switchBase.Mui-checked': {
+                    color: '#22c55e',
+                  },
+                  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                    backgroundColor: '#22c55e',
+                  },
+                }}
+              />
+            }
+            label=""
+          />
+          {!ragStatus?.isReady && (
+            <Tooltip title="Index your newsletters to enable RAG mode">
+              <Button
+                variant="outlined"
+                size="small"
+                startIcon={indexing ? <CircularProgress size={16} /> : <StorageIcon />}
+                onClick={handleIndexNewsletters}
+                disabled={indexing}
+                sx={{
+                  borderColor: '#667eea',
+                  color: '#667eea',
+                  '&:hover': {
+                    borderColor: '#5568d3',
+                    backgroundColor: '#ede9fe',
+                  },
+                }}
+              >
+                {indexing ? 'Indexing...' : 'Index Newsletters'}
+              </Button>
+            </Tooltip>
+          )}
+        </Box>
+
         {/* Data Source Counts */}
         {currentSession && (
           <Box sx={{display: 'flex', gap: 1, mb: 2, flexWrap: 'wrap'}}>
@@ -302,6 +434,14 @@ const LinkedInPostGeneration: React.FC<LinkedInPostGenerationProps> = ({
               size="small"
               sx={{backgroundColor: '#f3e8ff', color: '#6b21a8', fontWeight: 600}}
             />
+            {(currentSession as any).ragEnabled && (
+              <Chip
+                icon={<MemoryIcon sx={{ fontSize: 16 }} />}
+                label="RAG"
+                size="small"
+                sx={{backgroundColor: '#dcfce7', color: '#166534', fontWeight: 600}}
+              />
+            )}
           </Box>
         )}
 

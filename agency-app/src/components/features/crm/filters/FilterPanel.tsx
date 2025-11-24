@@ -7,7 +7,7 @@ import { StatusFilter } from './StatusFilter';
 import { CompanyFilter } from './CompanyFilter';
 import { MonthFilter } from './MonthFilter';
 import { DynamicFieldFilter } from './DynamicFieldFilter';
-import { getFilterableFields, FilterConfig } from '../../../../services/api/dynamicFilterService';
+import { getFilterableFieldsAsync, FilterConfig } from '../../../../services/api/dynamicFilterService';
 
 interface FilterPanelProps {
   isExpanded: boolean;
@@ -28,14 +28,17 @@ export const FilterPanel: React.FC<FilterPanelProps> = ({
 
   // Load filterable custom fields from actual leads data
   useEffect(() => {
-    if (isExpanded && leads.length > 0) {
-      try {
-        const filterableFields = getFilterableFields(leads);
-        setCustomFieldConfigs(filterableFields);
-      } catch (error) {
-        console.error('Error loading custom fields:', error);
+    const loadFields = async () => {
+      if (isExpanded && leads.length > 0) {
+        try {
+          const filterableFields = await getFilterableFieldsAsync(leads);
+          setCustomFieldConfigs(filterableFields);
+        } catch (error) {
+          console.error('Error loading custom fields:', error);
+        }
       }
-    }
+    };
+    loadFields();
   }, [isExpanded, leads]);
 
   const labelStyle = {

@@ -217,3 +217,130 @@ export function formatRelativeTime(date: Date): string {
     return `${diffHours} hour${diffHours > 1 ? 's' : ''} ago`;
   return `${diffDays} day${diffDays > 1 ? 's' : ''} ago`;
 }
+
+// ============================================
+// RAG-Enhanced Functions
+// ============================================
+
+/**
+ * RAG Status Response
+ */
+export interface RAGStatusResponse {
+  success: boolean;
+  isReady: boolean;
+  stats: {
+    totalNewsletters: number;
+    indexedNewsletters: number;
+    totalChunks: number;
+    percentIndexed: number;
+  };
+  message: string;
+  error?: string;
+}
+
+/**
+ * RAG Indexing Response
+ */
+export interface RAGIndexingResponse {
+  success: boolean;
+  message: string;
+  stats: {
+    totalNewsletters: number;
+    indexedNewsletters: number;
+    totalChunks: number;
+  };
+  details?: {
+    successCount: number;
+    failureCount: number;
+    totalChunks: number;
+    estimatedCost: string;
+  };
+}
+
+/**
+ * Get RAG system status
+ */
+export async function getRAGStatus(): Promise<RAGStatusResponse> {
+  try {
+    const statusFunction = httpsCallable<{}, RAGStatusResponse>(
+      functions,
+      'getRAGStatus'
+    );
+    const result = await statusFunction({});
+    return result.data;
+  } catch (error) {
+    console.error('Error getting RAG status:', error);
+    return {
+      success: false,
+      isReady: false,
+      stats: {
+        totalNewsletters: 0,
+        indexedNewsletters: 0,
+        totalChunks: 0,
+        percentIndexed: 0,
+      },
+      message: 'Failed to get RAG status',
+      error: error instanceof Error ? error.message : 'Unknown error',
+    };
+  }
+}
+
+/**
+ * Index all newsletters for RAG
+ */
+export async function indexNewslettersForRAG(): Promise<RAGIndexingResponse> {
+  try {
+    const indexFunction = httpsCallable<{}, RAGIndexingResponse>(
+      functions,
+      'indexNewsletters'
+    );
+    const result = await indexFunction({});
+    return result.data;
+  } catch (error) {
+    console.error('Error indexing newsletters:', error);
+    throw new Error(
+      `Failed to index newsletters: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
+  }
+}
+
+/**
+ * Generate 5 LinkedIn Post Ideas using RAG
+ */
+export async function generatePostIdeasRAG(): Promise<GeneratePostIdeasResponse> {
+  try {
+    const generateFunction = httpsCallable<{}, GeneratePostIdeasResponse>(
+      functions,
+      'generatePostIdeasRAG'
+    );
+    const result = await generateFunction({});
+    return result.data;
+  } catch (error) {
+    console.error('Error generating post ideas (RAG):', error);
+    throw new Error(
+      `Failed to generate post ideas: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
+  }
+}
+
+/**
+ * Generate full post from selected idea using RAG
+ */
+export async function generatePostFromIdeaRAG(
+  sessionId: string,
+  ideaId: string
+): Promise<GeneratePostFromIdeaResponse> {
+  try {
+    const generateFunction = httpsCallable<
+      GeneratePostFromIdeaRequest,
+      GeneratePostFromIdeaResponse
+    >(functions, 'generatePostFromIdeaRAG');
+    const result = await generateFunction({sessionId, ideaId});
+    return result.data;
+  } catch (error) {
+    console.error('Error generating post from idea (RAG):', error);
+    throw new Error(
+      `Failed to generate post: ${error instanceof Error ? error.message : 'Unknown error'}`
+    );
+  }
+}

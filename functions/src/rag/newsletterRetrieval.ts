@@ -82,13 +82,15 @@ export async function retrieveRelevantNewsletters(
   // Filter by minimum score
   const filteredResults = results.filter(r => r.score >= minScore);
 
-  // Map to chunks
+  // Map to chunks (format from field as string)
   const chunks: RetrievedNewsletterChunk[] = filteredResults
     .slice(0, limit)
     .map(r => ({
       text: r.payload.text,
       subject: r.payload.subject,
-      from: r.payload.from,
+      from: typeof r.payload.from === 'string'
+        ? r.payload.from
+        : `${r.payload.from.name} <${r.payload.from.email}>`,
       date: r.payload.date,
       relevanceScore: r.score,
       emailId: r.payload.emailId,

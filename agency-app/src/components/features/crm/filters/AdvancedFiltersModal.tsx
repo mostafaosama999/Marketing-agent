@@ -18,8 +18,8 @@ import { FilterRule, FilterableField } from '../../../../types/filter';
 import { Lead, LeadStatus } from '../../../../types/lead';
 import { Company } from '../../../../types/crm';
 import { FilterRuleRow } from './FilterRuleRow';
-import { getFilterRuleSummary, getFilterableFields } from '../../../../services/api/advancedFilterService';
-import { getCompanyFilterableFields } from '../../../../services/api/companyFilterService';
+import { getFilterRuleSummary, getFilterableFieldsAsync } from '../../../../services/api/advancedFilterService';
+import { getCompanyFilterableFieldsAsync } from '../../../../services/api/companyFilterService';
 
 interface AdvancedFiltersModalProps<T = Lead> {
   open: boolean;
@@ -58,17 +58,20 @@ export const AdvancedFiltersModal = <T extends Lead | Company = Lead>({
 
   // Load filterable fields from actual data (leads or companies)
   useEffect(() => {
-    if (open && data.length > 0) {
-      try {
-        const filterableFields = entityType === 'company'
-          ? getCompanyFilterableFields(data as Company[])
-          : getFilterableFields(data as Lead[], pipelineStages);
-        setFields(filterableFields);
-        setFieldsLoaded(true);
-      } catch (error) {
-        console.error('Error loading filterable fields:', error);
+    const loadFields = async () => {
+      if (open && data.length > 0) {
+        try {
+          const filterableFields = entityType === 'company'
+            ? await getCompanyFilterableFieldsAsync(data as Company[])
+            : await getFilterableFieldsAsync(data as Lead[], pipelineStages);
+          setFields(filterableFields);
+          setFieldsLoaded(true);
+        } catch (error) {
+          console.error('Error loading filterable fields:', error);
+        }
       }
-    }
+    };
+    loadFields();
   }, [open, data, entityType, pipelineStages]);
 
   // Add default rule AFTER fields are loaded (only if no rules)

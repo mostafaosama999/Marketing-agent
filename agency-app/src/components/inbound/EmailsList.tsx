@@ -97,8 +97,9 @@ const EmailsList: React.FC<EmailsListProps> = ({emails, loading = false}) => {
               </Box>
             }
             secondary={
-              <Box sx={{display: "flex", alignItems: "center", gap: 1}}>
+              <Box component="span" sx={{display: "flex", alignItems: "center", gap: 1}}>
                 <Typography
+                  component="span"
                   variant="caption"
                   sx={{
                     color: "#64748b",

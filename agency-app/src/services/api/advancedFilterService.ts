@@ -3,13 +3,20 @@
 
 import { Lead, LeadStatus } from '../../types/lead';
 import { FilterRule, FilterOperator, FilterableField } from '../../types/filter';
+import { getFieldDefinitions } from './fieldDefinitionsService';
+import { FieldDefinition } from '../../types/fieldDefinitions';
 
 /**
  * Get all filterable fields from standard Lead fields + custom fields from actual leads
  * @param leads - Array of leads to extract fields from
  * @param pipelineStages - Optional array of pipeline stage IDs to use for status options
+ * @param fieldDefinitions - Optional pre-fetched field definitions to avoid async call
  */
-export function getFilterableFields(leads: Lead[], pipelineStages?: LeadStatus[]): FilterableField[] {
+export function getFilterableFields(
+  leads: Lead[],
+  pipelineStages?: LeadStatus[],
+  fieldDefinitions?: FieldDefinition[]
+): FilterableField[] {
   // Determine status options: use pipelineStages if provided, otherwise extract from leads
   let statusOptions: string[];
   if (pipelineStages && pipelineStages.length > 0) {
@@ -48,17 +55,64 @@ export function getFilterableFields(leads: Lead[], pipelineStages?: LeadStatus[]
     }
   });
 
+  // Create a lookup map for field definitions if provided
+  const fieldDefMap = fieldDefinitions
+    ? new Map(fieldDefinitions.map(def => [def.name, def]))
+    : new Map<string, FieldDefinition>();
+
   // Create filterable fields for each custom field
   const customFilterableFields: FilterableField[] = Array.from(customFieldNames)
     .sort()
-    .map(fieldName => ({
-      name: fieldName,
-      label: fieldName.charAt(0).toUpperCase() + fieldName.slice(1).replace(/_/g, ' '),
-      type: 'text' as const, // Default to text for custom fields
-      isCustomField: true,
-    }));
+    .map(fieldName => {
+      const fieldDef = fieldDefMap.get(fieldName);
+
+      // Use label from field definition if available, otherwise generate from field name
+      const label = fieldDef?.label ||
+        (fieldName.charAt(0).toUpperCase() + fieldName.slice(1).replace(/_/g, ' '));
+
+      // Determine field type from definition
+      const fieldType = fieldDef?.fieldType;
+      let type: 'text' | 'number' | 'date' | 'select' = 'text';
+      let options: string[] | undefined;
+
+      if (fieldType === 'dropdown' && fieldDef?.options) {
+        type = 'select';
+        options = fieldDef.options;
+      } else if (fieldType === 'number') {
+        type = 'number';
+      } else if (fieldType === 'date') {
+        type = 'date';
+      }
+
+      return {
+        name: fieldName,
+        label,
+        type,
+        options,
+        isCustomField: true,
+      };
+    });
 
   return [...standardFields, ...customFilterableFields];
+}
+
+/**
+ * Async version of getFilterableFields that fetches field definitions from Firestore
+ * @param leads - Array of leads to extract fields from
+ * @param pipelineStages - Optional array of pipeline stage IDs to use for status options
+ */
+export async function getFilterableFieldsAsync(
+  leads: Lead[],
+  pipelineStages?: LeadStatus[]
+): Promise<FilterableField[]> {
+  try {
+    const fieldDefinitions = await getFieldDefinitions('lead');
+    return getFilterableFields(leads, pipelineStages, fieldDefinitions);
+  } catch (error) {
+    console.error('Error fetching field definitions for filters:', error);
+    // Fallback to without field definitions
+    return getFilterableFields(leads, pipelineStages);
+  }
 }
 
 /**

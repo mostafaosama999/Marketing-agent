@@ -367,11 +367,13 @@ const ClientGuidelinesModal: React.FC<ClientGuidelinesModalProps> = ({
                       )}
                       <Tooltip title="Delete section">
                         <IconButton
+                          component="div"
                           size="small"
                           onClick={(e) => {
                             e.stopPropagation();
                             deleteSection(section.id);
                           }}
+                          sx={{ cursor: 'pointer' }}
                         >
                           <Delete fontSize="small" />
                         </IconButton>
