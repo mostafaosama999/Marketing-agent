@@ -113,8 +113,12 @@ export async function buildLeadsTableColumns(leads: Lead[]): Promise<TableColumn
       customFieldNames.add(def.name);
     });
 
-    // Create column configs for each custom field
+    // Fields that are built-in (not custom) - exclude from custom field columns
+    const builtInFieldNames = new Set(['rating']);
+
+    // Create column configs for each custom field (excluding built-in fields)
     const customFieldColumns: TableColumnConfig[] = Array.from(customFieldNames)
+      .filter(fieldName => !builtInFieldNames.has(fieldName))
       .sort()
       .map((fieldName, index) => {
         const totalIndex = columns.length + index;

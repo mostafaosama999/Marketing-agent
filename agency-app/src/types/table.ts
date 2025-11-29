@@ -23,11 +23,12 @@ export const DEFAULT_LEADS_TABLE_COLUMNS: TableColumnConfig[] = [
   { id: 'phone', label: 'Phone', sortable: true, visible: false, type: 'default', order: 2, section: 'general' },
   { id: 'company', label: 'Company', sortable: true, visible: true, type: 'default', order: 3, section: 'general' },
   { id: 'status', label: 'Status', sortable: true, visible: true, type: 'default', order: 4, section: 'general' },
-  { id: 'linkedin_profile_url', label: 'Profile URL', sortable: true, visible: true, type: 'default', order: 5, section: 'linkedin' },
-  { id: 'linkedin_status', label: 'Status', sortable: true, visible: true, type: 'default', order: 6, section: 'linkedin' },
-  { id: 'email_outreach_status', label: 'Email Outreach', sortable: true, visible: true, type: 'default', order: 7, section: 'email' },
-  { id: 'createdAt', label: 'Created', sortable: true, visible: true, type: 'default', order: 8, section: 'general' },
-  { id: 'actions', label: 'Actions', sortable: false, visible: true, type: 'default', order: 9, section: 'general' },
+  { id: 'rating', label: 'Rating', sortable: true, visible: true, type: 'default', order: 5, section: 'general' },
+  { id: 'linkedin_profile_url', label: 'Profile URL', sortable: true, visible: true, type: 'default', order: 6, section: 'linkedin' },
+  { id: 'linkedin_status', label: 'Status', sortable: true, visible: true, type: 'default', order: 7, section: 'linkedin' },
+  { id: 'email_outreach_status', label: 'Email Outreach', sortable: true, visible: true, type: 'default', order: 8, section: 'email' },
+  { id: 'createdAt', label: 'Created', sortable: true, visible: true, type: 'default', order: 9, section: 'general' },
+  { id: 'actions', label: 'Actions', sortable: false, visible: true, type: 'default', order: 10, section: 'general' },
 ];
 
 // Companies table columns
