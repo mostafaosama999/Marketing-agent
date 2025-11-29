@@ -71,6 +71,10 @@ function convertToLead(id: string, data: any): Lead {
     lastEnrichedAt: safeToDate(data.lastEnrichedAt),
     totalApiCosts: data.totalApiCosts,
     lastApiCostUpdate: safeToDate(data.lastApiCostUpdate),
+    rating: data.rating !== undefined ? data.rating : null,
+    ratingUpdatedBy: data.ratingUpdatedBy,
+    ratingUpdatedAt: safeToDate(data.ratingUpdatedAt),
+    customFieldsUpdatedBy: data.customFieldsUpdatedBy,
     archived: data.archived || false,
     archivedAt: safeToDate(data.archivedAt),
     archivedBy: data.archivedBy,
@@ -567,20 +571,59 @@ export async function updateLeadStatus(
  * @param leadId - The ID of the lead to update
  * @param fieldName - The name of the custom field to update
  * @param value - The new value for the custom field
+ * @param userId - Optional user ID to track who made the update (for rating fields)
  */
 export async function updateLeadCustomField(
   leadId: string,
   fieldName: string,
-  value: any
+  value: any,
+  userId?: string
 ): Promise<void> {
   try {
     const leadRef = doc(db, LEADS_COLLECTION, leadId);
-    await updateDoc(leadRef, {
+    const updateData: Record<string, any> = {
       [`customFields.${fieldName}`]: value,
       updatedAt: serverTimestamp(),
-    });
+    };
+
+    // Track who updated rating fields
+    if (userId && fieldName.toLowerCase().includes('rating')) {
+      updateData[`customFieldsUpdatedBy.${fieldName}`] = userId;
+    }
+
+    await updateDoc(leadRef, updateData);
   } catch (error) {
     console.error('Error updating lead custom field:', error);
+    throw error;
+  }
+}
+
+/**
+ * Update lead rating with user tracking
+ * @param leadId - The ID of the lead to update
+ * @param rating - The new rating value (1-10 or null to clear)
+ * @param userId - The user ID who is setting the rating
+ */
+export async function updateLeadRating(
+  leadId: string,
+  rating: number | null,
+  userId?: string
+): Promise<void> {
+  try {
+    const leadRef = doc(db, LEADS_COLLECTION, leadId);
+    const updateData: Record<string, any> = {
+      rating: rating,
+      updatedAt: serverTimestamp(),
+    };
+
+    if (userId) {
+      updateData.ratingUpdatedBy = userId;
+      updateData.ratingUpdatedAt = serverTimestamp();
+    }
+
+    await updateDoc(leadRef, updateData);
+  } catch (error) {
+    console.error('Error updating lead rating:', error);
     throw error;
   }
 }

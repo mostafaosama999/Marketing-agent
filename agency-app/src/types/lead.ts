@@ -14,6 +14,7 @@ export interface Lead {
   companyName?: string; // Denormalized company name for performance
   status: LeadStatus;
   customFields: Record<string, any>; // Dynamic custom field values
+  customFieldsUpdatedBy?: Record<string, string>; // fieldName -> userId who last updated
   createdAt: Date;
   updatedAt: Date;
 
@@ -50,6 +51,11 @@ export interface Lead {
   // API Cost Tracking
   totalApiCosts?: number;
   lastApiCostUpdate?: Date;
+
+  // Rating (built-in field like Company's ratingV2)
+  rating?: number | null;
+  ratingUpdatedBy?: string;
+  ratingUpdatedAt?: Date;
 
   // Outreach Tracking (lead-level)
   outreach?: {

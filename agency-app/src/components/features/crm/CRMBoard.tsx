@@ -1,5 +1,5 @@
 // src/components/features/crm/CRMBoard.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   Box,
@@ -25,9 +25,12 @@ import { Add as AddIcon, UploadFile as UploadFileIcon, Archive as ArchiveIcon } 
 import { serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '../../../contexts/AuthContext';
 import { Lead, LeadStatus } from '../../../types/lead';
-import { CSVRow } from '../../../types/crm';
+import { Company, CSVRow } from '../../../types/crm';
 import { FilterState, FilterRule, SavePresetRequest } from '../../../types/filter';
-import { applyAdvancedFilters } from '../../../services/api/advancedFilterService';
+import { CrossEntityFilterContext } from '../../../types/crossEntityFilter';
+import { applyAdvancedFilters, applyAdvancedFiltersWithCrossEntity } from '../../../services/api/advancedFilterService';
+import { buildCompaniesMap } from '../../../services/api/crossEntityFilterService';
+import { subscribeToCompanies } from '../../../services/api/companies';
 import { LeadDialog } from './LeadDialog';
 import { LeadColumn } from './LeadColumn';
 import { CRMLeadsTable } from './CRMLeadsTable';
@@ -90,6 +93,8 @@ function CRMBoard() {
   const { userProfile, user } = useAuth();
   const { stages, updateLabel, updateOrder } = usePipelineConfig(); // Load dynamic pipeline config
   const [leads, setLeads] = useState<Lead[]>([]);
+  const [companies, setCompanies] = useState<Company[]>([]);
+  const [companiesLoading, setCompaniesLoading] = useState(false);
   const [archivedLeadsCount, setArchivedLeadsCount] = useState(0);
   const [showArchivedView, setShowArchivedView] = useState(false);
   const [draggedLead, setDraggedLead] = useState<Lead | null>(null);
@@ -174,6 +179,39 @@ function CRMBoard() {
 
     return () => unsubscribe();
   }, []);
+
+  // Check if any filter rules require company data (cross-entity filtering)
+  const hasCompanyCrossEntityRule = useMemo(
+    () => advancedFilterRules.some(r => r.entitySource === 'company'),
+    [advancedFilterRules]
+  );
+
+  // LAZY LOAD: Only subscribe to companies when cross-entity filter rules exist
+  // This avoids loading all companies into memory when not needed
+  useEffect(() => {
+    if (!hasCompanyCrossEntityRule) {
+      // Clear companies if no longer needed
+      setCompanies([]);
+      setCompaniesLoading(false);
+      return;
+    }
+
+    // Start loading - filter should wait until companies are loaded
+    setCompaniesLoading(true);
+
+    // Only subscribe when we actually need companies data for filtering
+    const unsubscribe = subscribeToCompanies((companiesData) => {
+      setCompanies(companiesData);
+      setCompaniesLoading(false); // Done loading
+    });
+
+    return () => unsubscribe();
+  }, [hasCompanyCrossEntityRule]);
+
+  // Build cross-entity context for filtering leads by company values
+  const crossEntityContext = useMemo<CrossEntityFilterContext>(() => {
+    return { companiesMap: buildCompaniesMap(companies) };
+  }, [companies]);
 
   // Subscribe to archived leads count
   useEffect(() => {
@@ -609,9 +647,14 @@ function CRMBoard() {
       });
     }
 
-    // Apply advanced filters if any rules are set
+    // Apply advanced filters if any rules are set (with cross-entity support)
     if (advancedFilterRules.length > 0) {
-      filteredLeads = applyAdvancedFilters(filteredLeads, advancedFilterRules);
+      // If we have company cross-entity rules but companies are still loading, return empty
+      // This prevents showing incorrect results before company data is available
+      if (hasCompanyCrossEntityRule && companiesLoading) {
+        return [];
+      }
+      filteredLeads = applyAdvancedFiltersWithCrossEntity(filteredLeads, advancedFilterRules, crossEntityContext);
     }
 
     return filteredLeads;
@@ -661,9 +704,15 @@ function CRMBoard() {
       });
     }
 
-    // Apply advanced filters if any rules are set
+    // Apply advanced filters if any rules are set (with cross-entity support)
     if (advancedFilterRules.length > 0) {
-      filteredLeads = applyAdvancedFilters(filteredLeads, advancedFilterRules);
+      // If we have company cross-entity rules but companies are still loading, return empty
+      // This prevents showing incorrect results before company data is available
+      if (hasCompanyCrossEntityRule && companiesLoading) {
+        return [];
+      }
+
+      filteredLeads = applyAdvancedFiltersWithCrossEntity(filteredLeads, advancedFilterRules, crossEntityContext);
     }
 
     return filteredLeads;
@@ -1406,7 +1455,7 @@ function CRMBoard() {
           />
         )}
 
-        {/* Advanced Filters Modal */}
+        {/* Advanced Filters Modal with Cross-Entity Support */}
         <AdvancedFiltersModal
           open={openFiltersModal}
           onClose={() => setOpenFiltersModal(false)}
@@ -1416,6 +1465,8 @@ function CRMBoard() {
           entityType="lead"
           pipelineStages={stages.map(s => s.id)}
           initialRules={advancedFilterRules}
+          crossEntityData={{ companies }}
+          enableCrossEntityFiltering={true}
         />
 
         {/* Bulk Edit Dialog */}

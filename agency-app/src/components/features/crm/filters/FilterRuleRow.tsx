@@ -2,10 +2,19 @@
 import React, { useState, useEffect } from 'react';
 import { Box, IconButton, Select, MenuItem, Typography } from '@mui/material';
 import { Delete as DeleteIcon } from '@mui/icons-material';
-import { FilterRule, FilterableField, FilterOperator } from '../../../../types/filter';
+import {
+  FilterRule,
+  FilterableField,
+  FilterOperator,
+  EntitySource,
+  LeadAggregationType,
+  CountOperator,
+} from '../../../../types/filter';
 import { FieldSelector } from './FieldSelector';
 import { OperatorSelector } from './OperatorSelector';
 import { ValueInput } from './ValueInput';
+import { AggregationSelector } from './AggregationSelector';
+import { CountValueInput } from './CountValueInput';
 import { getOperatorsForFieldType } from '../../../../services/api/advancedFilterService';
 
 interface FilterRuleRowProps {
@@ -42,7 +51,8 @@ export const FilterRuleRow: React.FC<FilterRuleRowProps> = ({
     fieldName: string,
     fieldLabel: string,
     type: 'text' | 'number' | 'date' | 'select' | 'boolean',
-    options?: string[]
+    options?: string[],
+    entitySource?: EntitySource
   ) => {
     setFieldType(type);
     setFieldOptions(options || []);
@@ -57,6 +67,11 @@ export const FilterRuleRow: React.FC<FilterRuleRowProps> = ({
       fieldLabel: fieldLabel,
       operator: defaultOperator,
       value: null, // Reset value when field changes
+      entitySource: entitySource || 'self',
+      // Set default aggregation for leads-sourced rules
+      aggregationType: entitySource === 'leads' ? 'any' : undefined,
+      countOperator: undefined,
+      countValue: undefined,
     });
   };
 
@@ -82,6 +97,35 @@ export const FilterRuleRow: React.FC<FilterRuleRowProps> = ({
     });
   };
 
+  const handleAggregationChange = (aggregationType: LeadAggregationType) => {
+    onUpdate({
+      ...rule,
+      aggregationType,
+      countOperator: aggregationType === 'count' ? 'equals' : undefined,
+      countValue: aggregationType === 'count' ? 1 : undefined,
+    });
+  };
+
+  const handleCountOperatorChange = (countOperator: CountOperator) => {
+    onUpdate({
+      ...rule,
+      countOperator,
+      countValue: countOperator === 'between' ? [1, 5] : 1,
+    });
+  };
+
+  const handleCountValueChange = (countValue: number | [number, number]) => {
+    onUpdate({
+      ...rule,
+      countValue,
+    });
+  };
+
+  // Check if this is a leads cross-entity rule
+  const isLeadsRule = rule.entitySource === 'leads';
+  const showAggregation = isLeadsRule;
+  const showCountInput = isLeadsRule && rule.aggregationType === 'count';
+
   return (
     <Box
       sx={{
@@ -93,11 +137,19 @@ export const FilterRuleRow: React.FC<FilterRuleRowProps> = ({
         bgcolor: 'white',
         borderRadius: '8px',
         border: '1px solid #e2e8f0',
+        // Highlight cross-entity rules
+        ...(rule.entitySource === 'company' && {
+          borderLeft: '3px solid #0077b5',
+        }),
+        ...(rule.entitySource === 'leads' && {
+          borderLeft: '3px solid #10b981',
+        }),
         '&:hover': {
           borderColor: '#667eea',
           boxShadow: '0 2px 8px rgba(102, 126, 234, 0.1)',
         },
         transition: 'all 0.2s',
+        flexWrap: 'wrap',
       }}
     >
       {/* Logic Gate Indicator (for non-first rows) */}
@@ -151,27 +203,55 @@ export const FilterRuleRow: React.FC<FilterRuleRowProps> = ({
         />
       </Box>
 
-      {/* Operator Selector */}
-      <Box sx={{ flex: 1, minWidth: '180px' }}>
-        <OperatorSelector
-          value={rule.operator}
-          fieldType={fieldType}
-          onChange={handleOperatorChange}
-          disabled={!rule.field}
-        />
-      </Box>
+      {/* Aggregation Selector - only for leads cross-entity rules */}
+      {showAggregation && (
+        <Box sx={{ flex: 0.8, minWidth: '140px' }}>
+          <AggregationSelector
+            value={(rule.aggregationType as LeadAggregationType) || 'any'}
+            onChange={handleAggregationChange}
+            disabled={!rule.field}
+          />
+        </Box>
+      )}
 
-      {/* Value Input */}
-      <Box sx={{ flex: 1.5, minWidth: '200px' }}>
-        <ValueInput
-          fieldType={fieldType}
-          operator={rule.operator}
-          value={rule.value}
-          onChange={handleValueChange}
-          options={fieldOptions}
-          disabled={!rule.field || !rule.operator}
-        />
-      </Box>
+      {/* Count Value Input - only for count aggregation */}
+      {showCountInput && (
+        <Box sx={{ flex: 1.2, minWidth: '220px' }}>
+          <CountValueInput
+            operator={(rule.countOperator as CountOperator) || 'equals'}
+            value={rule.countValue}
+            onOperatorChange={handleCountOperatorChange}
+            onValueChange={handleCountValueChange}
+            disabled={!rule.field}
+          />
+        </Box>
+      )}
+
+      {/* Operator Selector - hide for count aggregation */}
+      {!showCountInput && (
+        <Box sx={{ flex: 1, minWidth: '180px' }}>
+          <OperatorSelector
+            value={rule.operator}
+            fieldType={fieldType}
+            onChange={handleOperatorChange}
+            disabled={!rule.field}
+          />
+        </Box>
+      )}
+
+      {/* Value Input - hide for count aggregation */}
+      {!showCountInput && (
+        <Box sx={{ flex: 1.5, minWidth: '200px' }}>
+          <ValueInput
+            fieldType={fieldType}
+            operator={rule.operator}
+            value={rule.value}
+            onChange={handleValueChange}
+            options={fieldOptions}
+            disabled={!rule.field || !rule.operator}
+          />
+        </Box>
+      )}
 
       {/* Delete Button */}
       <IconButton

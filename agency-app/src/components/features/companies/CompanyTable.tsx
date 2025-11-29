@@ -49,6 +49,8 @@ import { updateCompanyCustomField, updateCompanyField, updateCompany, setCompany
 import { bulkFindWritingPrograms, bulkAnalyzeWritingPrograms } from '../../../services/api/bulkWritingProgramService';
 import { useAuth } from '../../../contexts/AuthContext';
 import { CompanyStatusBadge } from './CompanyStatusBadge';
+import { doc, getDoc } from 'firebase/firestore';
+import { db } from '../../../services/firebase/firestore';
 import { LeadStatus } from '../../../types/lead';
 
 interface CompanyTableProps {
@@ -125,6 +127,9 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
     severity: 'success' | 'error' | 'info';
   }>({ open: false, message: '', severity: 'success' });
 
+  // Rating user display names (first letter only)
+  const [ratingUserNames, setRatingUserNames] = useState<Map<string, string>>(new Map());
+
   // Fetch all field definitions on mount (dropdowns, dates, etc.)
   useEffect(() => {
     const fetchFieldDefinitions = async () => {
@@ -138,6 +143,51 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
 
     fetchFieldDefinitions();
   }, []);
+
+  // Fetch user display names for rating authors
+  useEffect(() => {
+    const fetchRatingUserNames = async () => {
+      const userIdSet = new Set(
+        companies
+          .map(c => c.ratingV2UpdatedBy)
+          .filter(Boolean)
+      );
+      const uniqueUserIds = Array.from(userIdSet) as string[];
+
+      if (uniqueUserIds.length === 0) return;
+
+      const names = new Map<string, string>();
+      await Promise.all(
+        uniqueUserIds.map(async (userId) => {
+          // Skip if we already have this user's name
+          if (ratingUserNames.has(userId)) {
+            names.set(userId, ratingUserNames.get(userId)!);
+            return;
+          }
+          try {
+            const userDoc = await getDoc(doc(db, 'users', userId));
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              const displayName = userData.displayName || userData.email || '';
+              names.set(userId, displayName);
+            } else {
+              names.set(userId, '');
+            }
+          } catch (error) {
+            console.error(`Error fetching user ${userId}:`, error);
+            names.set(userId, '');
+          }
+        })
+      );
+      setRatingUserNames(prev => {
+        const merged = new Map(prev);
+        names.forEach((value, key) => merged.set(key, value));
+        return merged;
+      });
+    };
+
+    fetchRatingUserNames();
+  }, [companies]);
 
   // Sorting handler
   const handleRequestSort = (fieldId: string) => {
@@ -785,6 +835,14 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
 
         const colors = getRatingColors(company.ratingV2);
 
+        // Get the first letter of the user's name who set the rating (default to 'M' if no tracking)
+        const hasRating = company.ratingV2 !== null && company.ratingV2 !== undefined;
+        const ratingUserInitial = hasRating
+          ? (company.ratingV2UpdatedBy && ratingUserNames.get(company.ratingV2UpdatedBy)
+              ? ratingUserNames.get(company.ratingV2UpdatedBy)!.charAt(0).toUpperCase()
+              : 'M') // Default to 'M' for ratings without tracking
+          : '';
+
         return (
           <TableCell
             key={columnId}
@@ -795,32 +853,52 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
               textAlign: 'center',
             }}
           >
-            <Chip
-              label={company.ratingV2 !== null && company.ratingV2 !== undefined ? company.ratingV2 : '-'}
-              size="small"
-              onClick={(e) => handleRatingClick(e, company)}
-              sx={{
-                background: colors.background,
-                color: '#fff',
-                fontWeight: 700,
-                fontSize: company.ratingV2 !== null && company.ratingV2 !== undefined ? '11px' : '10px',
-                height: company.ratingV2 !== null && company.ratingV2 !== undefined ? '24px' : '20px',
-                minWidth: company.ratingV2 !== null && company.ratingV2 !== undefined ? '40px' : '32px',
-                maxWidth: company.ratingV2 !== null && company.ratingV2 !== undefined ? '40px' : '32px',
-                boxShadow: '0 2px 4px rgba(0, 0, 0, 0.15)',
-                cursor: 'pointer',
-                margin: 'auto',
-                '& .MuiChip-label': {
-                  px: company.ratingV2 !== null && company.ratingV2 !== undefined ? 1.5 : 1,
-                },
-                '&:hover': {
-                  background: colors.hoverBackground,
-                  transform: 'translateY(-1px)',
-                  boxShadow: '0 4px 8px rgba(0, 0, 0, 0.25)',
-                  filter: 'brightness(1.1)',
-                },
-              }}
-            />
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 0.5 }}>
+              <Chip
+                label={hasRating ? company.ratingV2 : '-'}
+                size="small"
+                onClick={(e) => handleRatingClick(e, company)}
+                sx={{
+                  background: colors.background,
+                  color: '#fff',
+                  fontWeight: 700,
+                  fontSize: hasRating ? '11px' : '10px',
+                  height: hasRating ? '24px' : '20px',
+                  minWidth: hasRating ? '32px' : '32px',
+                  maxWidth: hasRating ? '32px' : '32px',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.15)',
+                  cursor: 'pointer',
+                  '& .MuiChip-label': {
+                    px: 1,
+                  },
+                  '&:hover': {
+                    background: colors.hoverBackground,
+                    transform: 'translateY(-1px)',
+                    boxShadow: '0 4px 8px rgba(0, 0, 0, 0.25)',
+                    filter: 'brightness(1.1)',
+                  },
+                }}
+              />
+              {ratingUserInitial && (
+                <Box
+                  sx={{
+                    width: 22,
+                    height: 22,
+                    borderRadius: '50%',
+                    bgcolor: '#667eea', // Fixed purple - brand color
+                    color: '#fff',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.2)',
+                  }}
+                >
+                  {ratingUserInitial}
+                </Box>
+              )}
+            </Box>
           </TableCell>
         );
 
@@ -1376,26 +1454,51 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
           }
         }}
       >
-        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((rating) => (
-          <MenuItem
-            key={rating}
-            onClick={() => handleRatingChange(rating)}
-            sx={{
-              fontSize: '13px',
-              py: 1,
-              justifyContent: 'center',
-              fontWeight: selectedCompanyForRating?.ratingV2 === rating ? 700 : 400,
-              background: selectedCompanyForRating?.ratingV2 === rating
-                ? 'linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%)'
-                : 'transparent',
-              '&:hover': {
-                bgcolor: 'rgba(102, 126, 234, 0.1)',
-              },
-            }}
-          >
-            {rating}
-          </MenuItem>
-        ))}
+        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((rating) => {
+          // Traffic light colors
+          const getRatingBgColor = (r: number) => {
+            if (r <= 3) return '#EF4444'; // Red
+            if (r <= 7) return '#F59E0B'; // Amber
+            return '#10B981'; // Green
+          };
+
+          return (
+            <MenuItem
+              key={rating}
+              onClick={() => handleRatingChange(rating)}
+              sx={{
+                fontSize: '13px',
+                py: 0.75,
+                justifyContent: 'center',
+                fontWeight: selectedCompanyForRating?.ratingV2 === rating ? 700 : 400,
+                background: selectedCompanyForRating?.ratingV2 === rating
+                  ? 'linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%)'
+                  : 'transparent',
+                '&:hover': {
+                  bgcolor: 'rgba(102, 126, 234, 0.1)',
+                },
+              }}
+            >
+              <Box
+                sx={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: '50%',
+                  bgcolor: getRatingBgColor(rating),
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#fff',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
+                }}
+              >
+                {rating}
+              </Box>
+            </MenuItem>
+          );
+        })}
         <MenuItem
           onClick={() => handleRatingChange(null)}
           sx={{

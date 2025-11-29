@@ -30,6 +30,8 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import { Company } from '../../types/crm';
+import { Lead } from '../../types/lead';
+import { CrossEntityFilterContext } from '../../types/crossEntityFilter';
 import {
   subscribeToCompanies,
   countLeadsForCompany,
@@ -39,6 +41,8 @@ import {
   bulkUpdateCompanyFields,
   bulkArchiveCompanies,
 } from '../../services/api/companies';
+import { subscribeToLeads } from '../../services/api/leads';
+import { buildLeadsMap } from '../../services/api/crossEntityFilterService';
 import { CompanyDialog } from '../../components/features/companies/CompanyDialog';
 import { CompanyTable } from '../../components/features/companies/CompanyTable';
 import { WritingProgramTable } from '../../components/features/companies/WritingProgramTable';
@@ -66,7 +70,7 @@ import {
 } from '../../services/api/tableColumnsService';
 import { CompanyFilterState, DEFAULT_COMPANY_FILTER_STATE, SaveCompanyPresetRequest } from '../../types/companyFilter';
 import { FilterRule } from '../../types/filter';
-import { applyCompanyAdvancedFilters } from '../../services/api/companyFilterService';
+import { applyCompanyAdvancedFilters, applyCompanyAdvancedFiltersWithCrossEntity } from '../../services/api/companyFilterService';
 import { AdvancedFiltersModal, SearchFilter, FilterButton } from '../../components/features/crm/filters';
 import { FilterPresetsMenu } from '../../components/features/crm/filters/FilterPresetsMenu';
 import { SavePresetDialog } from '../../components/features/crm/filters/SavePresetDialog';
@@ -208,6 +212,16 @@ export const CompaniesPage: React.FC = () => {
     severity: 'info',
   });
 
+  // State for leads (used for cross-entity filtering - lazy loaded)
+  const [allLeads, setAllLeads] = useState<Lead[]>([]);
+  const [leadsLoading, setLeadsLoading] = useState(false);
+
+  // Check if any filter rules require lead data (cross-entity filtering)
+  const hasLeadsCrossEntityRule = useMemo(
+    () => advancedFilterRules.some(r => r.entitySource === 'leads'),
+    [advancedFilterRules]
+  );
+
   // Subscribe to companies with real-time updates
   useEffect(() => {
     const unsubscribe = subscribeToCompanies(async (companiesData) => {
@@ -225,6 +239,33 @@ export const CompaniesPage: React.FC = () => {
 
     return () => unsubscribe();
   }, []);
+
+  // LAZY LOAD: Only subscribe to leads when cross-entity filter rules exist
+  // This avoids loading all leads into memory when not needed
+  useEffect(() => {
+    if (!hasLeadsCrossEntityRule) {
+      // Clear leads if no longer needed
+      setAllLeads([]);
+      setLeadsLoading(false);
+      return;
+    }
+
+    // Start loading - filter should wait until leads are loaded
+    setLeadsLoading(true);
+
+    // Only subscribe when we actually need leads data for filtering
+    const unsubscribe = subscribeToLeads((leadsData) => {
+      setAllLeads(leadsData);
+      setLeadsLoading(false); // Done loading
+    });
+
+    return () => unsubscribe();
+  }, [hasLeadsCrossEntityRule]);
+
+  // Build cross-entity context for filtering companies by lead values
+  const crossEntityContext = useMemo<CrossEntityFilterContext>(() => ({
+    leadsMap: buildLeadsMap(allLeads),
+  }), [allLeads]);
 
   // Subscribe to archived companies count
   useEffect(() => {
@@ -395,13 +436,22 @@ export const CompaniesPage: React.FC = () => {
       );
     }
 
-    // Apply advanced filters if any rules are set
+    // Apply advanced filters if any rules are set (with cross-entity support)
     if (advancedFilterRules.length > 0) {
-      filtered = applyCompanyAdvancedFilters(filtered, advancedFilterRules) as Array<Company & { leadCount: number }>;
+      // If we have leads cross-entity rules but leads are still loading, return empty
+      // This prevents showing incorrect results before lead data is available
+      if (hasLeadsCrossEntityRule && leadsLoading) {
+        return [];
+      }
+      filtered = applyCompanyAdvancedFiltersWithCrossEntity(
+        filtered,
+        advancedFilterRules,
+        crossEntityContext
+      ) as Array<Company & { leadCount: number }>;
     }
 
     return filtered;
-  }, [companies, filters, advancedFilterRules]);
+  }, [companies, filters, advancedFilterRules, crossEntityContext, hasLeadsCrossEntityRule, leadsLoading]);
 
   const handleAddCompany = () => {
     setOpenDialog(true);
@@ -1242,7 +1292,7 @@ export const CompaniesPage: React.FC = () => {
             }}
           />
 
-          {/* Advanced Filters Modal */}
+          {/* Advanced Filters Modal with Cross-Entity Support */}
           <AdvancedFiltersModal
             open={openFiltersModal}
             onClose={() => setOpenFiltersModal(false)}
@@ -1251,6 +1301,8 @@ export const CompaniesPage: React.FC = () => {
             data={companies}
             entityType="company"
             initialRules={advancedFilterRules}
+            crossEntityData={{ leads: allLeads }}
+            enableCrossEntityFiltering={true}
           />
 
           {/* Save Preset Dialog */}

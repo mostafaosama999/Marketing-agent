@@ -2,9 +2,16 @@
 // Service for evaluating filter rules against companies
 
 import { Company } from '../../types/crm';
+import { Lead, LeadStatus } from '../../types/lead';
 import { FilterRule, FilterableField } from '../../types/filter';
+import { CrossEntityFilterContext } from '../../types/crossEntityFilter';
 import { getFieldDefinitions } from './fieldDefinitionsService';
 import { FieldDefinition } from '../../types/fieldDefinitions';
+import { getFilterableFields } from './advancedFilterService';
+import {
+  evaluateCompanyCrossEntityRule,
+  evaluateRulesWithLogicGates,
+} from './crossEntityFilterService';
 
 /**
  * Get all filterable fields from standard Company fields + custom fields from actual companies
@@ -314,4 +321,148 @@ export async function getCompanyFilterableFieldsAsync(
     // Fallback to without field definitions
     return getCompanyFilterableFields(companies);
   }
+}
+
+/**
+ * Get lead fields that can be used to filter companies by their leads
+ * @param leads - Array of leads to extract fields from
+ * @param pipelineStages - Optional pipeline stages for status options
+ * @param fieldDefinitions - Optional pre-fetched lead field definitions
+ */
+export function getLeadFieldsForCompanyFilter(
+  leads: Lead[],
+  pipelineStages?: LeadStatus[],
+  fieldDefinitions?: FieldDefinition[]
+): FilterableField[] {
+  const leadFields = getFilterableFields(leads, pipelineStages, fieldDefinitions);
+
+  // Mark all fields as coming from 'leads' entity and add entity label
+  return leadFields.map(field => ({
+    ...field,
+    entitySource: 'leads' as const,
+    entityLabel: "Company's Leads",
+  }));
+}
+
+/**
+ * Get lead fields for company filtering using field definitions only (no leads data needed)
+ * This is more efficient as it doesn't require loading all leads into memory
+ * @param fieldDefinitions - Lead field definitions from Firestore
+ * @param pipelineStages - Optional pipeline stages for status options
+ */
+export function getLeadFieldsFromDefinitions(
+  fieldDefinitions?: FieldDefinition[],
+  pipelineStages?: LeadStatus[]
+): FilterableField[] {
+  // Standard lead fields (same as in advancedFilterService)
+  const statusOptions = pipelineStages || ['new_lead', 'qualified', 'contacted', 'follow_up', 'nurture', 'won', 'lost'];
+
+  const standardFields: FilterableField[] = [
+    { name: 'name', label: 'Name', type: 'text', isCustomField: false },
+    { name: 'email', label: 'Email', type: 'text', isCustomField: false },
+    { name: 'phone', label: 'Phone', type: 'text', isCustomField: false },
+    { name: 'company', label: 'Company', type: 'text', isCustomField: false },
+    { name: 'status', label: 'Status', type: 'select', options: statusOptions as string[], isCustomField: false },
+    { name: 'outreach.linkedIn.status', label: 'LinkedIn Status', type: 'select', options: ['not_sent', 'sent', 'opened', 'replied', 'refused', 'no_response'], isCustomField: false },
+    { name: 'outreach.email.status', label: 'Email Outreach Status', type: 'select', options: ['not_sent', 'sent', 'opened', 'replied', 'refused', 'no_response'], isCustomField: false },
+    { name: 'createdAt', label: 'Created Date', type: 'date', isCustomField: false },
+    { name: 'updatedAt', label: 'Updated Date', type: 'date', isCustomField: false },
+  ];
+
+  // Create custom fields from field definitions
+  const customFields: FilterableField[] = [];
+  if (fieldDefinitions) {
+    fieldDefinitions
+      .filter(def => def.entityType === 'lead')
+      .forEach(def => {
+        let type: 'text' | 'number' | 'date' | 'select' = 'text';
+        let options: string[] | undefined;
+
+        if (def.fieldType === 'dropdown' && def.options) {
+          type = 'select';
+          options = def.options;
+        } else if (def.fieldType === 'number') {
+          type = 'number';
+        } else if (def.fieldType === 'date') {
+          type = 'date';
+        }
+
+        customFields.push({
+          name: def.name,
+          label: def.label || def.name,
+          type,
+          options,
+          isCustomField: true,
+        });
+      });
+  }
+
+  const allFields = [...standardFields, ...customFields];
+
+  // Mark all fields as coming from 'leads' entity
+  return allFields.map(field => ({
+    ...field,
+    entitySource: 'leads' as const,
+    entityLabel: "Company's Leads",
+  }));
+}
+
+/**
+ * Async version that fetches lead field definitions from Firestore
+ * Use this instead of getLeadFieldsForCompanyFilter when you don't have leads data
+ */
+export async function getLeadFieldsFromDefinitionsAsync(
+  pipelineStages?: LeadStatus[]
+): Promise<FilterableField[]> {
+  try {
+    const fieldDefinitions = await getFieldDefinitions('lead');
+    return getLeadFieldsFromDefinitions(fieldDefinitions, pipelineStages);
+  } catch (error) {
+    console.error('Error fetching lead field definitions:', error);
+    // Fallback to standard fields only
+    return getLeadFieldsFromDefinitions(undefined, pipelineStages);
+  }
+}
+
+/**
+ * Apply filter rules with cross-entity support
+ * Handles both self (company) rules and cross-entity (leads) rules with aggregation
+ *
+ * @param companies - Array of companies to filter
+ * @param rules - Array of filter rules (may include leads-sourced rules)
+ * @param context - Optional cross-entity context with leadsMap
+ */
+export function applyCompanyAdvancedFiltersWithCrossEntity(
+  companies: Company[],
+  rules: FilterRule[],
+  context?: CrossEntityFilterContext
+): Company[] {
+  if (rules.length === 0) {
+    return companies;
+  }
+
+  // Separate self rules from cross-entity rules
+  const selfRules = rules.filter(r => !r.entitySource || r.entitySource === 'self');
+  const leadRules = rules.filter(r => r.entitySource === 'leads');
+
+  return companies.filter(company => {
+    // Evaluate self rules using existing logic
+    let selfResult = true;
+    if (selfRules.length > 0) {
+      selfResult = evaluateRulesWithLogicGates(company, selfRules, evaluateCompanyRule);
+    }
+
+    // Evaluate cross-entity (leads) rules with aggregation
+    let leadResult = true;
+    if (leadRules.length > 0 && context?.leadsMap) {
+      leadResult = evaluateRulesWithLogicGates(
+        company,
+        leadRules,
+        (c, r) => evaluateCompanyCrossEntityRule(c, r, context.leadsMap!)
+      );
+    }
+
+    // Both must pass (AND between self and cross-entity rule groups)
+    return selfResult && leadResult;
+  });
 }

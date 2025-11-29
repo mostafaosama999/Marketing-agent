@@ -2,9 +2,16 @@
 // Service for evaluating advanced filter rules against leads
 
 import { Lead, LeadStatus } from '../../types/lead';
+import { Company } from '../../types/crm';
 import { FilterRule, FilterOperator, FilterableField } from '../../types/filter';
+import { CrossEntityFilterContext } from '../../types/crossEntityFilter';
 import { getFieldDefinitions } from './fieldDefinitionsService';
 import { FieldDefinition } from '../../types/fieldDefinitions';
+import { getCompanyFilterableFields } from './companyFilterService';
+import {
+  evaluateLeadCrossEntityRule,
+  evaluateRulesWithLogicGates,
+} from './crossEntityFilterService';
 
 /**
  * Get all filterable fields from standard Lead fields + custom fields from actual leads
@@ -379,4 +386,176 @@ export function getFilterRuleSummary(rule: FilterRule, fields: FilterableField[]
   }
 
   return `${fieldLabel} ${operatorLabel}${valueStr ? ' ' + valueStr : ''}`;
+}
+
+/**
+ * Get company fields that can be used to filter leads by their linked company
+ * @param companies - Array of companies to extract fields from
+ * @param fieldDefinitions - Optional pre-fetched company field definitions
+ */
+export function getCompanyFieldsForLeadFilter(
+  companies: Company[],
+  fieldDefinitions?: FieldDefinition[]
+): FilterableField[] {
+  const companyFields = getCompanyFilterableFields(companies, fieldDefinitions);
+
+  // Mark all fields as coming from 'company' entity and add entity label
+  return companyFields.map(field => ({
+    ...field,
+    entitySource: 'company' as const,
+    entityLabel: 'Linked Company',
+  }));
+}
+
+/**
+ * Get company fields from field definitions only (no company data needed)
+ * Use this when you need to populate field dropdowns without loading all companies
+ * @param fieldDefinitions - Optional pre-fetched field definitions
+ */
+export function getCompanyFieldsFromDefinitions(
+  fieldDefinitions?: FieldDefinition[]
+): FilterableField[] {
+  // Standard company fields (same as in companyFilterService)
+  const standardFields: FilterableField[] = [
+    { name: 'name', label: 'Name', type: 'text', isCustomField: false },
+    { name: 'website', label: 'Website', type: 'text', isCustomField: false },
+    { name: 'industry', label: 'Industry', type: 'text', isCustomField: false },
+    { name: 'description', label: 'Description', type: 'text', isCustomField: false },
+    { name: 'ratingV2', label: 'Rating V2', type: 'number', isCustomField: false },
+    { name: 'status', label: 'Status', type: 'select', options: ['new_lead', 'qualified', 'contacted', 'follow_up', 'nurture', 'won', 'lost', 'previous_client', 'existing_client'], isCustomField: false },
+    { name: 'createdAt', label: 'Created Date', type: 'date', isCustomField: false },
+    { name: 'updatedAt', label: 'Updated Date', type: 'date', isCustomField: false },
+  ];
+
+  // Apollo enrichment fields
+  const apolloFields: FilterableField[] = [
+    { name: 'apolloEnrichment.employeeCount', label: 'Employee Count', type: 'number', isCustomField: false },
+    { name: 'apolloEnrichment.employeeRange', label: 'Employee Range', type: 'text', isCustomField: false },
+    { name: 'apolloEnrichment.foundedYear', label: 'Founded Year', type: 'number', isCustomField: false },
+    { name: 'apolloEnrichment.totalFundingFormatted', label: 'Total Funding', type: 'text', isCustomField: false },
+    { name: 'apolloEnrichment.latestFundingStage', label: 'Funding Stage', type: 'text', isCustomField: false },
+    { name: 'apolloEnrichment.latestFundingDate', label: 'Last Funding Date', type: 'date', isCustomField: false },
+    { name: 'apolloEnrichment.technologies', label: 'Technologies', type: 'text', isCustomField: false },
+    { name: 'apolloEnrichment.industries', label: 'Industries', type: 'text', isCustomField: false },
+  ];
+
+  // Blog analysis fields
+  const blogFields: FilterableField[] = [
+    { name: 'blogAnalysis.monthlyFrequency', label: 'Blog Posts per Month', type: 'number', isCustomField: false },
+    { name: 'blogAnalysis.writers.count', label: 'Number of Writers', type: 'number', isCustomField: false },
+    { name: 'blogAnalysis.blogNature.rating', label: 'Blog Quality Rating', type: 'select', options: ['low', 'medium', 'high'], isCustomField: false },
+    { name: 'blogAnalysis.blogNature.isTechnical', label: 'Technical Blog', type: 'boolean', isCustomField: false },
+    { name: 'blogAnalysis.blogNature.isAIWritten', label: 'AI Written Content', type: 'boolean', isCustomField: false },
+    { name: 'blogAnalysis.isDeveloperB2BSaas', label: 'Is Developer B2B SaaS', type: 'boolean', isCustomField: false },
+  ];
+
+  // Writing program fields
+  const writingProgramFields: FilterableField[] = [
+    { name: 'writingProgramAnalysis.hasProgram', label: 'Has Writing Program', type: 'boolean', isCustomField: false },
+    { name: 'writingProgramAnalysis.isOpen', label: 'Program is Open', type: 'boolean', isCustomField: false },
+    { name: 'writingProgramAnalysis.payment.amount', label: 'Payment Amount', type: 'text', isCustomField: false },
+    { name: 'writingProgramAnalysis.payment.method', label: 'Payment Method', type: 'text', isCustomField: false },
+  ];
+
+  // Create custom fields from field definitions
+  const customFields: FilterableField[] = [];
+  if (fieldDefinitions) {
+    fieldDefinitions
+      .filter(def => def.entityType === 'company')
+      .forEach(def => {
+        let type: 'text' | 'number' | 'date' | 'select' | 'boolean' = 'text';
+        let options: string[] | undefined;
+
+        if (def.fieldType === 'dropdown' && def.options) {
+          type = 'select';
+          options = def.options;
+        } else if (def.fieldType === 'number') {
+          type = 'number';
+        } else if (def.fieldType === 'date') {
+          type = 'date';
+        }
+
+        customFields.push({
+          name: def.name,
+          label: def.label || def.name,
+          type,
+          options,
+          isCustomField: true,
+        });
+      });
+  }
+
+  // Combine all fields (always include all standard field types since we don't have actual data)
+  const allFields = [
+    ...standardFields,
+    ...apolloFields,
+    ...blogFields,
+    ...writingProgramFields,
+    ...customFields,
+  ];
+
+  // Mark all fields as coming from 'company' entity
+  return allFields.map(field => ({
+    ...field,
+    entitySource: 'company' as const,
+    entityLabel: 'Linked Company',
+  }));
+}
+
+/**
+ * Async version that fetches company field definitions from Firestore
+ * Use this instead of getCompanyFieldsForLeadFilter when you don't have company data
+ */
+export async function getCompanyFieldsFromDefinitionsAsync(): Promise<FilterableField[]> {
+  try {
+    const fieldDefinitions = await getFieldDefinitions('company');
+    return getCompanyFieldsFromDefinitions(fieldDefinitions);
+  } catch (error) {
+    console.error('Error fetching company field definitions:', error);
+    // Fallback to standard fields only
+    return getCompanyFieldsFromDefinitions(undefined);
+  }
+}
+
+/**
+ * Apply filter rules with cross-entity support
+ * Handles both self (lead) rules and cross-entity (company) rules
+ *
+ * @param leads - Array of leads to filter
+ * @param rules - Array of filter rules (may include company-sourced rules)
+ * @param context - Optional cross-entity context with companiesMap
+ */
+export function applyAdvancedFiltersWithCrossEntity(
+  leads: Lead[],
+  rules: FilterRule[],
+  context?: CrossEntityFilterContext
+): Lead[] {
+  if (rules.length === 0) {
+    return leads;
+  }
+
+  // Separate self rules from cross-entity rules
+  const selfRules = rules.filter(r => !r.entitySource || r.entitySource === 'self');
+  const companyRules = rules.filter(r => r.entitySource === 'company');
+
+  return leads.filter(lead => {
+    // Evaluate self rules using existing logic
+    let selfResult = true;
+    if (selfRules.length > 0) {
+      selfResult = evaluateRulesWithLogicGates(lead, selfRules, evaluateRule);
+    }
+
+    // Evaluate cross-entity (company) rules
+    let companyResult = true;
+    if (companyRules.length > 0 && context?.companiesMap) {
+      companyResult = evaluateRulesWithLogicGates(
+        lead,
+        companyRules,
+        (l, r) => evaluateLeadCrossEntityRule(l, r, context.companiesMap!)
+      );
+    }
+
+    // Both must pass (AND between self and cross-entity rule groups)
+    return selfResult && companyResult;
+  });
 }

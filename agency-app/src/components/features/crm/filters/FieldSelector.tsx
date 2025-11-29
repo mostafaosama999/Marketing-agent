@@ -1,12 +1,19 @@
 // src/components/features/crm/filters/FieldSelector.tsx
 import React from 'react';
-import { FormControl, Select, MenuItem, Typography, ListSubheader } from '@mui/material';
-import { FilterableField } from '../../../../types/filter';
+import { FormControl, Select, MenuItem, Typography, ListSubheader, Box } from '@mui/material';
+import { Business as BusinessIcon, Person as PersonIcon } from '@mui/icons-material';
+import { FilterableField, EntitySource } from '../../../../types/filter';
 
 interface FieldSelectorProps {
   value: string;
   fields: FilterableField[];
-  onChange: (fieldName: string, fieldLabel: string, fieldType: 'text' | 'number' | 'date' | 'select' | 'boolean', options?: string[]) => void;
+  onChange: (
+    fieldName: string,
+    fieldLabel: string,
+    fieldType: 'text' | 'number' | 'date' | 'select' | 'boolean',
+    options?: string[],
+    entitySource?: EntitySource
+  ) => void;
   disabled?: boolean;
 }
 
@@ -25,14 +32,30 @@ export const FieldSelector: React.FC<FieldSelectorProps> = ({
         selectedField.name,
         selectedField.label,
         selectedField.type,
-        selectedField.options
+        selectedField.options,
+        selectedField.entitySource
       );
     }
   };
 
-  // Group fields by category
-  const standardFields = fields.filter(f => !f.isCustomField);
-  const customFields = fields.filter(f => f.isCustomField);
+  // Group fields by entity source and custom field status
+  const selfStandardFields = fields.filter(
+    f => (!f.entitySource || f.entitySource === 'self') && !f.isCustomField
+  );
+  const selfCustomFields = fields.filter(
+    f => (!f.entitySource || f.entitySource === 'self') && f.isCustomField
+  );
+  const companyFields = fields.filter(f => f.entitySource === 'company');
+  const leadFields = fields.filter(f => f.entitySource === 'leads');
+
+  // Get the current field to show correct color in the display
+  const currentField = fields.find(f => f.name === value);
+  const getFieldColor = (field?: FilterableField) => {
+    if (!field) return 'inherit';
+    if (field.entitySource === 'company') return '#0077b5';
+    if (field.entitySource === 'leads') return '#10b981';
+    return 'inherit';
+  };
 
   return (
     <FormControl fullWidth size="small" disabled={disabled}>
@@ -49,7 +72,22 @@ export const FieldSelector: React.FC<FieldSelectorProps> = ({
             );
           }
           const field = fields.find(f => f.name === selected);
-          return field?.label || selected;
+          return (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              {field?.entitySource === 'company' && (
+                <BusinessIcon sx={{ fontSize: 14, color: '#0077b5' }} />
+              )}
+              {field?.entitySource === 'leads' && (
+                <PersonIcon sx={{ fontSize: 14, color: '#10b981' }} />
+              )}
+              <Typography
+                variant="body2"
+                sx={{ color: getFieldColor(field) }}
+              >
+                {field?.label || selected}
+              </Typography>
+            </Box>
+          );
         }}
         sx={{
           bgcolor: 'white',
@@ -66,7 +104,7 @@ export const FieldSelector: React.FC<FieldSelectorProps> = ({
       >
 
         {/* Standard Fields */}
-        {standardFields.length > 0 && [
+        {selfStandardFields.length > 0 && [
           <ListSubheader
             key="standard-header"
             sx={{
@@ -80,7 +118,7 @@ export const FieldSelector: React.FC<FieldSelectorProps> = ({
           >
             Standard Fields
           </ListSubheader>,
-          ...standardFields.map(field => (
+          ...selfStandardFields.map(field => (
             <MenuItem key={field.name} value={field.name}>
               <Typography variant="body2">{field.label}</Typography>
             </MenuItem>
@@ -88,7 +126,7 @@ export const FieldSelector: React.FC<FieldSelectorProps> = ({
         ]}
 
         {/* Custom Fields */}
-        {customFields.length > 0 && [
+        {selfCustomFields.length > 0 && [
           <ListSubheader
             key="custom-header"
             sx={{
@@ -102,9 +140,71 @@ export const FieldSelector: React.FC<FieldSelectorProps> = ({
           >
             Custom Fields
           </ListSubheader>,
-          ...customFields.map(field => (
+          ...selfCustomFields.map(field => (
             <MenuItem key={field.name} value={field.name}>
               <Typography variant="body2">{field.label}</Typography>
+            </MenuItem>
+          ))
+        ]}
+
+        {/* Linked Company Fields (for lead filtering) */}
+        {companyFields.length > 0 && [
+          <ListSubheader
+            key="company-header"
+            sx={{
+              color: '#0077b5',
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+              bgcolor: 'rgba(0, 119, 181, 0.08)',
+              fontSize: '11px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+            }}
+          >
+            <BusinessIcon sx={{ fontSize: 14 }} />
+            Linked Company Fields
+          </ListSubheader>,
+          ...companyFields.map(field => (
+            <MenuItem key={`company-${field.name}`} value={field.name}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <BusinessIcon sx={{ fontSize: 14, color: '#0077b5', opacity: 0.6 }} />
+                <Typography variant="body2" sx={{ color: '#0077b5' }}>
+                  {field.label}
+                </Typography>
+              </Box>
+            </MenuItem>
+          ))
+        ]}
+
+        {/* Company's Leads Fields (for company filtering) */}
+        {leadFields.length > 0 && [
+          <ListSubheader
+            key="leads-header"
+            sx={{
+              color: '#10b981',
+              fontWeight: 600,
+              textTransform: 'uppercase',
+              letterSpacing: '0.5px',
+              bgcolor: 'rgba(16, 185, 129, 0.08)',
+              fontSize: '11px',
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+            }}
+          >
+            <PersonIcon sx={{ fontSize: 14 }} />
+            Company's Leads Fields
+          </ListSubheader>,
+          ...leadFields.map(field => (
+            <MenuItem key={`lead-${field.name}`} value={field.name}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <PersonIcon sx={{ fontSize: 14, color: '#10b981', opacity: 0.6 }} />
+                <Typography variant="body2" sx={{ color: '#10b981' }}>
+                  {field.label}
+                </Typography>
+              </Box>
             </MenuItem>
           ))
         ]}

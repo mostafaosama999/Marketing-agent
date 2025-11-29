@@ -16,6 +16,46 @@ import {
 } from 'firebase/firestore';
 import { db } from '../firebase/firestore';
 import { CompanyFilterPreset, SaveCompanyPresetRequest, CompanyPresetListItem } from '../../types/companyFilter';
+import { FilterRule } from '../../types/filter';
+
+/**
+ * Normalize filter rules for backward compatibility
+ * Adds default entitySource to rules that don't have it
+ */
+function normalizeFilterRules(rules: FilterRule[]): FilterRule[] {
+  if (!rules || !Array.isArray(rules)) return [];
+
+  return rules.map(rule => ({
+    ...rule,
+    entitySource: rule.entitySource || 'self',
+  }));
+}
+
+/**
+ * Clean filter rules for Firestore storage
+ * Removes undefined values which Firestore doesn't accept
+ */
+function cleanFilterRulesForStorage(rules: FilterRule[]): Record<string, unknown>[] {
+  if (!rules || !Array.isArray(rules)) return [];
+
+  return rules.map(rule => {
+    const cleanedRule: Record<string, unknown> = {};
+
+    // Only include defined values
+    Object.entries(rule).forEach(([key, value]) => {
+      if (value !== undefined) {
+        cleanedRule[key] = value;
+      }
+    });
+
+    // Ensure required fields have defaults
+    if (!cleanedRule.entitySource) {
+      cleanedRule.entitySource = 'self';
+    }
+
+    return cleanedRule;
+  });
+}
 
 /**
  * Subscribe to user's company filter presets with real-time updates
@@ -75,7 +115,7 @@ export async function saveCompanyPreset(
     // Build preset data, omitting undefined fields
     const presetData: any = {
       name: preset.name,
-      advancedRules: preset.advancedRules,
+      advancedRules: cleanFilterRulesForStorage(preset.advancedRules),
       basicFilters: preset.basicFilters,
       userId,
       isDefault: preset.isDefault || false,
@@ -123,9 +163,12 @@ export async function loadCompanyPreset(
       return null;
     }
 
+    const data = presetDoc.data();
     return {
       id: presetDoc.id,
-      ...presetDoc.data()
+      ...data,
+      // Normalize rules for backward compatibility (add entitySource if missing)
+      advancedRules: normalizeFilterRules(data.advancedRules),
     } as CompanyFilterPreset;
   } catch (error) {
     console.error('Error loading company filter preset:', error);
@@ -212,10 +255,13 @@ export async function getDefaultCompanyPreset(userId: string): Promise<CompanyFi
       return null;
     }
 
-    const doc = snapshot.docs[0];
+    const presetDoc = snapshot.docs[0];
+    const data = presetDoc.data();
     return {
-      id: doc.id,
-      ...doc.data()
+      id: presetDoc.id,
+      ...data,
+      // Normalize rules for backward compatibility (add entitySource if missing)
+      advancedRules: normalizeFilterRules(data.advancedRules),
     } as CompanyFilterPreset;
   } catch (error) {
     console.error('Error getting default company preset:', error);

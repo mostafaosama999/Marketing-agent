@@ -33,6 +33,21 @@ export type FilterOperator =
   | 'is_false';
 
 /**
+ * Entity source for cross-entity filtering
+ */
+export type EntitySource = 'self' | 'company' | 'leads';
+
+/**
+ * Aggregation type for company→leads filtering
+ */
+export type LeadAggregationType = 'any' | 'all' | 'none' | 'count';
+
+/**
+ * Count operators for lead count aggregation
+ */
+export type CountOperator = 'equals' | 'greater_than' | 'less_than' | 'between';
+
+/**
  * Single filter rule
  */
 export interface FilterRule {
@@ -42,6 +57,12 @@ export interface FilterRule {
   operator: FilterOperator;
   value: any; // Value type depends on field type
   logicGate: 'AND' | 'OR'; // Logic connector to next rule
+
+  // Cross-entity filtering support
+  entitySource?: EntitySource; // Which entity the field comes from ('self' | 'company' | 'leads')
+  aggregationType?: LeadAggregationType; // For company→leads filtering: how to aggregate across leads
+  countOperator?: CountOperator; // For 'count' aggregation type
+  countValue?: number | [number, number]; // For 'count' aggregation type
 }
 
 /**
@@ -74,6 +95,10 @@ export interface FilterableField {
   type: 'text' | 'number' | 'date' | 'select' | 'boolean';
   options?: string[]; // For select fields
   isCustomField: boolean;
+
+  // Cross-entity support
+  entitySource?: EntitySource; // Which entity this field belongs to ('self' | 'company' | 'leads')
+  entityLabel?: string; // Display label for entity grouping (e.g., "Linked Company Fields")
 }
 
 /**

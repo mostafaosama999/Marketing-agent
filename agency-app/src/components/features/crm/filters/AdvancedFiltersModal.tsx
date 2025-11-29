@@ -13,13 +13,28 @@ import {
   Add as AddIcon,
   FilterList as FilterListIcon,
   Close as CloseIcon,
+  Business as BusinessIcon,
+  Person as PersonIcon,
 } from '@mui/icons-material';
 import { FilterRule, FilterableField } from '../../../../types/filter';
 import { Lead, LeadStatus } from '../../../../types/lead';
 import { Company } from '../../../../types/crm';
 import { FilterRuleRow } from './FilterRuleRow';
-import { getFilterRuleSummary, getFilterableFieldsAsync } from '../../../../services/api/advancedFilterService';
-import { getCompanyFilterableFieldsAsync } from '../../../../services/api/companyFilterService';
+import {
+  getFilterRuleSummary,
+  getFilterableFieldsAsync,
+  getCompanyFieldsFromDefinitionsAsync,
+} from '../../../../services/api/advancedFilterService';
+import {
+  getCompanyFilterableFieldsAsync,
+  getLeadFieldsFromDefinitionsAsync,
+} from '../../../../services/api/companyFilterService';
+
+interface CrossEntityData {
+  companies?: Company[]; // For lead filtering: company data only needed for actual filtering (not for field names)
+  leads?: Lead[]; // For company filtering: leads data only needed for actual filtering (not for field names)
+  pipelineStages?: LeadStatus[]; // For lead status options
+}
 
 interface AdvancedFiltersModalProps<T = Lead> {
   open: boolean;
@@ -30,6 +45,9 @@ interface AdvancedFiltersModalProps<T = Lead> {
   entityType?: 'lead' | 'company';
   pipelineStages?: LeadStatus[]; // Optional pipeline stages for lead status field
   initialRules?: FilterRule[]; // Current active filter rules to display
+  // Cross-entity filtering support
+  crossEntityData?: CrossEntityData;
+  enableCrossEntityFiltering?: boolean;
 }
 
 export const AdvancedFiltersModal = <T extends Lead | Company = Lead>({
@@ -41,6 +59,8 @@ export const AdvancedFiltersModal = <T extends Lead | Company = Lead>({
   entityType = 'lead',
   pipelineStages,
   initialRules,
+  crossEntityData,
+  enableCrossEntityFiltering = false,
 }: AdvancedFiltersModalProps<T>) => {
   const [rules, setRules] = useState<FilterRule[]>([]);
   const [fields, setFields] = useState<FilterableField[]>([]);
@@ -61,9 +81,39 @@ export const AdvancedFiltersModal = <T extends Lead | Company = Lead>({
     const loadFields = async () => {
       if (open && data.length > 0) {
         try {
-          const filterableFields = entityType === 'company'
-            ? await getCompanyFilterableFieldsAsync(data as Company[])
-            : await getFilterableFieldsAsync(data as Lead[], pipelineStages);
+          let filterableFields: FilterableField[];
+
+          // Load self entity fields
+          if (entityType === 'company') {
+            filterableFields = await getCompanyFilterableFieldsAsync(data as Company[]);
+          } else {
+            filterableFields = await getFilterableFieldsAsync(data as Lead[], pipelineStages);
+          }
+
+          // Mark self fields with entitySource
+          filterableFields = filterableFields.map(f => ({
+            ...f,
+            entitySource: 'self' as const,
+          }));
+
+          // Load cross-entity fields if enabled
+          if (enableCrossEntityFiltering) {
+            if (entityType === 'lead') {
+              // For lead filtering: load company fields from field definitions (NOT from company data)
+              // This avoids loading all companies into memory just for field names
+              const companyFields = await getCompanyFieldsFromDefinitionsAsync();
+              filterableFields = [...filterableFields, ...companyFields];
+            }
+            if (entityType === 'company') {
+              // For company filtering: load lead fields from field definitions (NOT from leads data)
+              // This avoids loading all leads into memory just for field names
+              const leadFields = await getLeadFieldsFromDefinitionsAsync(
+                crossEntityData?.pipelineStages || pipelineStages
+              );
+              filterableFields = [...filterableFields, ...leadFields];
+            }
+          }
+
           setFields(filterableFields);
           setFieldsLoaded(true);
         } catch (error) {
@@ -72,7 +122,7 @@ export const AdvancedFiltersModal = <T extends Lead | Company = Lead>({
       }
     };
     loadFields();
-  }, [open, data, entityType, pipelineStages]);
+  }, [open, data, entityType, pipelineStages, crossEntityData, enableCrossEntityFiltering]);
 
   // Add default rule AFTER fields are loaded (only if no rules)
   useEffect(() => {
@@ -84,6 +134,7 @@ export const AdvancedFiltersModal = <T extends Lead | Company = Lead>({
         operator: 'equals',
         value: null,
         logicGate: 'AND',
+        entitySource: 'self',
       };
       setRules([defaultRule]);
     }
@@ -97,6 +148,7 @@ export const AdvancedFiltersModal = <T extends Lead | Company = Lead>({
       operator: 'equals',
       value: null,
       logicGate: 'AND',
+      entitySource: 'self',
     };
 
     setRules([...rules, newRule]);
@@ -142,6 +194,47 @@ export const AdvancedFiltersModal = <T extends Lead | Company = Lead>({
     onClose();
   };
 
+  // Get chip color based on entity source
+  const getChipStyles = (rule: FilterRule) => {
+    if (rule.entitySource === 'company') {
+      return {
+        borderColor: '#0077b5',
+        color: '#0077b5',
+      };
+    }
+    if (rule.entitySource === 'leads') {
+      return {
+        borderColor: '#10b981',
+        color: '#10b981',
+      };
+    }
+    return {
+      borderColor: '#667eea',
+      color: '#667eea',
+    };
+  };
+
+  // Get rule summary with entity context
+  const getRuleSummaryWithContext = (rule: FilterRule) => {
+    const baseSummary = getFilterRuleSummary(rule, fields);
+
+    if (rule.entitySource === 'leads' && rule.aggregationType) {
+      const aggregationLabels: Record<string, string> = {
+        any: 'Any lead:',
+        all: 'All leads:',
+        none: 'No leads:',
+        count: `Lead count ${rule.countOperator || 'equals'} ${
+          Array.isArray(rule.countValue)
+            ? `${rule.countValue[0]}-${rule.countValue[1]}`
+            : rule.countValue || 0
+        }:`,
+      };
+      return `${aggregationLabels[rule.aggregationType] || ''} ${baseSummary}`;
+    }
+
+    return baseSummary;
+  };
+
   return (
     <Modal
       open={open}
@@ -159,7 +252,7 @@ export const AdvancedFiltersModal = <T extends Lead | Company = Lead>({
           width: {
             xs: '90%',
             sm: '700px',
-            md: '800px',
+            md: '900px',
           },
           maxHeight: '90vh',
           overflow: 'auto',
@@ -185,6 +278,19 @@ export const AdvancedFiltersModal = <T extends Lead | Company = Lead>({
             <Typography variant="h6" sx={{ fontWeight: 600, color: '#1e293b', fontSize: '20px' }}>
               Advanced Filters
             </Typography>
+            {enableCrossEntityFiltering && (
+              <Chip
+                label="Cross-Entity"
+                size="small"
+                sx={{
+                  bgcolor: 'rgba(102, 126, 234, 0.1)',
+                  color: '#667eea',
+                  fontWeight: 600,
+                  fontSize: '10px',
+                  height: '20px',
+                }}
+              />
+            )}
           </Box>
 
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -219,6 +325,38 @@ export const AdvancedFiltersModal = <T extends Lead | Company = Lead>({
             </IconButton>
           </Box>
         </Box>
+
+        {/* Cross-entity legend */}
+        {enableCrossEntityFiltering && (
+          <Box
+            sx={{
+              display: 'flex',
+              gap: 2,
+              mb: 2,
+              p: 1.5,
+              bgcolor: '#f8fafc',
+              borderRadius: '8px',
+              border: '1px solid #e2e8f0',
+            }}
+          >
+            <Typography variant="caption" sx={{ color: '#64748b', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Box sx={{ width: 12, height: 12, bgcolor: '#667eea', borderRadius: '2px' }} />
+              {entityType === 'lead' ? 'Lead' : 'Company'} Fields
+            </Typography>
+            {entityType === 'lead' && crossEntityData?.companies?.length && (
+              <Typography variant="caption" sx={{ color: '#0077b5', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <BusinessIcon sx={{ fontSize: 14 }} />
+                Linked Company Fields
+              </Typography>
+            )}
+            {entityType === 'company' && (
+              <Typography variant="caption" sx={{ color: '#10b981', display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <PersonIcon sx={{ fontSize: 14 }} />
+                Company's Leads Fields
+              </Typography>
+            )}
+          </Box>
+        )}
 
         {/* Filter Rules */}
         {rules.length === 0 ? (
@@ -267,6 +405,8 @@ export const AdvancedFiltersModal = <T extends Lead | Company = Lead>({
               {rules.map((rule, index) => {
                 if (!rule.field) return null;
 
+                const chipStyles = getChipStyles(rule);
+
                 return (
                   <React.Fragment key={rule.id}>
                     {index > 0 && (
@@ -282,12 +422,18 @@ export const AdvancedFiltersModal = <T extends Lead | Company = Lead>({
                       />
                     )}
                     <Chip
-                      label={getFilterRuleSummary(rule, fields)}
+                      icon={
+                        rule.entitySource === 'company' ? (
+                          <BusinessIcon sx={{ fontSize: 14, color: '#0077b5' }} />
+                        ) : rule.entitySource === 'leads' ? (
+                          <PersonIcon sx={{ fontSize: 14, color: '#10b981' }} />
+                        ) : undefined
+                      }
+                      label={getRuleSummaryWithContext(rule)}
                       size="small"
                       variant="outlined"
                       sx={{
-                        borderColor: '#667eea',
-                        color: '#667eea',
+                        ...chipStyles,
                         fontWeight: 500,
                       }}
                     />

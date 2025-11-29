@@ -38,7 +38,7 @@ import { usePipelineConfigContext } from '../../../contexts/PipelineConfigContex
 import { TableColumnConfig } from '../../../types/table';
 import { FieldDefinition } from '../../../types/fieldDefinitions';
 import { getFieldDefinitions } from '../../../services/api/fieldDefinitionsService';
-import { updateLeadCustomField, updateLeadField, updateLeadLinkedInStatus, updateLeadEmailStatus } from '../../../services/api/leads';
+import { updateLeadCustomField, updateLeadField, updateLeadLinkedInStatus, updateLeadEmailStatus, updateLeadRating } from '../../../services/api/leads';
 import { fetchEmail } from '../../../services/api/apolloService';
 import { useAuth } from '../../../contexts/AuthContext';
 import { copyHtmlToClipboard } from '../../../utils/htmlHelpers';
@@ -47,7 +47,7 @@ import { getSettings } from '../../../services/api/settings';
 import { getLeadNameForApollo, validateNameForApollo } from '../../../utils/nameUtils';
 import { Company } from '../../../types/crm';
 import { getCompany } from '../../../services/api/companies';
-import { collection, getDocs } from 'firebase/firestore';
+import { collection, getDocs, doc, getDoc } from 'firebase/firestore';
 import { db } from '../../../services/firebase/firestore';
 import { DropdownFieldManager } from './DropdownFieldManager';
 import { DropdownMenuWithAdd } from './DropdownMenuWithAdd';
@@ -102,6 +102,40 @@ const getOutreachStatusColor = (status: string): { bg: string; color: string } =
   return { bg: '#f3f4f6', color: '#6b7280' };
 };
 
+// Helper to detect if a custom field is the Rating field
+const isRatingField = (fieldName: string): boolean => {
+  return fieldName.toLowerCase() === 'rating';
+};
+
+// Rating color helper (traffic-light system: red/amber/green)
+const getRatingColors = (rating: number | null | undefined) => {
+  if (rating === null || rating === undefined) {
+    return {
+      background: 'rgba(102, 126, 234, 0.25)',
+      hoverBackground: 'rgba(102, 126, 234, 0.4)',
+    };
+  }
+  // Low ratings (1-3): Red
+  if (rating <= 3) {
+    return {
+      background: 'linear-gradient(135deg, #EF4444 0%, #DC2626 100%)',
+      hoverBackground: 'linear-gradient(135deg, #DC2626 0%, #B91C1C 100%)',
+    };
+  }
+  // Medium ratings (4-7): Amber/Yellow
+  if (rating <= 7) {
+    return {
+      background: 'linear-gradient(135deg, #F59E0B 0%, #D97706 100%)',
+      hoverBackground: 'linear-gradient(135deg, #D97706 0%, #B45309 100%)',
+    };
+  }
+  // High ratings (8-10): Green
+  return {
+    background: 'linear-gradient(135deg, #10B981 0%, #059669 100%)',
+    hoverBackground: 'linear-gradient(135deg, #059669 0%, #047857 100%)',
+  };
+};
+
 export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
   leads,
   onLeadClick,
@@ -143,6 +177,11 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
   const [selectedLeadForDate, setSelectedLeadForDate] = useState<Lead | null>(null);
   const [selectedDateFieldName, setSelectedDateFieldName] = useState<string | null>(null);
 
+  // Rating field state (for company-style dropdown)
+  const [ratingMenuAnchor, setRatingMenuAnchor] = useState<null | HTMLElement>(null);
+  const [selectedLeadForRating, setSelectedLeadForRating] = useState<Lead | null>(null);
+  const [selectedRatingFieldName, setSelectedRatingFieldName] = useState<string | null>(null);
+
   // Pagination state
   const [page, setPage] = useState(() => {
     const saved = localStorage.getItem('crm_table_page');
@@ -165,6 +204,9 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
   const [offerHeadline, setOfferHeadline] = useState<string>('');
   const [offerTemplate, setOfferTemplate] = useState<string>('');
   const [companies, setCompanies] = useState<Map<string, Company>>(new Map());
+
+  // Rating user display names (first letter only)
+  const [ratingUserNames, setRatingUserNames] = useState<Map<string, string>>(new Map());
 
   // Fetch all field definitions (dropdowns, dates, etc.)
   const fetchFieldDefinitions = async () => {
@@ -225,6 +267,62 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
 
     fetchAppSettings();
   }, []);
+
+  // Fetch user display names for rating authors
+  useEffect(() => {
+    const fetchRatingUserNames = async () => {
+      // Collect all unique user IDs from built-in rating field and custom fields
+      const userIdSet = new Set<string>();
+      leads.forEach(lead => {
+        // Built-in rating field
+        if (lead.ratingUpdatedBy) {
+          userIdSet.add(lead.ratingUpdatedBy);
+        }
+        // Legacy: custom fields (for backward compatibility)
+        if (lead.customFieldsUpdatedBy) {
+          Object.entries(lead.customFieldsUpdatedBy).forEach(([fieldName, userId]) => {
+            if (fieldName.toLowerCase().includes('rating') && userId) {
+              userIdSet.add(userId);
+            }
+          });
+        }
+      });
+      const uniqueUserIds = Array.from(userIdSet);
+
+      if (uniqueUserIds.length === 0) return;
+
+      const names = new Map<string, string>();
+      await Promise.all(
+        uniqueUserIds.map(async (userId) => {
+          // Skip if we already have this user's name
+          if (ratingUserNames.has(userId)) {
+            names.set(userId, ratingUserNames.get(userId)!);
+            return;
+          }
+          try {
+            const userDoc = await getDoc(doc(db, 'users', userId));
+            if (userDoc.exists()) {
+              const userData = userDoc.data();
+              const displayName = userData.displayName || userData.email || '';
+              names.set(userId, displayName);
+            } else {
+              names.set(userId, '');
+            }
+          } catch (error) {
+            console.error(`Error fetching user ${userId}:`, error);
+            names.set(userId, '');
+          }
+        })
+      );
+      setRatingUserNames(prev => {
+        const merged = new Map(prev);
+        names.forEach((value, key) => merged.set(key, value));
+        return merged;
+      });
+    };
+
+    fetchRatingUserNames();
+  }, [leads]);
 
   // Toggle company collapse/expand
   const toggleCompanyCollapse = (companyName: string) => {
@@ -383,6 +481,51 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
   // Helper function to check if a custom field is a dropdown
   const isDropdownField = (fieldName: string): boolean => {
     return fieldDefinitions.some(def => def.name === fieldName && def.fieldType === 'dropdown');
+  };
+
+  // Rating field handlers (company-style dropdown)
+  const handleRatingClick = (
+    event: React.MouseEvent<HTMLElement>,
+    lead: Lead,
+    fieldName: string
+  ) => {
+    event.stopPropagation();
+    setRatingMenuAnchor(event.currentTarget);
+    setSelectedLeadForRating(lead);
+    setSelectedRatingFieldName(fieldName);
+  };
+
+  const handleRatingMenuClose = () => {
+    setRatingMenuAnchor(null);
+    setSelectedLeadForRating(null);
+    setSelectedRatingFieldName(null);
+  };
+
+  const handleRatingChange = async (newRating: number | null) => {
+    if (selectedLeadForRating && selectedRatingFieldName) {
+      try {
+        // Check if this is the built-in rating field or a custom field
+        if (selectedRatingFieldName === 'rating') {
+          // Use the built-in rating update function
+          await updateLeadRating(
+            selectedLeadForRating.id,
+            newRating,
+            user?.uid
+          );
+        } else {
+          // Legacy: custom field rating
+          await updateLeadCustomField(
+            selectedLeadForRating.id,
+            selectedRatingFieldName,
+            newRating !== null ? String(newRating) : '',
+            user?.uid
+          );
+        }
+      } catch (error) {
+        console.error('Error updating rating:', error);
+      }
+    }
+    handleRatingMenuClose();
   };
 
   // Date picker handlers
@@ -850,6 +993,76 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
           </TableCell>
         );
 
+      case 'rating': {
+        // Built-in rating field (like Company's ratingV2)
+        const ratingValue = lead.rating;
+        const hasLeadRating = ratingValue !== null && ratingValue !== undefined;
+        const ratingColors = getRatingColors(ratingValue);
+
+        // Get user initial (default to 'M' if no tracking)
+        const leadRatingUserInitial = hasLeadRating
+          ? (lead.ratingUpdatedBy && ratingUserNames.get(lead.ratingUpdatedBy)
+              ? ratingUserNames.get(lead.ratingUpdatedBy)!.charAt(0).toUpperCase()
+              : 'M') // Default to 'M' for ratings without tracking
+          : '';
+
+        return (
+          <TableCell key={columnId}>
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 0.5 }}>
+              <Chip
+                label={hasLeadRating ? ratingValue : '-'}
+                size="small"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setRatingMenuAnchor(e.currentTarget);
+                  setSelectedLeadForRating(lead);
+                  setSelectedRatingFieldName('rating'); // Use special marker for built-in field
+                }}
+                sx={{
+                  background: ratingColors.background,
+                  color: '#fff',
+                  fontWeight: 700,
+                  fontSize: hasLeadRating ? '11px' : '10px',
+                  height: hasLeadRating ? '24px' : '20px',
+                  minWidth: '32px',
+                  maxWidth: '32px',
+                  boxShadow: '0 2px 4px rgba(0, 0, 0, 0.15)',
+                  cursor: 'pointer',
+                  '& .MuiChip-label': {
+                    px: 1,
+                  },
+                  '&:hover': {
+                    background: ratingColors.hoverBackground,
+                    transform: 'translateY(-1px)',
+                    boxShadow: '0 4px 8px rgba(0, 0, 0, 0.25)',
+                    filter: 'brightness(1.1)',
+                  },
+                }}
+              />
+              {leadRatingUserInitial && (
+                <Box
+                  sx={{
+                    width: 22,
+                    height: 22,
+                    borderRadius: '50%',
+                    bgcolor: '#667eea', // Fixed purple - brand color
+                    color: '#fff',
+                    fontSize: '11px',
+                    fontWeight: 700,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    boxShadow: '0 1px 3px rgba(0, 0, 0, 0.2)',
+                  }}
+                >
+                  {leadRatingUserInitial}
+                </Box>
+              )}
+            </Box>
+          </TableCell>
+        );
+      }
+
       case 'linkedin_profile_url': {
         const profileUrl = lead.outreach?.linkedIn?.profileUrl || lead.customFields?.linkedinUrl;
         // Check if empty, null, undefined, or "NA" (case-insensitive)
@@ -1057,8 +1270,76 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
           // Check if this is a dropdown field (check column.fieldType first, then fallback to fieldDefinitions)
           const isDropdown = column.fieldType === 'dropdown' || isDropdownField(column.fieldName);
 
+          // Special handling for Rating field - render with company-style colored badges
+          if (isDropdown && isRatingField(column.fieldName)) {
+            const numericValue = value ? parseInt(String(value), 10) : null;
+            const validNumericValue = numericValue !== null && !isNaN(numericValue) ? numericValue : null;
+            const colors = getRatingColors(validNumericValue);
+
+            const hasRating = validNumericValue !== null;
+
+            // Get the first letter of the user's name who set the rating (only if there's a rating)
+            const ratingUserId = lead.customFieldsUpdatedBy?.[column.fieldName!];
+            const ratingUserInitial = hasRating
+              ? (ratingUserId && ratingUserNames.get(ratingUserId)
+                  ? ratingUserNames.get(ratingUserId)!.charAt(0).toUpperCase()
+                  : 'M') // Default to 'M' for ratings without tracking
+              : ''; // No badge when no rating
+
+            return (
+              <TableCell key={columnId}>
+                <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 0.5 }}>
+                  <Chip
+                    label={hasRating ? validNumericValue : '-'}
+                    size="small"
+                    onClick={(e) => handleRatingClick(e, lead, column.fieldName!)}
+                    sx={{
+                      background: colors.background,
+                      color: '#fff',
+                      fontWeight: 700,
+                      fontSize: hasRating ? '11px' : '10px',
+                      height: hasRating ? '24px' : '20px',
+                      minWidth: '32px',
+                      maxWidth: '32px',
+                      boxShadow: '0 2px 4px rgba(0, 0, 0, 0.15)',
+                      cursor: 'pointer',
+                      '& .MuiChip-label': {
+                        px: 1,
+                      },
+                      '&:hover': {
+                        background: colors.hoverBackground,
+                        transform: 'translateY(-1px)',
+                        boxShadow: '0 4px 8px rgba(0, 0, 0, 0.25)',
+                        filter: 'brightness(1.1)',
+                      },
+                    }}
+                  />
+                  {ratingUserInitial && (
+                    <Box
+                      sx={{
+                        width: 22,
+                        height: 22,
+                        borderRadius: '50%',
+                        bgcolor: '#667eea', // Fixed purple - brand color
+                        color: '#fff',
+                        fontSize: '11px',
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        boxShadow: '0 1px 3px rgba(0, 0, 0, 0.2)',
+                      }}
+                    >
+                      {ratingUserInitial}
+                    </Box>
+                  )}
+                </Box>
+              </TableCell>
+            );
+          }
+
           if (isDropdown) {
-            // All dropdown fields render as clickable chips, even when empty
+            // All other dropdown fields render as clickable chips, even when empty
             const displayValue = value || '-';
 
             return (
@@ -1642,6 +1923,82 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
             />
           );
         })()}
+      </Menu>
+
+      {/* Rating Dropdown Menu (Company-style) */}
+      <Menu
+        anchorEl={ratingMenuAnchor}
+        open={Boolean(ratingMenuAnchor)}
+        onClose={handleRatingMenuClose}
+        PaperProps={{
+          sx: {
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            borderRadius: '8px',
+            minWidth: 120,
+          }
+        }}
+      >
+        {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((rating) => {
+          // Traffic light colors
+          const getRatingBgColor = (r: number) => {
+            if (r <= 3) return '#EF4444'; // Red
+            if (r <= 7) return '#F59E0B'; // Amber
+            return '#10B981'; // Green
+          };
+
+          return (
+            <MenuItem
+              key={rating}
+              onClick={() => handleRatingChange(rating)}
+              sx={{
+                fontSize: '13px',
+                py: 0.75,
+                justifyContent: 'center',
+                fontWeight: selectedLeadForRating?.customFields?.[selectedRatingFieldName || ''] === String(rating) ? 700 : 400,
+                background: selectedLeadForRating?.customFields?.[selectedRatingFieldName || ''] === String(rating)
+                  ? 'linear-gradient(135deg, rgba(102, 126, 234, 0.1) 0%, rgba(118, 75, 162, 0.1) 100%)'
+                  : 'transparent',
+                '&:hover': {
+                  bgcolor: 'rgba(102, 126, 234, 0.1)',
+                },
+              }}
+            >
+              <Box
+                sx={{
+                  width: 24,
+                  height: 24,
+                  borderRadius: '50%',
+                  bgcolor: getRatingBgColor(rating),
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  color: '#fff',
+                  fontSize: '11px',
+                  fontWeight: 700,
+                  boxShadow: '0 2px 4px rgba(0,0,0,0.15)',
+                }}
+              >
+                {rating}
+              </Box>
+            </MenuItem>
+          );
+        })}
+        <MenuItem
+          onClick={() => handleRatingChange(null)}
+          sx={{
+            fontSize: '13px',
+            py: 1,
+            justifyContent: 'center',
+            color: 'text.secondary',
+            borderTop: '1px solid',
+            borderColor: 'divider',
+            '&:hover': {
+              bgcolor: 'rgba(102, 126, 234, 0.1)',
+            },
+          }}
+        >
+          Clear
+        </MenuItem>
       </Menu>
 
       {/* Date Picker Popover */}
