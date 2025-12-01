@@ -996,19 +996,11 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
           const isDropdown = column.fieldType === 'dropdown' || isDropdownField(column.fieldName);
 
           if (isDropdown) {
-            // Empty dropdown - show placeholder
-            if (!value || value === '') {
-              return (
-                <TableCell key={columnId}>
-                  <Typography variant="body2" sx={{ fontSize: '11px', lineHeight: 1.2, color: 'text.secondary' }}>-</Typography>
-                </TableCell>
-              );
-            }
-
+            // Render clickable chip for both empty and non-empty values
             return (
               <TableCell key={columnId}>
                 <Chip
-                  label={String(value)}
+                  label={value ? String(value) : '-'}
                   size="small"
                   onClick={(e) => handleCustomFieldClick(e, company, column.fieldName!)}
                   sx={{

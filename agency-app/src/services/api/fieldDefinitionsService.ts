@@ -584,8 +584,22 @@ export const deleteFieldWithDataRemoval = async (
     phase: 'finalizing',
   });
 
-  if (!isDefaultField) {
-    const fieldId = generateFieldId(entityType, fieldName);
+  const fieldId = generateFieldId(entityType, fieldName);
+  if (isDefaultField) {
+    // For default fields: create a field definition document with deleted flag
+    // This allows the UI to track which default fields have been deleted
+    await setDoc(doc(db, COLLECTION_NAME, fieldId), {
+      id: fieldId,
+      name: fieldName,
+      label: fieldName.charAt(0).toUpperCase() + fieldName.slice(1),
+      entityType,
+      fieldType: 'text',
+      isDefault: true,
+      deleted: true,
+      deletedAt: Timestamp.now(),
+    });
+  } else {
+    // For custom fields: delete the field definition document
     await deleteDoc(doc(db, COLLECTION_NAME, fieldId));
   }
 
@@ -596,4 +610,31 @@ export const deleteFieldWithDataRemoval = async (
     currentEntity,
     phase: 'completed',
   });
+};
+
+/**
+ * Get IDs of deleted default fields for an entity type
+ * Used to filter out deleted default fields from the UI
+ */
+export const getDeletedDefaultFieldIds = async (
+  entityType: EntityType
+): Promise<Set<string>> => {
+  const q = query(
+    collection(db, COLLECTION_NAME),
+    where('entityType', '==', entityType),
+    where('isDefault', '==', true),
+    where('deleted', '==', true)
+  );
+
+  const snapshot = await getDocs(q);
+  const deletedIds = new Set<string>();
+
+  snapshot.docs.forEach((doc) => {
+    const data = doc.data();
+    if (data.name) {
+      deletedIds.add(data.name);
+    }
+  });
+
+  return deletedIds;
 };

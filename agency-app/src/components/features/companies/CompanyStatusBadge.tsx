@@ -62,10 +62,12 @@ export const CompanyStatusBadge: React.FC<CompanyStatusBadgeProps> = ({
       <Chip
         label="No Status"
         size={size}
+        onClick={onClick}
         sx={{
           backgroundColor: '#e0e0e0',
           color: '#666',
           fontWeight: 500,
+          cursor: onClick ? 'pointer' : 'default',
         }}
       />
     );

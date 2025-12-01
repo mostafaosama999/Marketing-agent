@@ -38,6 +38,7 @@ import {
   getFieldValueCount,
   renameFieldWithDataMigration,
   deleteFieldWithDataRemoval,
+  getDeletedDefaultFieldIds,
   BatchProgressCallback,
 } from '../../services/api/fieldDefinitionsService';
 import {
@@ -67,6 +68,10 @@ export const FieldDefinitionsTab: React.FC = () => {
   // Field definitions state
   const [leadFields, setLeadFields] = useState<FieldDefinition[]>([]);
   const [companyFields, setCompanyFields] = useState<FieldDefinition[]>([]);
+
+  // Deleted default fields state (to filter out deleted default fields from UI)
+  const [deletedLeadDefaultFields, setDeletedLeadDefaultFields] = useState<Set<string>>(new Set());
+  const [deletedCompanyDefaultFields, setDeletedCompanyDefaultFields] = useState<Set<string>>(new Set());
 
   // Section expansion state
   const [leadDefaultExpanded, setLeadDefaultExpanded] = useState(false);
@@ -106,14 +111,20 @@ export const FieldDefinitionsTab: React.FC = () => {
   const loadFieldDefinitions = async () => {
     try {
       setLoading(true);
-      const [leads, companies] = await Promise.all([
+      const [leads, companies, deletedLeadDefaults, deletedCompanyDefaults] = await Promise.all([
         getFieldDefinitions('lead'),
         getFieldDefinitions('company'),
+        getDeletedDefaultFieldIds('lead'),
+        getDeletedDefaultFieldIds('company'),
       ]);
 
       // Sort by label
       setLeadFields(leads.sort((a, b) => a.label.localeCompare(b.label)));
       setCompanyFields(companies.sort((a, b) => a.label.localeCompare(b.label)));
+
+      // Set deleted default fields
+      setDeletedLeadDefaultFields(deletedLeadDefaults);
+      setDeletedCompanyDefaultFields(deletedCompanyDefaults);
     } catch (err: any) {
       console.error('Error loading field definitions:', err);
       setError('Failed to load field definitions');
@@ -391,7 +402,7 @@ export const FieldDefinitionsTab: React.FC = () => {
                 Lead Fields
               </Typography>
               <Typography variant="caption" sx={{ color: '#64748b' }}>
-                {DEFAULT_LEADS_TABLE_COLUMNS.length} default + {leadFields.length} custom fields
+                {DEFAULT_LEADS_TABLE_COLUMNS.filter(col => !deletedLeadDefaultFields.has(col.id)).length} default + {leadFields.length} custom fields
               </Typography>
             </Box>
           </Box>
@@ -433,7 +444,7 @@ export const FieldDefinitionsTab: React.FC = () => {
               Default Fields
             </Typography>
             <Chip
-              label={`${DEFAULT_LEADS_TABLE_COLUMNS.length} fields`}
+              label={`${DEFAULT_LEADS_TABLE_COLUMNS.filter(col => !deletedLeadDefaultFields.has(col.id)).length} fields`}
               size="small"
               sx={{
                 bgcolor: 'rgba(100, 116, 139, 0.1)',
@@ -450,7 +461,7 @@ export const FieldDefinitionsTab: React.FC = () => {
           </Box>
           <Collapse in={leadDefaultExpanded}>
             <Box sx={{ px: 2, pb: 2 }}>
-              {DEFAULT_LEADS_TABLE_COLUMNS.map((col) => (
+              {DEFAULT_LEADS_TABLE_COLUMNS.filter(col => !deletedLeadDefaultFields.has(col.id)).map((col) => (
                 <FieldDefinitionCard
                   key={col.id}
                   defaultField={col}
@@ -582,7 +593,7 @@ export const FieldDefinitionsTab: React.FC = () => {
                 Company Fields
               </Typography>
               <Typography variant="caption" sx={{ color: '#64748b' }}>
-                {DEFAULT_COMPANIES_TABLE_COLUMNS.length} default + {companyFields.length} custom fields
+                {DEFAULT_COMPANIES_TABLE_COLUMNS.filter(col => !deletedCompanyDefaultFields.has(col.id)).length} default + {companyFields.length} custom fields
               </Typography>
             </Box>
           </Box>
@@ -624,7 +635,7 @@ export const FieldDefinitionsTab: React.FC = () => {
               Default Fields
             </Typography>
             <Chip
-              label={`${DEFAULT_COMPANIES_TABLE_COLUMNS.length} fields`}
+              label={`${DEFAULT_COMPANIES_TABLE_COLUMNS.filter(col => !deletedCompanyDefaultFields.has(col.id)).length} fields`}
               size="small"
               sx={{
                 bgcolor: 'rgba(100, 116, 139, 0.1)',
@@ -641,7 +652,7 @@ export const FieldDefinitionsTab: React.FC = () => {
           </Box>
           <Collapse in={companyDefaultExpanded}>
             <Box sx={{ px: 2, pb: 2 }}>
-              {DEFAULT_COMPANIES_TABLE_COLUMNS.map((col) => (
+              {DEFAULT_COMPANIES_TABLE_COLUMNS.filter(col => !deletedCompanyDefaultFields.has(col.id)).map((col) => (
                 <FieldDefinitionCard
                   key={col.id}
                   defaultField={col}
