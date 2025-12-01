@@ -21,6 +21,7 @@ import {
   LinkedIn as LinkedInIcon,
   Email as EmailIcon,
   Send as SendIcon,
+  Star as StarIcon,
 } from '@mui/icons-material';
 import { subscribeToLeads } from '../../services/api/leads';
 import { Lead, LeadStatus } from '../../types/lead';
@@ -77,7 +78,7 @@ const LeadAnalytics: React.FC = () => {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode] = useState<'daily' | 'weekly'>('weekly'); // Fixed to weekly view
-  const [outreachDayRange, setOutreachDayRange] = useState<7 | 14 | 30 | 'all'>(30);
+  const [outreachDayRange, setOutreachDayRange] = useState<7 | 14 | 30 | 'all'>('all');
 
   // Subscribe to leads
   useEffect(() => {
@@ -303,6 +304,30 @@ const LeadAnalytics: React.FC = () => {
       activeLeads,
       conversionRate,
     };
+  }, [leads]);
+
+  // Rating distribution (Unrated + 1-10)
+  const ratingDistribution = useMemo(() => {
+    const counts: { rating: string; count: number }[] = [];
+
+    // Add unrated leads count first (leftmost)
+    const unratedCount = leads.filter(l => l.rating === null || l.rating === undefined).length;
+    counts.push({
+      rating: 'Unrated',
+      count: unratedCount,
+    });
+
+    // Add ratings 1-10
+    const ratingOrder = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    ratingOrder.forEach(rating => {
+      const count = leads.filter(l => l.rating === rating).length;
+      counts.push({
+        rating: rating.toString(),
+        count,
+      });
+    });
+
+    return counts;
   }, [leads]);
 
   // Lead distribution by status (for funnel chart)
@@ -593,6 +618,53 @@ const LeadAnalytics: React.FC = () => {
                 </Card>
               </Grid>
             </Grid>
+
+            {/* Rating Distribution */}
+            <Card sx={{
+              mb: 4,
+              background: 'rgba(255, 255, 255, 0.9)',
+              backdropFilter: 'blur(20px)',
+              border: '1px solid rgba(226, 232, 240, 0.5)',
+              borderRadius: 3,
+              boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08)',
+            }}>
+              <CardContent sx={{ p: 4 }}>
+                <Typography variant="h5" sx={{
+                  fontWeight: 600,
+                  mb: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                }}>
+                  <StarIcon sx={{ fontSize: 24, color: '#667eea' }} />
+                  Distribution by Rating
+                </Typography>
+                <Typography variant="body2" sx={{ color: '#64748b', mb: 4 }}>
+                  View how leads are distributed across different rating levels
+                </Typography>
+
+                <Box sx={{ height: 400 }}>
+                  <BarChart
+                    dataset={ratingDistribution}
+                    xAxis={[{ dataKey: 'rating', scaleType: 'band', label: 'Rating' }]}
+                    yAxis={[{ label: 'Number of Leads' }]}
+                    series={[
+                      {
+                        dataKey: 'count',
+                        label: 'Leads',
+                        color: '#667eea',
+                      },
+                    ]}
+                    margin={{ left: 80, right: 20, top: 20, bottom: 60 }}
+                    grid={{ vertical: true, horizontal: true }}
+                    sx={{
+                      '& .MuiChartsAxis-label': { fill: '#64748b' },
+                      '& .MuiChartsAxis-tickLabel': { fill: '#64748b' },
+                    }}
+                  />
+                </Box>
+              </CardContent>
+            </Card>
 
             {/* Lead Status Distribution */}
             {statusDistribution.length > 0 && (
