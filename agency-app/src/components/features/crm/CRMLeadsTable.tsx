@@ -766,6 +766,10 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
           aValue = a.status;
           bValue = b.status;
           break;
+        case 'rating':
+          aValue = a.rating;
+          bValue = b.rating;
+          break;
         case 'linkedin_profile_url':
           aValue = a.outreach?.linkedIn?.profileUrl || a.customFields?.linkedinUrl;
           bValue = b.outreach?.linkedIn?.profileUrl || b.customFields?.linkedinUrl;

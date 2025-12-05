@@ -206,7 +206,10 @@ export const DropdownMenuWithAdd: React.FC<DropdownMenuWithAddProps> = ({
                   setNewValue(e.target.value);
                   setError(null);
                 }}
-                onKeyDown={handleKeyPress}
+                onKeyDown={(e) => {
+                  e.stopPropagation(); // Prevent Menu from capturing keyboard events
+                  handleKeyPress(e);
+                }}
                 error={!!error}
                 helperText={error}
                 disabled={loading}

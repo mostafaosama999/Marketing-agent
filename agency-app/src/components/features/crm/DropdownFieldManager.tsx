@@ -252,6 +252,7 @@ export const DropdownFieldManager: React.FC<DropdownFieldManagerProps> = ({
               fullWidth
               value={newValue}
               onChange={(e) => setNewValue(e.target.value)}
+              onKeyDown={(e) => e.stopPropagation()} // Prevent Menu from capturing keyboard events
               disabled={loading}
               sx={{ mt: 2 }}
             />

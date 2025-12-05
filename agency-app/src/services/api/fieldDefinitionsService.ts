@@ -500,7 +500,8 @@ export const deleteFieldWithDataRemoval = async (
   entityType: EntityType,
   fieldName: string,
   isDefaultField: boolean,
-  onProgress?: BatchProgressCallback
+  onProgress?: BatchProgressCallback,
+  fieldId?: string
 ): Promise<void> => {
   const collectionName = entityType === 'lead' ? LEADS_COLLECTION : COMPANIES_COLLECTION;
   const currentEntity = entityType === 'lead' ? 'leads' : 'companies';
@@ -521,8 +522,8 @@ export const deleteFieldWithDataRemoval = async (
   if (total === 0) {
     // No records to update, just delete the field definition
     if (!isDefaultField) {
-      const fieldId = generateFieldId(entityType, fieldName);
-      await deleteDoc(doc(db, COLLECTION_NAME, fieldId));
+      const actualFieldId = fieldId || generateFieldId(entityType, fieldName);
+      await deleteDoc(doc(db, COLLECTION_NAME, actualFieldId));
     }
 
     onProgress?.({
@@ -584,12 +585,12 @@ export const deleteFieldWithDataRemoval = async (
     phase: 'finalizing',
   });
 
-  const fieldId = generateFieldId(entityType, fieldName);
+  const actualFieldId = fieldId || generateFieldId(entityType, fieldName);
   if (isDefaultField) {
     // For default fields: create a field definition document with deleted flag
     // This allows the UI to track which default fields have been deleted
-    await setDoc(doc(db, COLLECTION_NAME, fieldId), {
-      id: fieldId,
+    await setDoc(doc(db, COLLECTION_NAME, actualFieldId), {
+      id: actualFieldId,
       name: fieldName,
       label: fieldName.charAt(0).toUpperCase() + fieldName.slice(1),
       entityType,
@@ -600,7 +601,7 @@ export const deleteFieldWithDataRemoval = async (
     });
   } else {
     // For custom fields: delete the field definition document
-    await deleteDoc(doc(db, COLLECTION_NAME, fieldId));
+    await deleteDoc(doc(db, COLLECTION_NAME, actualFieldId));
   }
 
   // Phase 4: Completed

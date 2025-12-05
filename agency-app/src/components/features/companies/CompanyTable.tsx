@@ -45,6 +45,7 @@ import { Company } from '../../../types/crm';
 import { TableColumnConfig } from '../../../types/table';
 import { FieldDefinition } from '../../../types/fieldDefinitions';
 import { getFieldDefinitions } from '../../../services/api/fieldDefinitionsService';
+import { DropdownMenuWithAdd } from '../crm/DropdownMenuWithAdd';
 import { updateCompanyCustomField, updateCompanyField, updateCompany, setCompanyStatusManually, unlockCompanyStatus } from '../../../services/api/companies';
 import { bulkFindWritingPrograms, bulkAnalyzeWritingPrograms } from '../../../services/api/bulkWritingProgramService';
 import { useAuth } from '../../../contexts/AuthContext';
@@ -130,17 +131,18 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
   // Rating user display names (first letter only)
   const [ratingUserNames, setRatingUserNames] = useState<Map<string, string>>(new Map());
 
-  // Fetch all field definitions on mount (dropdowns, dates, etc.)
-  useEffect(() => {
-    const fetchFieldDefinitions = async () => {
-      try {
-        const definitions = await getFieldDefinitions('company');
-        setFieldDefinitions(definitions);
-      } catch (error) {
-        console.error('Error fetching field definitions:', error);
-      }
-    };
+  // Fetch all field definitions (dropdowns, dates, etc.)
+  const fetchFieldDefinitions = async () => {
+    try {
+      const definitions = await getFieldDefinitions('company');
+      setFieldDefinitions(definitions);
+    } catch (error) {
+      console.error('Error fetching field definitions:', error);
+    }
+  };
 
+  // Fetch field definitions on mount
+  useEffect(() => {
     fetchFieldDefinitions();
   }, []);
 
@@ -1412,25 +1414,35 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
           sx: {
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
             borderRadius: '8px',
-            minWidth: 160,
+            minWidth: 200,
           }
         }}
       >
-        {selectedCustomFieldName && getDropdownOptions(selectedCustomFieldName).map((option) => (
-          <MenuItem
-            key={option}
-            onClick={() => handleCustomFieldChange(option)}
-            sx={{
-              fontSize: '13px',
-              py: 1,
-              '&:hover': {
-                bgcolor: 'rgba(102, 126, 234, 0.1)',
+        {selectedCustomFieldName && (
+          <DropdownMenuWithAdd
+            options={getDropdownOptions(selectedCustomFieldName).map(option => ({
+              value: option,
+              label: option,
+              chipSx: {
+                bgcolor: selectedCompanyForCustomField?.customFields?.[selectedCustomFieldName] === option
+                  ? '#e0e7ff'
+                  : '#f3f4f6',
+                color: selectedCompanyForCustomField?.customFields?.[selectedCustomFieldName] === option
+                  ? '#4f46e5'
+                  : '#6b7280',
+                fontWeight: 500,
               },
+            }))}
+            selectedValue={selectedCompanyForCustomField?.customFields?.[selectedCustomFieldName]}
+            onSelect={(value) => handleCustomFieldChange(value)}
+            entityType="company"
+            fieldName={selectedCustomFieldName}
+            onUpdate={() => {
+              fetchFieldDefinitions();
+              handleCustomFieldMenuClose();
             }}
-          >
-            {option}
-          </MenuItem>
-        ))}
+          />
+        )}
       </Menu>
 
       {/* Rating V2 dropdown menu */}

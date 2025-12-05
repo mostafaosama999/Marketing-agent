@@ -293,7 +293,8 @@ export const FieldDefinitionsTab: React.FC = () => {
           selectedEntityType,
           selectedFieldName,
           selectedIsDefaultField,
-          progressCallback
+          progressCallback,
+          selectedFieldId
         );
         setSuccess(`Field "${selectedFieldLabel}" has been deleted successfully!`);
       }
