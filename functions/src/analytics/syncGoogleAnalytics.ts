@@ -283,7 +283,7 @@ export const syncGoogleAnalytics = functions
     memory: "512MB",
     secrets: ["GA4_SERVICE_ACCOUNT"],
   })
-  .https.onCall(async (data: { daysToSync?: number }, context) => {
+  .https.onCall(async (data: { daysToSync?: number; configId?: string }, context) => {
     // Require authentication
     if (!context.auth) {
       throw new functions.https.HttpsError(
@@ -292,11 +292,11 @@ export const syncGoogleAnalytics = functions
       );
     }
 
-    const userId = 'global'; // Use global config instead of per-user
+    const userId = data.configId || 'global'; // Use configId from request, default to 'global'
     const daysToSync = data.daysToSync || 30; // Default to last 30 days
 
     try {
-      console.log(`Starting Google Analytics sync for global config, ${daysToSync} days`);
+      console.log(`Starting Google Analytics sync for config '${userId}', ${daysToSync} days`);
 
       // Get GA4 property ID from user config
       const configDoc = await admin.firestore()

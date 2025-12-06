@@ -57,11 +57,12 @@ export const CompanyDialog: React.FC<CompanyDialogProps> = ({
   company,
   onSuccess,
 }) => {
-  const [formData, setFormData] = useState<CompanyFormData>({
+  const [formData, setFormData] = useState<CompanyFormData & { ratingV2?: number }>({
     name: '',
     website: '',
     industry: '',
     description: '',
+    ratingV2: undefined,
     customFields: {},
   });
 
@@ -94,6 +95,7 @@ export const CompanyDialog: React.FC<CompanyDialogProps> = ({
         website: company.website || '',
         industry: company.industry || '',
         description: company.description || '',
+        ratingV2: company.ratingV2 || undefined,
         customFields: company.customFields || {},
       });
     } else if (!open) {
@@ -103,6 +105,7 @@ export const CompanyDialog: React.FC<CompanyDialogProps> = ({
         website: '',
         industry: '',
         description: '',
+        ratingV2: undefined,
         customFields: {},
       });
       setError('');
@@ -356,6 +359,9 @@ export const CompanyDialog: React.FC<CompanyDialogProps> = ({
       }
       if (formData.description?.trim()) {
         companyData.description = formData.description.trim();
+      }
+      if (formData.ratingV2 !== undefined) {
+        companyData.ratingV2 = formData.ratingV2;
       }
 
       if (isEditMode && company) {
@@ -639,6 +645,22 @@ export const CompanyDialog: React.FC<CompanyDialogProps> = ({
                     disabled={loading}
                     placeholder="e.g., Technology, Healthcare, Finance"
                     helperText="Optional - Business sector or category"
+                  />
+                </Grid>
+
+                <Grid size={{ xs: 12 }}>
+                  <TextField
+                    fullWidth
+                    type="number"
+                    label="Rating V2"
+                    value={formData.ratingV2 ?? ''}
+                    onChange={(e) => setFormData(prev => ({
+                      ...prev,
+                      ratingV2: e.target.value ? parseInt(e.target.value, 10) : undefined
+                    }))}
+                    disabled={loading}
+                    inputProps={{ min: 1, max: 10 }}
+                    helperText="Optional - Company quality rating (1-10)"
                   />
                 </Grid>
 

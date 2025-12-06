@@ -5,7 +5,7 @@ import { Company } from '../../types/crm';
 import { Lead, LeadStatus } from '../../types/lead';
 import { FilterRule, FilterableField } from '../../types/filter';
 import { CrossEntityFilterContext } from '../../types/crossEntityFilter';
-import { getFieldDefinitions } from './fieldDefinitionsService';
+import { getFieldDefinitions, getDeletedDefaultFieldIds } from './fieldDefinitionsService';
 import { FieldDefinition } from '../../types/fieldDefinitions';
 import { getFilterableFields } from './advancedFilterService';
 import {
@@ -308,14 +308,28 @@ export function applyCompanyAdvancedFilters(companies: Company[], rules: FilterR
 
 /**
  * Async version of getCompanyFilterableFields that fetches field definitions from Firestore
+ * Also filters out deleted default fields
  * @param companies - Array of companies to extract fields from
  */
 export async function getCompanyFilterableFieldsAsync(
   companies: Company[]
 ): Promise<FilterableField[]> {
   try {
-    const fieldDefinitions = await getFieldDefinitions('company');
-    return getCompanyFilterableFields(companies, fieldDefinitions);
+    const [fieldDefinitions, deletedFieldIds] = await Promise.all([
+      getFieldDefinitions('company'),
+      getDeletedDefaultFieldIds('company'),
+    ]);
+
+    const allFields = getCompanyFilterableFields(companies, fieldDefinitions);
+
+    // Filter out deleted default fields
+    return allFields.filter(field => {
+      // Only filter out non-custom fields that are in the deleted set
+      if (!field.isCustomField && deletedFieldIds.has(field.name)) {
+        return false;
+      }
+      return true;
+    });
   } catch (error) {
     console.error('Error fetching field definitions for company filters:', error);
     // Fallback to without field definitions

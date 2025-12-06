@@ -9,7 +9,7 @@ import {
 } from '../../types/table';
 import { Company } from '../../types/crm';
 import { Lead } from '../../types/lead';
-import { getFieldDefinitions } from './fieldDefinitionsService';
+import { getFieldDefinitions, getDeletedDefaultFieldIds } from './fieldDefinitionsService';
 import { FieldSection } from '../../types/crm';
 import { getSectionFromFieldName } from '../../types/fieldDefinitions';
 
@@ -87,11 +87,17 @@ export async function buildTableColumns(leads: Lead[]): Promise<TableColumnConfi
  * Build leads table columns (default + custom fields from actual lead data)
  * Scans all leads' customFields to find unique field names
  * Auto-groups columns by section: General → LinkedIn → Email
+ * Filters out deleted default fields
  */
 export async function buildLeadsTableColumns(leads: Lead[]): Promise<TableColumnConfig[]> {
   try {
-    // Start with default columns
-    const columns: TableColumnConfig[] = [...DEFAULT_LEADS_TABLE_COLUMNS];
+    // Get deleted default field IDs to filter them out
+    const deletedFieldIds = await getDeletedDefaultFieldIds('lead');
+
+    // Start with default columns, filtering out deleted ones
+    const columns: TableColumnConfig[] = DEFAULT_LEADS_TABLE_COLUMNS.filter(
+      col => !deletedFieldIds.has(col.id)
+    );
 
     // Extract all unique custom field names from leads
     const customFieldNames = new Set<string>();
@@ -116,9 +122,9 @@ export async function buildLeadsTableColumns(leads: Lead[]): Promise<TableColumn
     // Fields that are built-in (not custom) - exclude from custom field columns
     const builtInFieldNames = new Set(['rating']);
 
-    // Create column configs for each custom field (excluding built-in fields)
+    // Create column configs for each custom field (excluding built-in fields, only those with definitions)
     const customFieldColumns: TableColumnConfig[] = Array.from(customFieldNames)
-      .filter(fieldName => !builtInFieldNames.has(fieldName))
+      .filter(fieldName => !builtInFieldNames.has(fieldName) && fieldDefMap.has(fieldName))
       .sort()
       .map((fieldName, index) => {
         const totalIndex = columns.length + index;
@@ -173,11 +179,17 @@ export async function buildLeadsTableColumns(leads: Lead[]): Promise<TableColumn
 /**
  * Build companies table columns (default + custom fields from companies)
  * Scans all companies' customFields to find unique field names
+ * Filters out deleted default fields
  */
 export async function buildCompaniesTableColumns(companies: Company[]): Promise<TableColumnConfig[]> {
   try {
-    // Start with default columns
-    const columns: TableColumnConfig[] = [...DEFAULT_COMPANIES_TABLE_COLUMNS];
+    // Get deleted default field IDs to filter them out
+    const deletedFieldIds = await getDeletedDefaultFieldIds('company');
+
+    // Start with default columns, filtering out deleted ones
+    const columns: TableColumnConfig[] = DEFAULT_COMPANIES_TABLE_COLUMNS.filter(
+      col => !deletedFieldIds.has(col.id)
+    );
 
     // Extract all unique custom field names from companies
     const customFieldNames = new Set<string>();
@@ -198,8 +210,9 @@ export async function buildCompaniesTableColumns(companies: Company[]): Promise<
       customFieldNames.add(def.name);
     });
 
-    // Create column configs for each custom field
+    // Create column configs for each custom field (only those with field definitions)
     const customFieldColumns: TableColumnConfig[] = Array.from(customFieldNames)
+      .filter(fieldName => fieldDefMap.has(fieldName)) // Only show fields with definitions
       .sort()
       .map((fieldName, index) => {
         const totalIndex = columns.length + index;

@@ -172,6 +172,7 @@ const PlaceholderChart: React.FC<PlaceholderChartProps> = ({ title, description,
   );
 };
 
+
 const CompanyAnalytics: React.FC = () => {
   const [companies, setCompanies] = useState<Company[]>([]);
   const [archivedCompanies, setArchivedCompanies] = useState<Company[]>([]);
@@ -265,12 +266,12 @@ const CompanyAnalytics: React.FC = () => {
     navigate('/companies?rating=7,8,9,10&status=new_lead,qualified');
   };
 
-  // Rating distribution (1-10 only, excluding archived, no rating, and client statuses)
+  // Rating distribution (5-10 only, excluding archived, no rating, and client statuses)
   const ratingDistribution = useMemo(() => {
     const counts: { rating: string; count: number }[] = [];
 
-    // Add ratings 1-10 only (exclude 0/no rating, archived, and client statuses)
-    const ratingOrder = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10];
+    // Add ratings 5-10 only (focus on higher quality companies)
+    const ratingOrder = [5, 6, 7, 8, 9, 10];
     ratingOrder.forEach(rating => {
       const count = analyticsCompanies.filter(c => c.ratingV2 === rating).length;
       counts.push({
@@ -360,6 +361,139 @@ const CompanyAnalytics: React.FC = () => {
         const ratingParam = selectedRating !== 'all' ? `&rating=${selectedRating}` : '';
         navigate(`/companies?status=${statusItem.statusId}${ratingParam}`);
       }
+    }
+  };
+
+  // AI Company Type distribution (from customFields.ai_company_type)
+  const aiTypeDistribution = useMemo(() => {
+    const typeCounts: Record<string, number> = {};
+
+    analyticsCompanies.forEach(company => {
+      const aiType = company.customFields?.ai_company_type || 'Unclassified';
+      typeCounts[aiType] = (typeCounts[aiType] || 0) + 1;
+    });
+
+    return Object.entries(typeCounts)
+      .map(([type, count]) => ({ type, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [analyticsCompanies]);
+
+  // AI Company Subtype distribution (from customFields.ai_company_subtype)
+  const aiSubtypeDistribution = useMemo(() => {
+    const subtypeCounts: Record<string, number> = {};
+
+    analyticsCompanies.forEach(company => {
+      const aiSubtype = company.customFields?.ai_company_subtype || 'Unclassified';
+      subtypeCounts[aiSubtype] = (subtypeCounts[aiSubtype] || 0) + 1;
+    });
+
+    return Object.entries(subtypeCounts)
+      .map(([subtype, count]) => ({ subtype, count }))
+      .sort((a, b) => b.count - a.count);
+  }, [analyticsCompanies]);
+
+  // Rating vs AI Type correlation (for stacked bar chart)
+  const ratingByTypeCorrelation = useMemo(() => {
+    // Get unique AI types
+    const types = Array.from(new Set(analyticsCompanies.map(c => c.customFields?.ai_company_type || 'Unclassified')));
+
+    // Create data for ratings 5-10 (most interesting range)
+    const ratingOrder = [5, 6, 7, 8, 9, 10];
+
+    return ratingOrder.map(rating => {
+      const dataPoint: Record<string, any> = { rating: rating.toString() };
+
+      types.forEach(type => {
+        const count = analyticsCompanies.filter(c =>
+          c.ratingV2 === rating &&
+          (c.customFields?.ai_company_type || 'Unclassified') === type
+        ).length;
+        dataPoint[type] = count;
+      });
+
+      return dataPoint;
+    });
+  }, [analyticsCompanies]);
+
+  // Get unique AI types for series (sorted by count descending, filter out 0s)
+  const uniqueAiTypes = useMemo(() => {
+    const typeCounts: Record<string, number> = {};
+    analyticsCompanies.forEach(c => {
+      const type = c.customFields?.ai_company_type || 'Unclassified';
+      typeCounts[type] = (typeCounts[type] || 0) + 1;
+    });
+    return Object.entries(typeCounts)
+      .filter(([type, count]) => type !== 'Unclassified' && count > 0)
+      .sort((a, b) => b[1] - a[1])
+      .map(([type]) => type);
+  }, [analyticsCompanies]);
+
+  // Rating vs AI Subtype correlation
+  const ratingBySubtypeCorrelation = useMemo(() => {
+    const subtypes = Array.from(new Set(analyticsCompanies.map(c => c.customFields?.ai_company_subtype || 'Unclassified')));
+    const ratingOrder = [5, 6, 7, 8, 9, 10];
+
+    return ratingOrder.map(rating => {
+      const dataPoint: Record<string, any> = { rating: rating.toString() };
+      subtypes.forEach(subtype => {
+        const count = analyticsCompanies.filter(c =>
+          c.ratingV2 === rating &&
+          (c.customFields?.ai_company_subtype || 'Unclassified') === subtype
+        ).length;
+        dataPoint[subtype] = count;
+      });
+      return dataPoint;
+    });
+  }, [analyticsCompanies]);
+
+  // Get unique subtypes for series (sorted by count descending, filter out 0s)
+  const uniqueAiSubtypes = useMemo(() => {
+    const subtypeCounts: Record<string, number> = {};
+    analyticsCompanies.forEach(c => {
+      const subtype = c.customFields?.ai_company_subtype || 'Unclassified';
+      subtypeCounts[subtype] = (subtypeCounts[subtype] || 0) + 1;
+    });
+    return Object.entries(subtypeCounts)
+      .filter(([subtype, count]) => subtype !== 'Unclassified' && count > 0)
+      .sort((a, b) => b[1] - a[1])
+      .map(([subtype]) => subtype);
+  }, [analyticsCompanies]);
+
+  // Colors for AI types
+  const typeColors: Record<string, string> = {
+    'SaaS': '#667eea',
+    'Agency': '#f59e0b',
+    'Content Publisher': '#10b981',
+    'Job Platform': '#ef4444',
+    'Unclassified': '#94a3b8',
+  };
+
+  // Colors for AI subtypes
+  const subtypeColors: Record<string, string> = {
+    'AI/ML Platforms': '#667eea',
+    'Developer Infrastructure': '#f59e0b',
+    'Data Engineering': '#10b981',
+    'Security': '#ef4444',
+    'Cloud Services': '#8b5cf6',
+    'CMS': '#06b6d4',
+    'Developer': '#ec4899',
+    'General': '#94a3b8',
+    'Other': '#6b7280',
+  };
+
+  // Handle AI type bar click
+  const handleAiTypeClick = (event: any, itemData: any) => {
+    if (itemData?.axisValue) {
+      const type = itemData.axisValue;
+      navigate(`/companies?aiType=${encodeURIComponent(type)}`);
+    }
+  };
+
+  // Handle AI subtype bar click
+  const handleAiSubtypeClick = (event: any, itemData: any) => {
+    if (itemData?.axisValue) {
+      const subtype = itemData.axisValue;
+      navigate(`/companies?aiSubtype=${encodeURIComponent(subtype)}`);
     }
   };
 
@@ -468,7 +602,7 @@ const CompanyAnalytics: React.FC = () => {
                       Distribution by Rating V2
                     </Typography>
                     <Typography variant="body2" sx={{ color: '#64748b', mb: 4 }}>
-                      View how companies are distributed across different rating levels
+                      View how companies are distributed across ratings 5-10
                     </Typography>
 
                     <Box sx={{ height: 400 }}>
@@ -555,7 +689,7 @@ const CompanyAnalytics: React.FC = () => {
                           }}
                         >
                           <MenuItem value="all">All Ratings</MenuItem>
-                          {[1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map((rating) => (
+                          {[5, 6, 7, 8, 9, 10].map((rating) => (
                             <MenuItem key={rating} value={rating}>
                               Rating {rating}
                             </MenuItem>
@@ -696,6 +830,281 @@ const CompanyAnalytics: React.FC = () => {
                           },
                         }}
                       />
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
+
+            {/* AI Type & Subtype Distribution - Side by Side */}
+            <Grid container spacing={3} sx={{ mb: 4 }}>
+              {/* AI Company Type Distribution */}
+              <Grid item xs={12} md={6}>
+                <Card
+                  sx={{
+                    background: 'rgba(255, 255, 255, 0.9)',
+                    borderRadius: 3,
+                    backdropFilter: 'blur(20px)',
+                    border: '1px solid rgba(226, 232, 240, 0.5)',
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08)',
+                    height: '100%',
+                  }}
+                >
+                  <CardContent sx={{ p: 4 }}>
+                    <Typography
+                      variant="h5"
+                      sx={{
+                        color: '#1e293b',
+                        fontWeight: 700,
+                        mb: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                      }}
+                    >
+                      <CategoryIcon sx={{ fontSize: 24, color: '#667eea' }} />
+                      AI Company Type
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: '#64748b', mb: 3 }}>
+                      Distribution by AI-classified company type
+                    </Typography>
+
+                    <Box sx={{ height: 350 }}>
+                      <BarChart
+                        dataset={aiTypeDistribution}
+                        xAxis={[{ dataKey: 'type', scaleType: 'band', label: 'Type' }]}
+                        yAxis={[{ label: 'Companies' }]}
+                        series={[
+                          {
+                            dataKey: 'count',
+                            label: 'Companies',
+                            color: '#667eea',
+                          },
+                        ]}
+                        margin={{ left: 60, right: 20, top: 20, bottom: 60 }}
+                        grid={{ vertical: true, horizontal: true }}
+                        onItemClick={handleAiTypeClick}
+                        sx={{
+                          '& .MuiChartsAxis-label': { fill: '#64748b', fontWeight: 600 },
+                          '& .MuiChartsAxis-tickLabel': { fill: '#475569', fontWeight: 500 },
+                          '& .MuiBarElement-root': {
+                            cursor: 'pointer',
+                            transition: 'opacity 0.2s',
+                            '&:hover': { opacity: 0.8 },
+                          },
+                        }}
+                      />
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+
+              {/* AI Company Subtype Distribution */}
+              <Grid item xs={12} md={6}>
+                <Card
+                  sx={{
+                    background: 'rgba(255, 255, 255, 0.9)',
+                    borderRadius: 3,
+                    backdropFilter: 'blur(20px)',
+                    border: '1px solid rgba(226, 232, 240, 0.5)',
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08)',
+                    height: '100%',
+                  }}
+                >
+                  <CardContent sx={{ p: 4 }}>
+                    <Typography
+                      variant="h5"
+                      sx={{
+                        color: '#1e293b',
+                        fontWeight: 700,
+                        mb: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                      }}
+                    >
+                      <CategoryIcon sx={{ fontSize: 24, color: '#f59e0b' }} />
+                      AI Company Subtype
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: '#64748b', mb: 3 }}>
+                      Distribution by AI-classified subtype
+                    </Typography>
+
+                    <Box sx={{ height: 350 }}>
+                      <BarChart
+                        dataset={aiSubtypeDistribution}
+                        xAxis={[{ dataKey: 'subtype', scaleType: 'band', label: 'Subtype' }]}
+                        yAxis={[{ label: 'Companies' }]}
+                        series={[
+                          {
+                            dataKey: 'count',
+                            label: 'Companies',
+                            color: '#f59e0b',
+                          },
+                        ]}
+                        margin={{ left: 60, right: 20, top: 20, bottom: 100 }}
+                        grid={{ vertical: true, horizontal: true }}
+                        onItemClick={handleAiSubtypeClick}
+                        sx={{
+                          '& .MuiChartsAxis-label': { fill: '#64748b', fontWeight: 600 },
+                          '& .MuiChartsAxis-tickLabel': { fill: '#475569', fontWeight: 500, fontSize: '10px' },
+                          '& .MuiBarElement-root': {
+                            cursor: 'pointer',
+                            transition: 'opacity 0.2s',
+                            '&:hover': { opacity: 0.8 },
+                          },
+                        }}
+                      />
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
+
+            {/* Rating vs AI Type Correlation - Full Width */}
+            <Grid container spacing={3} sx={{ mb: 4 }}>
+              <Grid item xs={12}>
+                <Card
+                  sx={{
+                    background: 'rgba(255, 255, 255, 0.9)',
+                    borderRadius: 3,
+                    backdropFilter: 'blur(20px)',
+                    border: '1px solid rgba(226, 232, 240, 0.5)',
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08)',
+                  }}
+                >
+                  <CardContent sx={{ p: 4 }}>
+                    <Typography
+                      variant="h5"
+                      sx={{
+                        color: '#1e293b',
+                        fontWeight: 700,
+                        mb: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                      }}
+                    >
+                      <TrendingUpIcon sx={{ fontSize: 24, color: '#10b981' }} />
+                      Rating vs Company Type Correlation
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: '#64748b', mb: 4 }}>
+                      See how different company types are distributed across ratings (5-10)
+                    </Typography>
+
+                    <Box sx={{ height: 400 }}>
+                      <BarChart
+                        dataset={ratingByTypeCorrelation}
+                        xAxis={[{ dataKey: 'rating', scaleType: 'band', label: 'Rating' }]}
+                        yAxis={[{ label: 'Number of Companies' }]}
+                        series={uniqueAiTypes.map(type => ({
+                          dataKey: type,
+                          label: type,
+                          color: typeColors[type] || '#94a3b8',
+                          stack: 'total',
+                          valueFormatter: (value: number | null) => (value === 0 ? null : value?.toString() || '0'),
+                        }))}
+                        margin={{ left: 80, right: 20, top: 20, bottom: 60 }}
+                        grid={{ vertical: true, horizontal: true }}
+                        sx={{
+                          '& .MuiChartsAxis-label': { fill: '#64748b', fontWeight: 600 },
+                          '& .MuiChartsAxis-tickLabel': { fill: '#475569', fontWeight: 500 },
+                        }}
+                      />
+                    </Box>
+
+                    {/* Legend */}
+                    <Box sx={{ display: 'flex', justifyContent: 'center', gap: 3, mt: 2, flexWrap: 'wrap' }}>
+                      {uniqueAiTypes.map(type => (
+                        <Box key={type} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Box
+                            sx={{
+                              width: 12,
+                              height: 12,
+                              borderRadius: 1,
+                              backgroundColor: typeColors[type] || '#94a3b8',
+                            }}
+                          />
+                          <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500 }}>
+                            {type}
+                          </Typography>
+                        </Box>
+                      ))}
+                    </Box>
+                  </CardContent>
+                </Card>
+              </Grid>
+            </Grid>
+
+            {/* Rating vs AI Subtype Correlation - Full Width */}
+            <Grid container spacing={3} sx={{ mb: 4 }}>
+              <Grid item xs={12}>
+                <Card
+                  sx={{
+                    background: 'rgba(255, 255, 255, 0.9)',
+                    borderRadius: 3,
+                    backdropFilter: 'blur(20px)',
+                    border: '1px solid rgba(226, 232, 240, 0.5)',
+                    boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08)',
+                  }}
+                >
+                  <CardContent sx={{ p: 4 }}>
+                    <Typography
+                      variant="h5"
+                      sx={{
+                        color: '#1e293b',
+                        fontWeight: 700,
+                        mb: 1,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 1,
+                      }}
+                    >
+                      <TrendingUpIcon sx={{ fontSize: 24, color: '#8b5cf6' }} />
+                      Rating vs Company Subtype Correlation
+                    </Typography>
+                    <Typography variant="body2" sx={{ color: '#64748b', mb: 4 }}>
+                      See how different company subtypes are distributed across ratings (5-10)
+                    </Typography>
+
+                    <Box sx={{ height: 400 }}>
+                      <BarChart
+                        dataset={ratingBySubtypeCorrelation}
+                        xAxis={[{ dataKey: 'rating', scaleType: 'band', label: 'Rating' }]}
+                        yAxis={[{ label: 'Number of Companies' }]}
+                        series={uniqueAiSubtypes.map(subtype => ({
+                          dataKey: subtype,
+                          label: subtype,
+                          color: subtypeColors[subtype] || '#94a3b8',
+                          stack: 'total',
+                          valueFormatter: (value: number | null) => (value === 0 ? null : value?.toString() || '0'),
+                        }))}
+                        margin={{ left: 80, right: 20, top: 20, bottom: 60 }}
+                        grid={{ vertical: true, horizontal: true }}
+                        sx={{
+                          '& .MuiChartsAxis-label': { fill: '#64748b', fontWeight: 600 },
+                          '& .MuiChartsAxis-tickLabel': { fill: '#475569', fontWeight: 500 },
+                        }}
+                      />
+                    </Box>
+
+                    {/* Legend */}
+                    <Box sx={{ display: 'flex', justifyContent: 'center', gap: 2, mt: 2, flexWrap: 'wrap' }}>
+                      {uniqueAiSubtypes.map(subtype => (
+                        <Box key={subtype} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                          <Box
+                            sx={{
+                              width: 12,
+                              height: 12,
+                              borderRadius: 1,
+                              backgroundColor: subtypeColors[subtype] || '#94a3b8',
+                            }}
+                          />
+                          <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500, fontSize: '11px' }}>
+                            {subtype}
+                          </Typography>
+                        </Box>
+                      ))}
                     </Box>
                   </CardContent>
                 </Card>

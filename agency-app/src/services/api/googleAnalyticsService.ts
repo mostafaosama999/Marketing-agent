@@ -33,15 +33,20 @@ const functions = getFunctions(app);
 
 /**
  * Call Cloud Function to manually sync Google Analytics data
+ * @param daysToSync Number of days to sync (default: 30)
+ * @param configId The config ID to sync ('global' for personal, 'company' for company analytics)
  */
-export async function syncGoogleAnalytics(daysToSync: number = 30): Promise<GASyncResult> {
+export async function syncGoogleAnalytics(
+  daysToSync: number = 30,
+  configId: string = 'global'
+): Promise<GASyncResult> {
   try {
     const syncFunction = httpsCallable<
-      { daysToSync: number },
+      { daysToSync: number; configId: string },
       GASyncResult
     >(functions, 'syncGoogleAnalytics');
 
-    const result = await syncFunction({ daysToSync });
+    const result = await syncFunction({ daysToSync, configId });
     return result.data;
   } catch (error: any) {
     console.error('Failed to sync Google Analytics:', error);

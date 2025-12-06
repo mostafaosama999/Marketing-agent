@@ -5,7 +5,7 @@ import { Lead, LeadStatus } from '../../types/lead';
 import { Company } from '../../types/crm';
 import { FilterRule, FilterOperator, FilterableField } from '../../types/filter';
 import { CrossEntityFilterContext } from '../../types/crossEntityFilter';
-import { getFieldDefinitions } from './fieldDefinitionsService';
+import { getFieldDefinitions, getDeletedDefaultFieldIds } from './fieldDefinitionsService';
 import { FieldDefinition } from '../../types/fieldDefinitions';
 import { getCompanyFilterableFields } from './companyFilterService';
 import {
@@ -113,8 +113,21 @@ export async function getFilterableFieldsAsync(
   pipelineStages?: LeadStatus[]
 ): Promise<FilterableField[]> {
   try {
-    const fieldDefinitions = await getFieldDefinitions('lead');
-    return getFilterableFields(leads, pipelineStages, fieldDefinitions);
+    const [fieldDefinitions, deletedFieldIds] = await Promise.all([
+      getFieldDefinitions('lead'),
+      getDeletedDefaultFieldIds('lead'),
+    ]);
+
+    const allFields = getFilterableFields(leads, pipelineStages, fieldDefinitions);
+
+    // Filter out deleted default fields
+    return allFields.filter(field => {
+      // Only filter out non-custom fields that are in the deleted set
+      if (!field.isCustomField && deletedFieldIds.has(field.name)) {
+        return false;
+      }
+      return true;
+    });
   } catch (error) {
     console.error('Error fetching field definitions for filters:', error);
     // Fallback to without field definitions
