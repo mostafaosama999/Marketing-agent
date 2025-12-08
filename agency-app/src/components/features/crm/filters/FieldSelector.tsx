@@ -23,9 +23,30 @@ export const FieldSelector: React.FC<FieldSelectorProps> = ({
   onChange,
   disabled = false,
 }) => {
+  // Create a unique key for each field to handle name collisions across entity sources
+  // For cross-entity fields (company/leads), use "entitySource:fieldName" format
+  // For self fields, use just "fieldName" to maintain backward compatibility
+  const getFieldKey = (field: FilterableField): string => {
+    if (field.entitySource === 'company' || field.entitySource === 'leads') {
+      return `${field.entitySource}:${field.name}`;
+    }
+    return field.name;
+  };
+
+  // Find a field by its key (handles both simple names and composite keys)
+  const findFieldByKey = (key: string): FilterableField | undefined => {
+    // First try to find by exact key match (for cross-entity fields)
+    const fieldByKey = fields.find(f => getFieldKey(f) === key);
+    if (fieldByKey) return fieldByKey;
+
+    // Fallback: try to find by name only (for backward compatibility with existing filters)
+    // This handles old filters that were saved before the fix
+    return fields.find(f => f.name === key);
+  };
+
   const handleChange = (event: any) => {
-    const selectedFieldName = event.target.value;
-    const selectedField = fields.find(f => f.name === selectedFieldName);
+    const selectedKey = event.target.value;
+    const selectedField = findFieldByKey(selectedKey);
 
     if (selectedField) {
       onChange(
@@ -49,7 +70,7 @@ export const FieldSelector: React.FC<FieldSelectorProps> = ({
   const leadFields = fields.filter(f => f.entitySource === 'leads');
 
   // Get the current field to show correct color in the display
-  const currentField = fields.find(f => f.name === value);
+  const currentField = findFieldByKey(value);
   const getFieldColor = (field?: FilterableField) => {
     if (!field) return 'inherit';
     if (field.entitySource === 'company') return '#0077b5';
@@ -71,7 +92,7 @@ export const FieldSelector: React.FC<FieldSelectorProps> = ({
               </Typography>
             );
           }
-          const field = fields.find(f => f.name === selected);
+          const field = findFieldByKey(selected as string);
           return (
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
               {field?.entitySource === 'company' && (
@@ -167,7 +188,7 @@ export const FieldSelector: React.FC<FieldSelectorProps> = ({
             Linked Company Fields
           </ListSubheader>,
           ...companyFields.map(field => (
-            <MenuItem key={`company-${field.name}`} value={field.name}>
+            <MenuItem key={`company-${field.name}`} value={getFieldKey(field)}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                 <BusinessIcon sx={{ fontSize: 14, color: '#0077b5', opacity: 0.6 }} />
                 <Typography variant="body2" sx={{ color: '#0077b5' }}>
@@ -198,7 +219,7 @@ export const FieldSelector: React.FC<FieldSelectorProps> = ({
             Company's Leads Fields
           </ListSubheader>,
           ...leadFields.map(field => (
-            <MenuItem key={`lead-${field.name}`} value={field.name}>
+            <MenuItem key={`lead-${field.name}`} value={getFieldKey(field)}>
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
                 <PersonIcon sx={{ fontSize: 14, color: '#10b981', opacity: 0.6 }} />
                 <Typography variant="body2" sx={{ color: '#10b981' }}>

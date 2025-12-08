@@ -35,12 +35,13 @@ export const DEFAULT_LEADS_TABLE_COLUMNS: TableColumnConfig[] = [
 export const DEFAULT_COMPANIES_TABLE_COLUMNS: TableColumnConfig[] = [
   { id: 'name', label: 'Company Name', sortable: true, visible: true, type: 'default', order: 0 },
   { id: 'status', label: 'Status', sortable: true, visible: true, type: 'default', order: 1 },
-  { id: 'ratingV2', label: 'Rating V2', sortable: true, visible: true, type: 'default', order: 2 },
-  { id: 'website', label: 'Website', sortable: true, visible: true, type: 'default', order: 3 },
-  { id: 'industry', label: 'Industry', sortable: true, visible: true, type: 'default', order: 4 },
-  { id: 'description', label: 'Description', sortable: true, visible: false, type: 'default', order: 5 },
-  { id: 'leadCount', label: 'Leads', sortable: true, visible: true, type: 'default', order: 6 },
-  { id: 'createdAt', label: 'Created', sortable: true, visible: false, type: 'default', order: 7 },
+  { id: 'labels', label: 'Labels', sortable: true, visible: true, type: 'default', order: 2, fieldType: 'dropdown' },
+  { id: 'ratingV2', label: 'Rating V2', sortable: true, visible: true, type: 'default', order: 3 },
+  { id: 'website', label: 'Website', sortable: true, visible: true, type: 'default', order: 4 },
+  { id: 'industry', label: 'Industry', sortable: true, visible: true, type: 'default', order: 5 },
+  { id: 'description', label: 'Description', sortable: true, visible: false, type: 'default', order: 6 },
+  { id: 'leadCount', label: 'Leads', sortable: true, visible: true, type: 'default', order: 7 },
+  { id: 'createdAt', label: 'Created', sortable: true, visible: false, type: 'default', order: 8 },
 ];
 
 // Writing Program table columns

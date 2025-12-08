@@ -106,19 +106,29 @@ function CRMBoard() {
   const [alertOpen, setAlertOpen] = useState(false);
   const [alertMessage, setAlertMessage] = useState('');
 
-  // Track if component has mounted to prevent saving on initial render
-  const isInitialMount = React.useRef(true);
-
-  // Unified filter state
-  const [filters, setFilters] = useState<FilterState>({
-    search: '',
-    statuses: [],
-    company: '',
-    month: '',
+  // Unified filter state - load from localStorage synchronously to avoid race conditions
+  const [filters, setFilters] = useState<FilterState>(() => {
+    try {
+      const saved = localStorage.getItem(ACTIVE_FILTERS_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.filters) return parsed.filters;
+      }
+    } catch {}
+    return { search: '', statuses: [], company: '', month: '' };
   });
 
-  // Advanced filter rules
-  const [advancedFilterRules, setAdvancedFilterRules] = useState<FilterRule[]>([]);
+  // Advanced filter rules - load from localStorage synchronously
+  const [advancedFilterRules, setAdvancedFilterRules] = useState<FilterRule[]>(() => {
+    try {
+      const saved = localStorage.getItem(ACTIVE_FILTERS_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.advancedFilterRules) return parsed.advancedFilterRules;
+      }
+    } catch {}
+    return [];
+  });
 
   // CSV Import states
   const [showCSVUpload, setShowCSVUpload] = useState(false);
@@ -126,7 +136,17 @@ function CRMBoard() {
   const [parsedCSVData, setParsedCSVData] = useState<CSVRow[]>([]);
   const [csvHeaders, setCsvHeaders] = useState<string[]>([]);
 
-  const [currentView, setCurrentView] = useState<'board' | 'table'>('table');
+  // View state - load from localStorage synchronously
+  const [currentView, setCurrentView] = useState<'board' | 'table'>(() => {
+    try {
+      const saved = localStorage.getItem(ACTIVE_FILTERS_STORAGE_KEY);
+      if (saved) {
+        const parsed = JSON.parse(saved);
+        if (parsed.currentView) return parsed.currentView;
+      }
+    } catch {}
+    return 'table';
+  });
 
   // Preset dialog state
   const [showSavePresetDialog, setShowSavePresetDialog] = useState(false);
@@ -288,45 +308,6 @@ function CRMBoard() {
     }
   }, [leads]);
 
-  // Load filters from localStorage on mount (persists across page refreshes)
-  useEffect(() => {
-    const debugMode = localStorage.getItem('crm_debug') === 'true';
-
-    try {
-      const savedFilters = localStorage.getItem(ACTIVE_FILTERS_STORAGE_KEY);
-
-      if (debugMode) {
-        console.log('[CRM Filter Persistence] Loading filters from localStorage:', savedFilters);
-      }
-
-      if (savedFilters) {
-        const parsed = JSON.parse(savedFilters);
-
-        if (debugMode) {
-          console.log('[CRM Filter Persistence] Parsed filter state:', parsed);
-        }
-
-        if (parsed.filters) {
-          setFilters(parsed.filters);
-        }
-        if (parsed.advancedFilterRules) {
-          setAdvancedFilterRules(parsed.advancedFilterRules);
-        }
-        if (parsed.currentView) {
-          setCurrentView(parsed.currentView);
-        }
-
-        if (debugMode) {
-          console.log('[CRM Filter Persistence] Filters successfully restored');
-        }
-      } else if (debugMode) {
-        console.log('[CRM Filter Persistence] No saved filters found in localStorage');
-      }
-    } catch (error) {
-      console.error('Error loading filters from localStorage:', error);
-    }
-  }, []); // Only run once on mount
-
   // Helper function to save filters to localStorage
   const saveFiltersToStorage = React.useCallback(() => {
     try {
@@ -347,14 +328,8 @@ function CRMBoard() {
     }
   }, [filters, advancedFilterRules, currentView]);
 
-  // Save filters to localStorage whenever they change (skip initial mount)
+  // Save filters to localStorage whenever they change
   useEffect(() => {
-    // Skip saving on the very first render to allow loading to complete
-    if (isInitialMount.current) {
-      isInitialMount.current = false;
-      return;
-    }
-
     saveFiltersToStorage();
   }, [filters, advancedFilterRules, currentView, saveFiltersToStorage]);
 
@@ -600,7 +575,17 @@ function CRMBoard() {
     const emailMatch = lead.email.toLowerCase().includes(searchLower);
     const companyMatch = lead.company.toLowerCase().includes(searchLower);
     const phoneMatch = lead.phone ? lead.phone.toLowerCase().includes(searchLower) : false;
-    return nameMatch || emailMatch || companyMatch || phoneMatch;
+
+    // Search through custom fields
+    let customFieldMatch = false;
+    if (lead.customFields) {
+      customFieldMatch = Object.values(lead.customFields).some(value => {
+        if (value === null || value === undefined) return false;
+        return String(value).toLowerCase().includes(searchLower);
+      });
+    }
+
+    return nameMatch || emailMatch || companyMatch || phoneMatch || customFieldMatch;
   };
 
   const getLeadsForColumn = (columnId: LeadStatus) => {

@@ -117,13 +117,19 @@ export function getCompanyFilterableFields(
   const hasBlogData = companies.some(c => c.blogAnalysis);
   const hasWritingProgramData = companies.some(c => c.writingProgramAnalysis);
 
-  const fields = [...standardFields];
-  if (hasApolloData) fields.push(...apolloFields);
-  if (hasBlogData) fields.push(...blogFields);
-  if (hasWritingProgramData) fields.push(...writingProgramFields);
-  fields.push(...customFilterableFields);
+  // Use a Map to deduplicate by field name - custom fields override standard fields
+  const fieldMap = new Map<string, FilterableField>();
 
-  return fields;
+  // Add standard fields first
+  standardFields.forEach(field => fieldMap.set(field.name, field));
+  if (hasApolloData) apolloFields.forEach(field => fieldMap.set(field.name, field));
+  if (hasBlogData) blogFields.forEach(field => fieldMap.set(field.name, field));
+  if (hasWritingProgramData) writingProgramFields.forEach(field => fieldMap.set(field.name, field));
+
+  // Custom fields override standard fields with the same name
+  customFilterableFields.forEach(field => fieldMap.set(field.name, field));
+
+  return Array.from(fieldMap.values());
 }
 
 /**
@@ -411,10 +417,17 @@ export function getLeadFieldsFromDefinitions(
       });
   }
 
-  const allFields = [...standardFields, ...customFields];
+  // Use a Map to deduplicate by field name - custom fields override standard fields
+  const fieldMap = new Map<string, FilterableField>();
+
+  // Add standard fields first
+  standardFields.forEach(field => fieldMap.set(field.name, field));
+
+  // Custom fields override standard fields with the same name
+  customFields.forEach(field => fieldMap.set(field.name, field));
 
   // Mark all fields as coming from 'leads' entity
-  return allFields.map(field => ({
+  return Array.from(fieldMap.values()).map(field => ({
     ...field,
     entitySource: 'leads' as const,
     entityLabel: "Company's Leads",

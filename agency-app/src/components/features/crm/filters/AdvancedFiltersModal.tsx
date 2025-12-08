@@ -411,10 +411,10 @@ export const AdvancedFiltersModal = <T extends Lead | Company = Lead>({
                   <React.Fragment key={rule.id}>
                     {index > 0 && (
                       <Chip
-                        label={rules[index - 1].logicGate}
+                        label={rule.logicGate}
                         size="small"
                         sx={{
-                          bgcolor: rules[index - 1].logicGate === 'AND' ? '#667eea' : '#f59e0b',
+                          bgcolor: rule.logicGate === 'AND' ? '#667eea' : '#f59e0b',
                           color: 'white',
                           fontWeight: 600,
                           fontSize: '11px',

@@ -42,6 +42,9 @@ function convertToCompany(id: string, data: any): Company {
     ratingV2: data.ratingV2 !== undefined ? data.ratingV2 : null,
     ratingV2UpdatedBy: data.ratingV2UpdatedBy,
     ratingV2UpdatedAt: data.ratingV2UpdatedAt?.toDate ? data.ratingV2UpdatedAt.toDate() : (data.ratingV2UpdatedAt ? new Date(data.ratingV2UpdatedAt) : undefined),
+    labels: data.labels,
+    labelsUpdatedBy: data.labelsUpdatedBy,
+    labelsUpdatedAt: data.labelsUpdatedAt?.toDate ? data.labelsUpdatedAt.toDate() : (data.labelsUpdatedAt ? new Date(data.labelsUpdatedAt) : undefined),
     customFields: data.customFields || {},
     createdAt: data.createdAt?.toDate ? data.createdAt.toDate() : (data.createdAt || new Date()),
     updatedAt: data.updatedAt?.toDate ? data.updatedAt.toDate() : (data.updatedAt || new Date()),
@@ -438,6 +441,31 @@ export async function updateCompanyField(
     await updateDoc(companyRef, updateData);
   } catch (error) {
     console.error('Error updating company field:', error);
+    throw error;
+  }
+}
+
+/**
+ * Update the labels field on a company
+ * @param companyId - The ID of the company to update
+ * @param labels - The new labels value (or empty string to clear)
+ * @param userId - User ID to track who made the update
+ */
+export async function updateCompanyLabels(
+  companyId: string,
+  labels: string,
+  userId: string
+): Promise<void> {
+  try {
+    const companyRef = doc(db, COMPANIES_COLLECTION, companyId);
+    await updateDoc(companyRef, {
+      labels: labels || null,
+      labelsUpdatedBy: userId,
+      labelsUpdatedAt: serverTimestamp(),
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    console.error('Error updating company labels:', error);
     throw error;
   }
 }

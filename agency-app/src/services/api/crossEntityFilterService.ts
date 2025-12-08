@@ -167,13 +167,13 @@ export function evaluateRulesWithLogicGates<T>(
   let result = evaluator(item, rules[0]);
 
   for (let i = 0; i < rules.length - 1; i++) {
-    const currentRule = rules[i];
     const nextRule = rules[i + 1];
     const nextResult = evaluator(item, nextRule);
 
-    if (currentRule.logicGate === 'AND') {
+    // Use nextRule's logicGate - it determines how this rule combines with previous result
+    if (nextRule.logicGate === 'AND') {
       result = result && nextResult;
-    } else if (currentRule.logicGate === 'OR') {
+    } else if (nextRule.logicGate === 'OR') {
       result = result || nextResult;
     }
   }

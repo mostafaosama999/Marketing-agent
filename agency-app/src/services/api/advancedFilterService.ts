@@ -100,7 +100,16 @@ export function getFilterableFields(
       };
     });
 
-  return [...standardFields, ...customFilterableFields];
+  // Use a Map to deduplicate by field name - custom fields override standard fields
+  const fieldMap = new Map<string, FilterableField>();
+
+  // Add standard fields first
+  standardFields.forEach(field => fieldMap.set(field.name, field));
+
+  // Custom fields override standard fields with the same name
+  customFilterableFields.forEach(field => fieldMap.set(field.name, field));
+
+  return Array.from(fieldMap.values());
 }
 
 /**
@@ -340,13 +349,13 @@ export function applyAdvancedFilters(leads: Lead[], rules: FilterRule[]): Lead[]
     let result = evaluateRule(lead, rules[0]);
 
     for (let i = 0; i < rules.length - 1; i++) {
-      const currentRule = rules[i];
       const nextRule = rules[i + 1];
       const nextResult = evaluateRule(lead, nextRule);
 
-      if (currentRule.logicGate === 'AND') {
+      // Use nextRule's logicGate - it determines how this rule combines with previous result
+      if (nextRule.logicGate === 'AND') {
         result = result && nextResult;
-      } else if (currentRule.logicGate === 'OR') {
+      } else if (nextRule.logicGate === 'OR') {
         result = result || nextResult;
       }
     }
@@ -499,16 +508,21 @@ export function getCompanyFieldsFromDefinitions(
   }
 
   // Combine all fields (always include all standard field types since we don't have actual data)
-  const allFields = [
-    ...standardFields,
-    ...apolloFields,
-    ...blogFields,
-    ...writingProgramFields,
-    ...customFields,
-  ];
+  // Use a Map to deduplicate by field name - custom fields override standard fields
+  const fieldMap = new Map<string, FilterableField>();
+
+  // Add standard fields first
+  [...standardFields, ...apolloFields, ...blogFields, ...writingProgramFields].forEach(field => {
+    fieldMap.set(field.name, field);
+  });
+
+  // Custom fields override standard fields with the same name
+  customFields.forEach(field => {
+    fieldMap.set(field.name, field);
+  });
 
   // Mark all fields as coming from 'company' entity
-  return allFields.map(field => ({
+  return Array.from(fieldMap.values()).map(field => ({
     ...field,
     entitySource: 'company' as const,
     entityLabel: 'Linked Company',

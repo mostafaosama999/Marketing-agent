@@ -38,14 +38,36 @@ export const FilterRuleRow: React.FC<FilterRuleRowProps> = ({
   const [fieldType, setFieldType] = useState<'text' | 'number' | 'date' | 'select' | 'boolean'>('text');
   const [fieldOptions, setFieldOptions] = useState<string[]>([]);
 
+  // Helper to create composite key for cross-entity fields (matches FieldSelector logic)
+  const getFieldKey = (fieldName: string, entitySource?: EntitySource): string => {
+    if (entitySource === 'company' || entitySource === 'leads') {
+      return `${entitySource}:${fieldName}`;
+    }
+    return fieldName;
+  };
+
+  // Helper to find field by composite key or name
+  const findFieldByKey = (key: string): FilterableField | undefined => {
+    // First try exact match with entitySource prefix
+    for (const field of fields) {
+      const fieldKey = getFieldKey(field.name, field.entitySource);
+      if (fieldKey === key) return field;
+    }
+    // Fallback to name-only match for backward compatibility
+    return fields.find(f => f.name === key);
+  };
+
+  // Get the composite key for the current rule's field (for FieldSelector value)
+  const fieldSelectorValue = rule.field ? getFieldKey(rule.field, rule.entitySource) : '';
+
   // Initialize field type based on selected field
   useEffect(() => {
-    const field = fields.find(f => f.name === rule.field);
+    const field = findFieldByKey(fieldSelectorValue);
     if (field) {
       setFieldType(field.type);
       setFieldOptions(field.options || []);
     }
-  }, [rule.field, fields]);
+  }, [fieldSelectorValue, fields]);
 
   const handleFieldChange = (
     fieldName: string,
@@ -61,7 +83,7 @@ export const FilterRuleRow: React.FC<FilterRuleRowProps> = ({
     const operators = getOperatorsForFieldType(type);
     const defaultOperator = operators[0]?.value || 'equals';
 
-    onUpdate({
+    const updatedRule: FilterRule = {
       ...rule,
       field: fieldName,
       fieldLabel: fieldLabel,
@@ -69,10 +91,12 @@ export const FilterRuleRow: React.FC<FilterRuleRowProps> = ({
       value: null, // Reset value when field changes
       entitySource: entitySource || 'self',
       // Set default aggregation for leads-sourced rules
-      aggregationType: entitySource === 'leads' ? 'any' : undefined,
+      aggregationType: entitySource === 'leads' ? 'any' as LeadAggregationType : undefined,
       countOperator: undefined,
       countValue: undefined,
-    });
+    };
+
+    onUpdate(updatedRule);
   };
 
   const handleOperatorChange = (operator: FilterOperator) => {
@@ -197,7 +221,7 @@ export const FilterRuleRow: React.FC<FilterRuleRowProps> = ({
       {/* Field Selector */}
       <Box sx={{ flex: 1, minWidth: '180px' }}>
         <FieldSelector
-          value={rule.field}
+          value={fieldSelectorValue}
           fields={fields}
           onChange={handleFieldChange}
         />

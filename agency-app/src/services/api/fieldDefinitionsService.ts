@@ -639,3 +639,53 @@ export const getDeletedDefaultFieldIds = async (
 
   return deletedIds;
 };
+
+/**
+ * Ensure the company labels field definition exists
+ * Creates it with default options if not present
+ * @param userId - User ID for creation tracking (use 'system' for auto-init)
+ */
+export const ensureCompanyLabelsFieldDefinition = async (
+  userId: string = 'system'
+): Promise<FieldDefinition> => {
+  const fieldId = generateFieldId('company', 'labels');
+  const existing = await getFieldDefinition(fieldId);
+
+  if (existing) {
+    return existing;
+  }
+
+  // Create the field definition with some starter options
+  const fieldDefinition: FieldDefinition = {
+    id: fieldId,
+    name: 'labels',
+    label: 'Labels',
+    entityType: 'company',
+    fieldType: 'dropdown',
+    section: 'general',
+    options: [
+      'Competitor',
+      'Partner',
+      'Security',
+      'AI/ML',
+      'Developer Tools',
+      'Enterprise',
+      'Startup',
+      'Agency',
+      'Referral',
+      'Conference Lead',
+    ],
+    required: false,
+    createdAt: new Date(),
+    createdBy: userId,
+  };
+
+  const docRef = doc(db, COLLECTION_NAME, fieldId);
+  await setDoc(docRef, {
+    ...fieldDefinition,
+    createdAt: Timestamp.fromDate(fieldDefinition.createdAt),
+  });
+
+  console.log('✅ Created company labels field definition');
+  return fieldDefinition;
+};

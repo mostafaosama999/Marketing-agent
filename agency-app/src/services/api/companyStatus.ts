@@ -124,7 +124,6 @@ export async function updateCompanyStatusFromLeads(
     const companyDoc = await getDocs(query(collection(db, 'entities'), where('__name__', '==', companyId)));
 
     if (companyDoc.empty) {
-      console.warn(`Company ${companyId} not found`);
       return null;
     }
 
@@ -132,7 +131,6 @@ export async function updateCompanyStatusFromLeads(
 
     // Skip update if manually locked (unless force update)
     if (!forceUpdate && companyData.statusLockedManually === true) {
-      console.log(`Company ${companyId} status is manually locked, skipping auto-update`);
       return null;
     }
 
@@ -152,7 +150,6 @@ export async function updateCompanyStatusFromLeads(
       updatedAt: Timestamp.now(),
     });
 
-    console.log(`Updated company ${companyId} status from ${companyData.status} to ${newStatus}`);
     return newStatus;
   } catch (error) {
     console.error('Error updating company status from leads:', error);

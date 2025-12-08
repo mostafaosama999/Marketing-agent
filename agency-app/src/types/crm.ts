@@ -1,6 +1,7 @@
 // CRM Configuration and Company types
 
 import { LeadStatus } from './lead';
+export type { LeadStatus } from './lead';
 
 // Company management types
 export interface Company {
@@ -33,6 +34,11 @@ export interface Company {
   statusLockedManually?: boolean; // If true, status won't auto-update from leads
   statusLastUpdatedAt?: Date; // Timestamp when status was last updated
   statusLastUpdatedBy?: string; // User ID who last updated the status
+
+  // Company Labels - Custom categorization labels (e.g., "Competitor", "Security", etc.)
+  labels?: string; // Selected label value from dropdown options
+  labelsUpdatedBy?: string; // User ID who last updated the labels
+  labelsUpdatedAt?: Date; // Timestamp when labels were last updated
 
   // Offer/Pitch for lead outreach
   offer?: {
@@ -171,6 +177,7 @@ export interface CompanyFormData {
   ratingV2?: number | null;
   status?: LeadStatus;
   statusLockedManually?: boolean;
+  labels?: string;
   customFields?: Record<string, any>;
 }
 

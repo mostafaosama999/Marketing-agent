@@ -686,17 +686,21 @@ export async function updateLeadEmailStatus(
   leadId: string,
   status: string
 ): Promise<void> {
+  console.log('🟢 [updateLeadEmailStatus] Called with:', { leadId, status });
   try {
     const leadRef = doc(db, LEADS_COLLECTION, leadId);
+    console.log('🟢 [updateLeadEmailStatus] Updating outreach.email.status...');
     await updateDoc(leadRef, {
       'outreach.email.status': status,
       updatedAt: serverTimestamp(),
     });
+    console.log('🟢 [updateLeadEmailStatus] Updated successfully, now calling autoUpdateLeadStatusFromOutreach...');
 
     // Auto-update lead status to "Contacted" if applicable
     await autoUpdateLeadStatusFromOutreach(leadId);
+    console.log('🟢 [updateLeadEmailStatus] autoUpdateLeadStatusFromOutreach completed');
   } catch (error) {
-    console.error('Error updating lead email status:', error);
+    console.error('🔴 [updateLeadEmailStatus] Error updating lead email status:', error);
     throw error;
   }
 }
@@ -742,22 +746,18 @@ export async function autoUpdateLeadStatusFromOutreach(
     // Get current lead data
     const lead = await getLead(leadId);
     if (!lead) {
-      console.warn(`Auto-update skipped: Lead ${leadId} not found`);
       return;
     }
 
     // Only auto-update from "new_lead" or "qualified" status
     const allowedStatuses: LeadStatus[] = ['new_lead', 'qualified'];
     if (!allowedStatuses.includes(lead.status)) {
-      console.log(
-        `Auto-update skipped: Lead ${leadId} status is "${lead.status}" (not new_lead or qualified)`
-      );
       return;
     }
 
     // Check if outreach conditions are met
-    if (!shouldAutoUpdateToContacted(lead.outreach)) {
-      console.log(`Auto-update skipped: Lead ${leadId} outreach conditions not met`);
+    const shouldUpdate = shouldAutoUpdateToContacted(lead.outreach);
+    if (!shouldUpdate) {
       return;
     }
 
@@ -778,8 +778,6 @@ export async function autoUpdateLeadStatusFromOutreach(
 
     const reasonText = `Auto-updated to Contacted due to outreach: ${reasons.join(', ')}`;
 
-    console.log(`✨ Auto-updating lead ${leadId} from "${lead.status}" to "contacted": ${reasonText}`);
-
     // Update main document status
     const leadRef = doc(db, LEADS_COLLECTION, leadId);
     await updateDoc(leadRef, {
@@ -797,7 +795,15 @@ export async function autoUpdateLeadStatusFromOutreach(
       true // automaticChange flag
     );
 
-    console.log(`✅ Lead ${leadId} auto-updated to "contacted" successfully`);
+    // Trigger company status recalculation if lead has a company
+    if (lead.companyId) {
+      try {
+        await updateCompanyStatusFromLeads(lead.companyId);
+      } catch (companyError) {
+        // Log error but don't fail the lead status update
+        console.error('Error updating company status after auto lead status change:', companyError);
+      }
+    }
   } catch (error) {
     console.error(`Error auto-updating lead ${leadId} status:`, error);
     // Don't throw - we don't want to block the main outreach update if auto-status fails

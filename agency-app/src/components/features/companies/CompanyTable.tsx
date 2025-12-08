@@ -44,9 +44,9 @@ import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { Company } from '../../../types/crm';
 import { TableColumnConfig } from '../../../types/table';
 import { FieldDefinition } from '../../../types/fieldDefinitions';
-import { getFieldDefinitions } from '../../../services/api/fieldDefinitionsService';
+import { getFieldDefinitions, ensureCompanyLabelsFieldDefinition } from '../../../services/api/fieldDefinitionsService';
 import { DropdownMenuWithAdd } from '../crm/DropdownMenuWithAdd';
-import { updateCompanyCustomField, updateCompanyField, updateCompany, setCompanyStatusManually, unlockCompanyStatus } from '../../../services/api/companies';
+import { updateCompanyCustomField, updateCompanyField, updateCompany, setCompanyStatusManually, unlockCompanyStatus, updateCompanyLabels } from '../../../services/api/companies';
 import { bulkFindWritingPrograms, bulkAnalyzeWritingPrograms } from '../../../services/api/bulkWritingProgramService';
 import { useAuth } from '../../../contexts/AuthContext';
 import { CompanyStatusBadge } from './CompanyStatusBadge';
@@ -103,6 +103,10 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
   const [statusMenuAnchor, setStatusMenuAnchor] = useState<null | HTMLElement>(null);
   const [selectedCompanyForStatus, setSelectedCompanyForStatus] = useState<Company | null>(null);
 
+  // Labels inline edit state
+  const [labelsMenuAnchor, setLabelsMenuAnchor] = useState<null | HTMLElement>(null);
+  const [selectedCompanyForLabels, setSelectedCompanyForLabels] = useState<Company | null>(null);
+
   // Pagination state
   const [page, setPage] = useState(() => {
     const saved = localStorage.getItem('companies_table_page');
@@ -134,6 +138,8 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
   // Fetch all field definitions (dropdowns, dates, etc.)
   const fetchFieldDefinitions = async () => {
     try {
+      // Ensure the labels field definition exists
+      await ensureCompanyLabelsFieldDefinition();
       const definitions = await getFieldDefinitions('company');
       setFieldDefinitions(definitions);
     } catch (error) {
@@ -342,6 +348,52 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
       }
     }
     handleStatusMenuClose();
+  };
+
+  // Labels inline edit handlers
+  const handleLabelsClick = (
+    event: React.MouseEvent<HTMLElement>,
+    company: Company
+  ) => {
+    event.stopPropagation();
+    setLabelsMenuAnchor(event.currentTarget);
+    setSelectedCompanyForLabels(company);
+  };
+
+  const handleLabelsMenuClose = () => {
+    setLabelsMenuAnchor(null);
+    setSelectedCompanyForLabels(null);
+  };
+
+  const handleLabelsChange = async (newLabels: string) => {
+    if (selectedCompanyForLabels && userProfile?.uid) {
+      try {
+        await updateCompanyLabels(
+          selectedCompanyForLabels.id,
+          newLabels,
+          userProfile.uid
+        );
+        setSnackbar({
+          open: true,
+          message: newLabels ? `Label updated to "${newLabels}"` : 'Label cleared',
+          severity: 'success',
+        });
+      } catch (error) {
+        console.error('Error updating labels:', error);
+        setSnackbar({
+          open: true,
+          message: 'Failed to update labels',
+          severity: 'error',
+        });
+      }
+    }
+    handleLabelsMenuClose();
+  };
+
+  // Helper function to get labels dropdown options from field definitions
+  const getLabelsOptions = (): string[] => {
+    const labelsDef = fieldDefinitions.find(def => def.name === 'labels');
+    return labelsDef?.options || [];
   };
 
   // Date picker handlers
@@ -912,6 +964,32 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
               locked={company.statusLockedManually}
               size="small"
               onClick={(e) => handleStatusClick(e, company)}
+            />
+          </TableCell>
+        );
+
+      case 'labels':
+        return (
+          <TableCell key={columnId}>
+            <Chip
+              label={company.labels || '-'}
+              size="small"
+              onClick={(e) => handleLabelsClick(e, company)}
+              sx={{
+                fontSize: '10px',
+                height: '20px',
+                cursor: 'pointer',
+                background: company.labels
+                  ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                  : 'rgba(102, 126, 234, 0.15)',
+                color: company.labels ? 'white' : '#667eea',
+                fontWeight: company.labels ? 500 : 400,
+                '&:hover': {
+                  background: company.labels
+                    ? 'linear-gradient(135deg, #5568d3 0%, #6b408e 100%)'
+                    : 'rgba(102, 126, 234, 0.25)',
+                },
+              }}
             />
           </TableCell>
         );
@@ -1571,6 +1649,44 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
             </MenuItem>
           </>
         )}
+      </Menu>
+
+      {/* Labels dropdown menu */}
+      <Menu
+        anchorEl={labelsMenuAnchor}
+        open={Boolean(labelsMenuAnchor)}
+        onClose={handleLabelsMenuClose}
+        PaperProps={{
+          sx: {
+            boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+            borderRadius: '8px',
+            minWidth: 200,
+          }
+        }}
+      >
+        <DropdownMenuWithAdd
+          options={getLabelsOptions().map(option => ({
+            value: option,
+            label: option,
+            chipSx: {
+              bgcolor: selectedCompanyForLabels?.labels === option
+                ? '#e0e7ff'
+                : '#f3f4f6',
+              color: selectedCompanyForLabels?.labels === option
+                ? '#4f46e5'
+                : '#6b7280',
+              fontWeight: 500,
+            },
+          }))}
+          selectedValue={selectedCompanyForLabels?.labels}
+          onSelect={(value) => handleLabelsChange(value)}
+          entityType="company"
+          fieldName="labels"
+          onUpdate={() => {
+            fetchFieldDefinitions();
+            handleLabelsMenuClose();
+          }}
+        />
       </Menu>
 
       {/* Date Picker Popover */}
