@@ -78,10 +78,16 @@ export const FieldSelector: React.FC<FieldSelectorProps> = ({
     return 'inherit';
   };
 
+  // Compute the actual value to pass to Select
+  // If fields aren't loaded yet or value doesn't exist in fields, use empty string
+  // This prevents MUI "out-of-range value" warnings when fields array is empty
+  const hasValidValue = value && fields.length > 0 && findFieldByKey(value);
+  const selectValue = hasValidValue ? value : '';
+
   return (
     <FormControl fullWidth size="small" disabled={disabled}>
       <Select
-        value={value || ''}
+        value={selectValue}
         onChange={handleChange}
         displayEmpty
         renderValue={(selected) => {

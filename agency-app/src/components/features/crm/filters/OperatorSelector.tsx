@@ -19,6 +19,11 @@ export const OperatorSelector: React.FC<OperatorSelectorProps> = ({
 }) => {
   const operators = getOperatorsForFieldType(fieldType);
 
+  // Check if the current value exists in the operators for this field type
+  // If not, use empty string to avoid MUI out-of-range warning
+  const isValidOperator = operators.some(op => op.value === value);
+  const selectValue = isValidOperator ? value : '';
+
   const handleChange = (event: any) => {
     onChange(event.target.value as FilterOperator);
   };
@@ -26,7 +31,7 @@ export const OperatorSelector: React.FC<OperatorSelectorProps> = ({
   return (
     <FormControl fullWidth size="small" disabled={disabled}>
       <Select
-        value={value}
+        value={selectValue}
         onChange={handleChange}
         displayEmpty
         sx={{

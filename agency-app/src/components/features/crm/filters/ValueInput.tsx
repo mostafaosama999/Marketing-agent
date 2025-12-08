@@ -149,12 +149,17 @@ export const ValueInput: React.FC<ValueInputProps> = ({
 
     if (isMultiSelect) {
       const selectedValues = Array.isArray(value) ? value : [];
+      // Filter selected values to only include those that exist in options
+      // This prevents MUI "out-of-range value" warnings when options aren't loaded yet
+      const validSelectedValues = options.length > 0
+        ? selectedValues.filter(v => options.includes(v))
+        : [];
 
       return (
         <FormControl fullWidth size="small" disabled={disabled}>
           <Select
             multiple
-            value={selectedValues}
+            value={validSelectedValues}
             onChange={(e) => onChange(e.target.value)}
             input={<OutlinedInput />}
             renderValue={(selected) => (selected as string[]).join(', ')}
@@ -172,10 +177,13 @@ export const ValueInput: React.FC<ValueInputProps> = ({
     }
 
     // Single select
+    // Only use value if it exists in options to prevent MUI warnings
+    const validValue = options.length > 0 && options.includes(value) ? value : '';
+
     return (
       <FormControl fullWidth size="small" disabled={disabled}>
         <Select
-          value={value || ''}
+          value={validValue}
           onChange={(e) => onChange(e.target.value)}
           displayEmpty
           sx={commonSx}

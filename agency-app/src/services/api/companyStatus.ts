@@ -181,7 +181,6 @@ export async function setCompanyStatusManually(
       updatedAt: Timestamp.now(),
     });
 
-    console.log(`Manually set company ${companyId} status to ${status} by user ${userId}`);
   } catch (error) {
     console.error('Error setting company status manually:', error);
     throw error;
@@ -212,7 +211,6 @@ export async function unlockCompanyStatus(
     // Then force recalculate (even though it's now unlocked, we use forceUpdate to ensure it runs)
     const newStatus = await updateCompanyStatusFromLeads(companyId, true);
 
-    console.log(`Unlocked company ${companyId} status, recalculated to ${newStatus}`);
     return newStatus || 'new_lead';
   } catch (error) {
     console.error('Error unlocking company status:', error);
@@ -240,7 +238,6 @@ export async function batchUpdateCompanyStatuses(companyIds: string[]): Promise<
       );
     }
 
-    console.log(`Batch updated ${companyIds.length} company statuses`);
   } catch (error) {
     console.error('Error batch updating company statuses:', error);
     throw error;
