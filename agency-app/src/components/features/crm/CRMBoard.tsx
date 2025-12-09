@@ -4,7 +4,6 @@ import { useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
-  Fab,
   Button,
   ThemeProvider,
   createTheme,
@@ -20,8 +19,11 @@ import {
   DialogContentText,
   CircularProgress,
   TextField,
+  SpeedDial,
+  SpeedDialAction,
+  SpeedDialIcon,
 } from '@mui/material';
-import { Add as AddIcon, UploadFile as UploadFileIcon, Archive as ArchiveIcon } from '@mui/icons-material';
+import { Add as AddIcon, UploadFile as UploadFileIcon, Archive as ArchiveIcon, PersonAdd as PersonAddIcon, GroupAdd as GroupAddIcon } from '@mui/icons-material';
 import { serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '../../../contexts/AuthContext';
 import { Lead, LeadStatus } from '../../../types/lead';
@@ -62,6 +64,9 @@ import {
   deleteCustomFieldFromAllLeads,
 } from '../../../services/api/leads';
 import { ArchivedLeadsView } from './ArchivedLeadsView';
+import { BulkLeadAddDialog } from './BulkLeadAddDialog';
+import { BulkLeadRow, BulkLeadImportResult } from '../../../types/bulkLead';
+import { createLeadsForCompany } from '../../../services/api/leads';
 import { usePipelineConfig } from '../../../hooks/usePipelineConfig';
 import {
   loadPreset,
@@ -168,6 +173,9 @@ function CRMBoard() {
   // Bulk delete dialog and loading state
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  // Bulk add leads dialog state
+  const [showBulkAddDialog, setShowBulkAddDialog] = useState(false);
 
   // Table column visibility state
   const [tableColumns, setTableColumns] = useState<TableColumnConfig[]>(DEFAULT_TABLE_COLUMNS);
@@ -517,6 +525,39 @@ function CRMBoard() {
     setSelectedLead(null);
     setDialogMode('create');
     setOpenDialog(true);
+  };
+
+  const handleBulkAddLeads = async (rows: BulkLeadRow[], companyName: string): Promise<BulkLeadImportResult> => {
+    if (!user) {
+      return { successful: 0, failed: rows.length, leadIds: [], errors: ['User not authenticated'] };
+    }
+
+    // Transform grid rows to LeadFormData
+    const leadsData = rows.map(row => ({
+      name: `${row.name}${row.lastName ? ' ' + row.lastName : ''}`.trim(),
+      email: row.email || '',
+      company: companyName,
+      phone: '',
+      status: 'new_lead' as const,
+      customFields: {
+        ...(row.lastName ? { last_name: row.lastName } : {}),
+        ...(row.jobTitle ? { job_title: row.jobTitle } : {}),
+      },
+      outreach: row.linkedInUrl ? {
+        linkedIn: {
+          status: 'not_sent' as const,
+          profileUrl: row.linkedInUrl,
+        }
+      } : undefined,
+    }));
+
+    const result = await createLeadsForCompany(leadsData, user.uid, companyName);
+
+    if (result.successful > 0) {
+      showAlert(`Successfully created ${result.successful} lead${result.successful !== 1 ? 's' : ''}`);
+    }
+
+    return result;
   };
 
   const handleSaveLead = async (leadData: any) => {
@@ -1369,23 +1410,51 @@ function CRMBoard() {
           </Box>
         )}
 
-        {/* Floating Action Button */}
-        <Fab
-          onClick={handleAddLead}
+        {/* Speed Dial for Add Actions */}
+        <SpeedDial
+          ariaLabel="Add lead actions"
           sx={{
             position: 'fixed',
             bottom: 24,
             right: 24,
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            color: 'white',
-            '&:hover': {
-              background: 'linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%)',
-              transform: 'scale(1.05)',
+            '& .MuiSpeedDial-fab': {
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              '&:hover': {
+                background: 'linear-gradient(135deg, #5a67d8 0%, #6b46c1 100%)',
+              },
             },
           }}
+          icon={<SpeedDialIcon openIcon={<AddIcon />} />}
         >
-          <AddIcon />
-        </Fab>
+          <SpeedDialAction
+            icon={<PersonAddIcon />}
+            tooltipTitle="Add Single Lead"
+            onClick={handleAddLead}
+            sx={{
+              '& .MuiSpeedDialAction-fab': {
+                bgcolor: 'white',
+                color: '#667eea',
+                '&:hover': {
+                  bgcolor: '#f7f8fc',
+                },
+              },
+            }}
+          />
+          <SpeedDialAction
+            icon={<GroupAddIcon />}
+            tooltipTitle="Bulk Add Leads"
+            onClick={() => setShowBulkAddDialog(true)}
+            sx={{
+              '& .MuiSpeedDialAction-fab': {
+                bgcolor: 'white',
+                color: '#764ba2',
+                '&:hover': {
+                  bgcolor: '#f7f8fc',
+                },
+              },
+            }}
+          />
+        </SpeedDial>
 
         {/* Alert Snackbar */}
         <Snackbar
@@ -1460,6 +1529,14 @@ function CRMBoard() {
           onClose={() => setShowBulkEditDialog(false)}
           onSave={handleBulkEditSave}
           selectedCount={selectedLeadIds.length}
+        />
+
+        {/* Bulk Add Leads Dialog */}
+        <BulkLeadAddDialog
+          open={showBulkAddDialog}
+          onClose={() => setShowBulkAddDialog(false)}
+          onSubmit={handleBulkAddLeads}
+          companies={companies}
         />
 
         {/* Bulk Archive Confirmation Dialog */}

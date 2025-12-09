@@ -479,6 +479,61 @@ export async function createLeadsBatch(
 }
 
 /**
+ * Create multiple leads for a single company (optimized for bulk grid input)
+ * Handles company creation/lookup and batch lead creation
+ * @param leadsData Array of lead data to create
+ * @param userId User ID performing the creation
+ * @param companyName Company name for all leads
+ * @returns Result object with successful count, failed count, and lead IDs
+ */
+export async function createLeadsForCompany(
+  leadsData: LeadFormData[],
+  userId: string,
+  companyName: string
+): Promise<{
+  successful: number;
+  failed: number;
+  leadIds: string[];
+  errors: string[];
+}> {
+  const errors: string[] = [];
+
+  try {
+    // Get or create the company first
+    const company = await getOrCreateCompany(companyName);
+
+    // Create company ID map with single entry
+    const companyIdMap = new Map<string, string>();
+    companyIdMap.set(companyName, company.id);
+
+    // Update all lead data to use this company name
+    const leadsWithCompany = leadsData.map(lead => ({
+      ...lead,
+      company: companyName,
+    }));
+
+    // Use existing batch creation
+    const leadIds = await createLeadsBatch(leadsWithCompany, userId, companyIdMap);
+
+    return {
+      successful: leadIds.length,
+      failed: leadsData.length - leadIds.length,
+      leadIds,
+      errors,
+    };
+  } catch (error) {
+    console.error('Error creating leads for company:', error);
+    errors.push(error instanceof Error ? error.message : 'Unknown error occurred');
+    return {
+      successful: 0,
+      failed: leadsData.length,
+      leadIds: [],
+      errors,
+    };
+  }
+}
+
+/**
  * Update an existing lead
  * If company name changes, updates company reference
  * Auto-updates lead status to "Contacted" if outreach fields are modified
