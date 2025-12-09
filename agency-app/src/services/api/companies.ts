@@ -490,42 +490,18 @@ export async function countLeadsForCompany(companyId: string): Promise<number> {
  * Should only be called when no leads reference this company
  */
 export async function deleteCompany(companyId: string): Promise<void> {
-  const stack = new Error().stack?.split('\n').slice(1, 5).join('\n');
-
-  console.log('🗑️ [COMPANY DELETE] Delete requested:', {
-    companyId,
-    timestamp: new Date().toISOString(),
-    calledFrom: stack,
-  });
-
   try {
     // Safety check: ensure no leads reference this company
     const leadCount = await countLeadsForCompany(companyId);
 
-    console.log('🔍 [COMPANY DELETE] Lead count check:', {
-      companyId,
-      leadCount,
-      willDelete: leadCount === 0,
-      timestamp: new Date().toISOString(),
-    });
-
     if (leadCount > 0) {
-      console.warn('⚠️ [COMPANY DELETE] Cannot delete company - has leads:', {
-        companyId,
-        leadCount,
-      });
       return;
     }
 
     const companyRef = doc(db, COMPANIES_COLLECTION, companyId);
     await deleteDoc(companyRef);
-
-    console.log('✅ [COMPANY DELETE] Company deleted successfully:', {
-      companyId,
-      timestamp: new Date().toISOString(),
-    });
   } catch (error) {
-    console.error('❌ [COMPANY DELETE] Error deleting company:', error);
+    console.error('Error deleting company:', error);
     throw error;
   }
 }

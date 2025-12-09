@@ -885,7 +885,6 @@ async function deleteLeadTimeline(leadId: string): Promise<void> {
     });
 
     await batch.commit();
-    console.log(`Deleted ${timelineSnapshot.size} timeline documents for lead ${leadId}`);
   } catch (error) {
     console.error(`Error deleting timeline for lead ${leadId}:`, error);
     // Don't throw - we still want to delete the parent document even if timeline deletion fails
@@ -1203,12 +1202,6 @@ export async function bulkArchiveLeads(
 }
 
 export async function bulkDeleteLeads(leadIds: string[]): Promise<void> {
-  console.log('🗑️ [BULK DELETE] Starting bulk lead deletion:', {
-    count: leadIds.length,
-    leadIds,
-    timestamp: new Date().toISOString(),
-  });
-
   try {
     // Get all lead documents first to find their companies
     const leadDocs = await Promise.all(
@@ -1223,11 +1216,6 @@ export async function bulkDeleteLeads(leadIds: string[]): Promise<void> {
           companyIds.add(companyId);
         }
       }
-    });
-
-    console.log('🔍 [BULK DELETE] Found affected companies:', {
-      companyCount: companyIds.size,
-      companyIds: Array.from(companyIds),
     });
 
     // Delete timeline subcollections first (in parallel for better performance)
@@ -1247,33 +1235,18 @@ export async function bulkDeleteLeads(leadIds: string[]): Promise<void> {
       await batch.commit();
     }
 
-    console.log('✅ [BULK DELETE] Leads deleted, checking company cleanup');
-
     // Check and clean up companies that no longer have leads
     const companyCleanupPromises = Array.from(companyIds).map(async (companyId) => {
       const remainingLeads = await countLeadsForCompany(companyId);
 
-      console.log('🔍 [BULK DELETE] Company check:', {
-        companyId,
-        remainingLeads,
-        willDelete: remainingLeads === 0,
-      });
-
       if (remainingLeads === 0) {
-        console.log('⚠️ [BULK DELETE] Triggering company auto-delete:', {
-          companyId,
-          reason: 'All leads deleted in bulk operation',
-          deletedLeadCount: leadIds.length,
-        });
         await deleteCompany(companyId);
       }
     });
 
     await Promise.all(companyCleanupPromises);
-
-    console.log('✅ [BULK DELETE] Bulk deletion complete');
   } catch (error) {
-    console.error('❌ [BULK DELETE] Error bulk deleting leads:', error);
+    console.error('Error bulk deleting leads:', error);
     throw error;
   }
 }

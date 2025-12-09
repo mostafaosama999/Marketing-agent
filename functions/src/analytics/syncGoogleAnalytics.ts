@@ -292,8 +292,9 @@ export const syncGoogleAnalytics = functions
       );
     }
 
-    const userId = data.configId || 'global'; // Use configId from request, default to 'global'
-    const daysToSync = data.daysToSync || 30; // Default to last 30 days
+    console.log('Received data:', JSON.stringify(data));
+    const userId = data?.configId || 'global'; // Use configId from request, default to 'global'
+    const daysToSync = data?.daysToSync || 30; // Default to last 30 days
 
     try {
       console.log(`Starting Google Analytics sync for config '${userId}', ${daysToSync} days`);

@@ -1,4 +1,4 @@
-// src/components/features/analytics/WebsiteAnalytics.tsx
+// src/components/features/analytics/CompanyWebsiteAnalytics.tsx
 import React, { useState, useEffect } from 'react';
 import {
   Box,
@@ -23,7 +23,6 @@ import {
   Pageview as PageviewIcon,
   Schedule as ScheduleIcon,
   Sync as SyncIcon,
-  Settings as SettingsIcon,
   CheckCircle as CheckCircleIcon,
 } from '@mui/icons-material';
 import {
@@ -39,6 +38,7 @@ import {
   formatPercentage,
   formatSourceName,
   getGAMetrics,
+  saveGAConfig,
 } from '../../../services/api/googleAnalyticsService';
 import type {
   GAConfig,
@@ -48,11 +48,12 @@ import type {
   GAChartDataPoint,
 } from '../../../types/googleAnalytics';
 
-interface WebsiteAnalyticsProps {
-  onConfigureClick?: () => void;
-}
+// Hardcoded company config
+const COMPANY_CONFIG_ID = 'company';
+const COMPANY_PROPERTY_ID = '418209825';  // Property ID (not Account ID)
+const COMPANY_WEBSITE_URL = 'https://codecontent.net';
 
-const WebsiteAnalytics: React.FC<WebsiteAnalyticsProps> = ({ onConfigureClick }) => {
+const CompanyWebsiteAnalytics: React.FC = () => {
   const [config, setConfig] = useState<GAConfig | null>(null);
   const [metrics, setMetrics] = useState<GAMetrics[]>([]);
   const [chartData, setChartData] = useState<GAChartDataPoint[]>([]);
@@ -63,6 +64,7 @@ const WebsiteAnalytics: React.FC<WebsiteAnalyticsProps> = ({ onConfigureClick })
   const [error, setError] = useState<string | null>(null);
   const [syncSuccess, setSyncSuccess] = useState(false);
   const [dayRange, setDayRange] = useState<7 | 14 | 30 | 90 | 365>(30);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   // Load config and subscribe to metrics
   useEffect(() => {
@@ -71,9 +73,21 @@ const WebsiteAnalytics: React.FC<WebsiteAnalyticsProps> = ({ onConfigureClick })
         setLoading(true);
         setError(null);
 
-        // Use global config for company-wide analytics
-        const configId = 'global';
-        const gaConfig = await getGAConfig(configId);
+        // Use company config ID
+        const configId = COMPANY_CONFIG_ID;
+        let gaConfig = await getGAConfig(configId);
+
+        // Auto-create or update config with correct property ID
+        if (!gaConfig || gaConfig.propertyId !== COMPANY_PROPERTY_ID) {
+          await saveGAConfig(configId, {
+            propertyId: COMPANY_PROPERTY_ID,
+            websiteUrl: COMPANY_WEBSITE_URL,
+            enabled: true,
+            syncInterval: 'daily',
+          });
+          gaConfig = await getGAConfig(configId);
+        }
+
         setConfig(gaConfig);
 
         if (!gaConfig) {
@@ -84,7 +98,7 @@ const WebsiteAnalytics: React.FC<WebsiteAnalyticsProps> = ({ onConfigureClick })
         // Get date range
         const dateRange = getDateRange(dayRange);
 
-        // Subscribe to metrics using global config
+        // Subscribe to metrics using company config
         const unsubscribe = subscribeToGAMetrics(
           configId,
           dateRange,
@@ -104,7 +118,7 @@ const WebsiteAnalytics: React.FC<WebsiteAnalyticsProps> = ({ onConfigureClick })
     };
 
     loadData();
-  }, [dayRange]);
+  }, [dayRange, refreshKey]);
 
   // Calculate summary and trends whenever metrics change
   useEffect(() => {
@@ -113,7 +127,7 @@ const WebsiteAnalytics: React.FC<WebsiteAnalyticsProps> = ({ onConfigureClick })
     const calculateSummary = async () => {
       try {
         // Get previous period metrics for trend calculation
-        const configId = 'global';
+        const configId = COMPANY_CONFIG_ID;
         const previousDateRange = getDateRange(dayRange * 2);
         const previousEndDate = new Date();
         previousEndDate.setDate(previousEndDate.getDate() - dayRange);
@@ -139,13 +153,12 @@ const WebsiteAnalytics: React.FC<WebsiteAnalyticsProps> = ({ onConfigureClick })
 
     const loadTrafficSources = async () => {
       try {
-        const configId = 'global';
+        const configId = COMPANY_CONFIG_ID;
         const { getGATrafficSources } = await import('../../../services/api/googleAnalyticsService');
         const dateRange = getDateRange(dayRange);
         const sources = await getGATrafficSources(configId, dateRange);
-        const aggregated = aggregateTrafficSources(sources, 10); // Limit to top 10 sources
+        const aggregated = aggregateTrafficSources(sources, 10);
 
-        // Format source names for display
         const formatted = aggregated.map(s => ({
           ...s,
           sourceName: formatSourceName(s.source),
@@ -167,9 +180,12 @@ const WebsiteAnalytics: React.FC<WebsiteAnalyticsProps> = ({ onConfigureClick })
       setError(null);
       setSyncSuccess(false);
 
-      await syncGoogleAnalytics(dayRange);
+      console.log('Syncing with configId:', COMPANY_CONFIG_ID, 'dayRange:', dayRange);
+      await syncGoogleAnalytics(dayRange, COMPANY_CONFIG_ID);
 
       setSyncSuccess(true);
+      // Trigger re-subscription to load new data
+      setRefreshKey(prev => prev + 1);
       setTimeout(() => setSyncSuccess(false), 3000);
     } catch (err: any) {
       console.error('Sync failed:', err);
@@ -213,55 +229,13 @@ const WebsiteAnalytics: React.FC<WebsiteAnalyticsProps> = ({ onConfigureClick })
       }}>
         <CircularProgress size={40} sx={{ color: '#667eea' }} />
         <Typography variant="body2" sx={{ color: '#64748b' }}>
-          Loading website analytics...
+          Loading company website analytics...
         </Typography>
       </Box>
     );
   }
 
-  // Show not configured state
-  if (!config) {
-    return (
-      <Card sx={{
-        background: 'rgba(255, 255, 255, 0.9)',
-        borderRadius: 3,
-        backdropFilter: 'blur(20px)',
-        border: '1px solid rgba(226, 232, 240, 0.5)',
-        boxShadow: '0 8px 32px rgba(0, 0, 0, 0.08)',
-        p: 6,
-        textAlign: 'center',
-      }}>
-        <WebsiteIcon sx={{ fontSize: 64, color: '#667eea', mb: 2 }} />
-        <Typography variant="h5" sx={{ color: '#1e293b', fontWeight: 600, mb: 2 }}>
-          Google Analytics Not Configured
-        </Typography>
-        <Typography variant="body2" sx={{ color: '#64748b', mb: 4, maxWidth: 500, mx: 'auto' }}>
-          Connect your Google Analytics account to track website traffic, user behavior, and conversion metrics in real-time.
-        </Typography>
-        <Button
-          variant="contained"
-          startIcon={<SettingsIcon />}
-          onClick={onConfigureClick}
-          sx={{
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            color: 'white',
-            px: 4,
-            py: 1.5,
-            borderRadius: 2,
-            textTransform: 'none',
-            fontWeight: 600,
-            '&:hover': {
-              background: 'linear-gradient(135deg, #5a67d8 0%, #6b3fa0 100%)',
-            }
-          }}
-        >
-          Configure Google Analytics
-        </Button>
-      </Card>
-    );
-  }
-
-  // Show no data state
+  // Show no data state - prompt to sync
   if (metrics.length === 0) {
     return (
       <Card sx={{
@@ -277,8 +251,11 @@ const WebsiteAnalytics: React.FC<WebsiteAnalyticsProps> = ({ onConfigureClick })
         <Typography variant="h5" sx={{ color: '#1e293b', fontWeight: 600, mb: 2 }}>
           No Analytics Data Available
         </Typography>
-        <Typography variant="body2" sx={{ color: '#64748b', mb: 4 }}>
-          Sync your Google Analytics data to see website traffic and performance metrics.
+        <Typography variant="body2" sx={{ color: '#64748b', mb: 1 }}>
+          Sync Google Analytics data for <strong>codecontent.net</strong> to see website traffic and performance metrics.
+        </Typography>
+        <Typography variant="caption" sx={{ color: '#94a3b8', display: 'block', mb: 4 }}>
+          Property ID: {COMPANY_PROPERTY_ID}
         </Typography>
         {error && (
           <Alert severity="error" sx={{ mb: 3, maxWidth: 500, mx: 'auto' }}>
@@ -303,7 +280,7 @@ const WebsiteAnalytics: React.FC<WebsiteAnalyticsProps> = ({ onConfigureClick })
             }
           }}
         >
-          {syncing ? 'Syncing...' : 'Sync Website Analytics'}
+          {syncing ? 'Syncing...' : 'Sync Company Website Analytics'}
         </Button>
       </Card>
     );
@@ -323,13 +300,13 @@ const WebsiteAnalytics: React.FC<WebsiteAnalyticsProps> = ({ onConfigureClick })
               WebkitBackgroundClip: 'text',
               color: 'transparent',
             }}>
-              Website Analytics
+              Company Website Analytics
             </Typography>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
               <Typography variant="body2" sx={{ color: '#64748b' }}>
-                {config.websiteUrl}
+                {config?.websiteUrl || COMPANY_WEBSITE_URL}
               </Typography>
-              {config.lastSyncAt && (
+              {config?.lastSyncAt && (
                 <Typography variant="caption" sx={{ color: '#94a3b8' }}>
                   • Last synced {new Date(config.lastSyncAt).toLocaleDateString()}
                 </Typography>
@@ -620,4 +597,4 @@ const WebsiteAnalytics: React.FC<WebsiteAnalyticsProps> = ({ onConfigureClick })
   );
 };
 
-export default WebsiteAnalytics;
+export default CompanyWebsiteAnalytics;
