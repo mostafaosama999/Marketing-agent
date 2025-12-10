@@ -534,14 +534,14 @@ function CRMBoard() {
 
     // Transform grid rows to LeadFormData
     const leadsData = rows.map(row => ({
-      name: `${row.name}${row.lastName ? ' ' + row.lastName : ''}`.trim(),
+      name: row.name.trim(),
       email: row.email || '',
       company: companyName,
       phone: '',
       status: 'new_lead' as const,
       customFields: {
-        ...(row.lastName ? { last_name: row.lastName } : {}),
-        ...(row.jobTitle ? { job_title: row.jobTitle } : {}),
+        ...(row.lastName ? { 'lead_last_name': row.lastName } : {}),
+        ...(row.jobTitle ? { 'lead_job': row.jobTitle } : {}),
       },
       outreach: row.linkedInUrl ? {
         linkedIn: {
