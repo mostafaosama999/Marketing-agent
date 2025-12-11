@@ -365,7 +365,8 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
     setSelectedCompanyForLabels(null);
   };
 
-  const handleLabelsChange = async (newLabels: string) => {
+  // Handler for multi-select labels (receives full array of selected values)
+  const handleLabelsMultiSelect = async (newLabels: string[]) => {
     if (selectedCompanyForLabels && userProfile?.uid) {
       try {
         await updateCompanyLabels(
@@ -373,9 +374,31 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
           newLabels,
           userProfile.uid
         );
+        // Don't close menu - allow user to continue selecting
+        // Don't show snackbar for each toggle to avoid spam
+      } catch (error) {
+        console.error('Error updating labels:', error);
         setSnackbar({
           open: true,
-          message: newLabels ? `Label updated to "${newLabels}"` : 'Label cleared',
+          message: 'Failed to update labels',
+          severity: 'error',
+        });
+      }
+    }
+  };
+
+  // Legacy single-select handler (kept for compatibility but now converts to array)
+  const handleLabelsChange = async (newLabels: string) => {
+    if (selectedCompanyForLabels && userProfile?.uid) {
+      try {
+        await updateCompanyLabels(
+          selectedCompanyForLabels.id,
+          newLabels ? [newLabels] : [],
+          userProfile.uid
+        );
+        setSnackbar({
+          open: true,
+          message: newLabels ? `Label updated to "${newLabels}"` : 'Labels cleared',
           severity: 'success',
         });
       } catch (error) {
@@ -969,28 +992,76 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
         );
 
       case 'labels':
+        const labelsArray = company.labels || [];
+        const maxVisibleLabels = 3;
+        const visibleLabels = labelsArray.slice(0, maxVisibleLabels);
+        const hiddenCount = labelsArray.length - maxVisibleLabels;
+
         return (
           <TableCell key={columnId}>
-            <Chip
-              label={company.labels || '-'}
-              size="small"
-              onClick={(e) => handleLabelsClick(e, company)}
+            <Box
               sx={{
-                fontSize: '10px',
-                height: '20px',
+                display: 'flex',
+                flexWrap: 'wrap',
+                gap: 0.5,
+                alignItems: 'center',
                 cursor: 'pointer',
-                background: company.labels
-                  ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
-                  : 'rgba(102, 126, 234, 0.15)',
-                color: company.labels ? 'white' : '#667eea',
-                fontWeight: company.labels ? 500 : 400,
-                '&:hover': {
-                  background: company.labels
-                    ? 'linear-gradient(135deg, #5568d3 0%, #6b408e 100%)'
-                    : 'rgba(102, 126, 234, 0.25)',
-                },
               }}
-            />
+              onClick={(e) => handleLabelsClick(e, company)}
+            >
+              {labelsArray.length === 0 ? (
+                <Chip
+                  label="-"
+                  size="small"
+                  sx={{
+                    fontSize: '10px',
+                    height: '20px',
+                    background: 'rgba(102, 126, 234, 0.15)',
+                    color: '#667eea',
+                    fontWeight: 400,
+                    '&:hover': {
+                      background: 'rgba(102, 126, 234, 0.25)',
+                    },
+                  }}
+                />
+              ) : (
+                <>
+                  {visibleLabels.map((label, index) => (
+                    <Chip
+                      key={index}
+                      label={label}
+                      size="small"
+                      sx={{
+                        fontSize: '10px',
+                        height: '20px',
+                        background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                        color: 'white',
+                        fontWeight: 500,
+                        '&:hover': {
+                          background: 'linear-gradient(135deg, #5568d3 0%, #6b408e 100%)',
+                        },
+                      }}
+                    />
+                  ))}
+                  {hiddenCount > 0 && (
+                    <Chip
+                      label={`+${hiddenCount}`}
+                      size="small"
+                      sx={{
+                        fontSize: '10px',
+                        height: '20px',
+                        background: 'rgba(102, 126, 234, 0.2)',
+                        color: '#667eea',
+                        fontWeight: 600,
+                        '&:hover': {
+                          background: 'rgba(102, 126, 234, 0.3)',
+                        },
+                      }}
+                    />
+                  )}
+                </>
+              )}
+            </Box>
           </TableCell>
         );
 
@@ -1651,7 +1722,7 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
         )}
       </Menu>
 
-      {/* Labels dropdown menu */}
+      {/* Labels dropdown menu - Multi-select mode */}
       <Menu
         anchorEl={labelsMenuAnchor}
         open={Boolean(labelsMenuAnchor)}
@@ -1660,7 +1731,8 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
           sx: {
             boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
             borderRadius: '8px',
-            minWidth: 200,
+            minWidth: 220,
+            maxHeight: 400,
           }
         }}
       >
@@ -1668,24 +1740,18 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
           options={getLabelsOptions().map(option => ({
             value: option,
             label: option,
-            chipSx: {
-              bgcolor: selectedCompanyForLabels?.labels === option
-                ? '#e0e7ff'
-                : '#f3f4f6',
-              color: selectedCompanyForLabels?.labels === option
-                ? '#4f46e5'
-                : '#6b7280',
-              fontWeight: 500,
-            },
           }))}
-          selectedValue={selectedCompanyForLabels?.labels}
+          multiSelect={true}
+          selectedValues={selectedCompanyForLabels?.labels || []}
           onSelect={(value) => handleLabelsChange(value)}
+          onMultiSelect={handleLabelsMultiSelect}
           entityType="company"
           fieldName="labels"
           onUpdate={() => {
             fetchFieldDefinitions();
-            handleLabelsMenuClose();
           }}
+          showManagement={false}
+          allowAdd={true}
         />
       </Menu>
 

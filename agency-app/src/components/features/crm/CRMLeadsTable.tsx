@@ -824,17 +824,10 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
     });
   }, [leads, orderBy, order, displayColumns]);
 
-  // Paginate leads (not companies)
-  const paginatedLeads = useMemo(() => {
-    const start = page * rowsPerPage;
-    const end = start + rowsPerPage;
-    return sortedLeads.slice(start, end);
-  }, [sortedLeads, page, rowsPerPage]);
-
-  // Group only the paginated leads by company
-  const paginatedGroupedLeads = useMemo(() => {
+  // Step 1: Group ALL leads by company (before pagination)
+  const groupedLeads = useMemo(() => {
     const groups: { [company: string]: Lead[] } = {};
-    paginatedLeads.forEach(lead => {
+    sortedLeads.forEach(lead => {
       const company = lead.company || lead.companyName || 'No Company';
       if (!groups[company]) {
         groups[company] = [];
@@ -842,21 +835,80 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
       groups[company].push(lead);
     });
     return groups;
-  }, [paginatedLeads]);
+  }, [sortedLeads]);
 
-  // Get companies for current page only, sorted by lead count then alphabetically
-  const paginatedCompanies = useMemo(() => {
-    return Object.keys(paginatedGroupedLeads).sort((a, b) => {
-      const countDiff = paginatedGroupedLeads[b].length - paginatedGroupedLeads[a].length;
+  // Step 2: Sort companies by lead count (descending), then alphabetically
+  const sortedCompanies = useMemo(() => {
+    return Object.keys(groupedLeads).sort((a, b) => {
+      const countDiff = groupedLeads[b].length - groupedLeads[a].length;
       if (countDiff !== 0) return countDiff;
       return a.localeCompare(b);
     });
-  }, [paginatedGroupedLeads]);
+  }, [groupedLeads]);
 
-  // Calculate current page lead IDs
+  // Step 3: Company-aware pagination - keeps entire company groups together
+  const { paginatedCompanies, paginatedLeadIds } = useMemo(() => {
+    if (sortedCompanies.length === 0) {
+      return { paginatedCompanies: [], paginatedLeadIds: [] };
+    }
+
+    // Calculate cumulative lead counts to find page boundaries
+    const cumulativeCounts: number[] = [];
+    let total = 0;
+    for (const company of sortedCompanies) {
+      total += groupedLeads[company].length;
+      cumulativeCounts.push(total);
+    }
+
+    // Find which company index starts the current page
+    const targetStart = page * rowsPerPage;
+    let startCompanyIndex = 0;
+
+    // Find the company that contains the target start position
+    for (let i = 0; i < cumulativeCounts.length; i++) {
+      if (targetStart < cumulativeCounts[i]) {
+        // The target start falls within this company's range
+        // Start from this company to keep the group intact
+        startCompanyIndex = i;
+        break;
+      }
+      if (i === cumulativeCounts.length - 1) {
+        // We've gone past all companies, show the last one
+        startCompanyIndex = i;
+      }
+    }
+
+    // Collect companies for this page, keeping groups intact
+    const companiesOnPage: string[] = [];
+    const leadIdsOnPage: string[] = [];
+    let leadsCollected = 0;
+
+    for (let i = startCompanyIndex; i < sortedCompanies.length; i++) {
+      const company = sortedCompanies[i];
+      const companyLeads = groupedLeads[company];
+
+      // Always include at least one company
+      // Then include more until we reach/exceed the target page size
+      companiesOnPage.push(company);
+      companyLeads.forEach(lead => leadIdsOnPage.push(lead.id));
+      leadsCollected += companyLeads.length;
+
+      // Stop after reaching target page size (but always include at least one company)
+      if (leadsCollected >= rowsPerPage) {
+        break;
+      }
+    }
+
+    return {
+      paginatedCompanies: companiesOnPage,
+      paginatedLeadIds: leadIdsOnPage,
+    };
+  }, [sortedCompanies, groupedLeads, page, rowsPerPage]);
+
+  // Calculate current page lead IDs (for selection functionality)
   const currentPageLeadIds = useMemo(() => {
-    return paginatedLeads.map(lead => lead.id);
-  }, [paginatedLeads]);
+    return paginatedLeadIds;
+  }, [paginatedLeadIds]);
 
   // Check if all leads on current page are selected
   const allSelected = currentPageLeadIds.length > 0 &&
@@ -1596,7 +1648,7 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
               </TableRow>
             ) : (
               paginatedCompanies.map((companyName) => {
-                const companyLeads = paginatedGroupedLeads[companyName];
+                const companyLeads = groupedLeads[companyName];
                 const isCollapsed = collapsedCompanies.has(companyName);
 
                 return (

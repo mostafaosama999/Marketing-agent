@@ -16,6 +16,7 @@ import {
   Divider,
   Typography,
   IconButton,
+  Checkbox,
 } from '@mui/material';
 import AddIcon from '@mui/icons-material/Add';
 import CheckIcon from '@mui/icons-material/Check';
@@ -37,10 +38,14 @@ export interface DropdownOption {
 interface DropdownMenuWithAddProps {
   /** Array of dropdown options */
   options: DropdownOption[];
-  /** Currently selected value */
+  /** Currently selected value (for single-select mode) */
   selectedValue?: string;
-  /** Callback when an option is selected */
+  /** Currently selected values (for multi-select mode) */
+  selectedValues?: string[];
+  /** Callback when an option is selected (single-select mode) */
   onSelect: (value: string) => void;
+  /** Callback when selection changes (multi-select mode) - receives full array of selected values */
+  onMultiSelect?: (values: string[]) => void;
   /** Entity type (lead or company) */
   entityType: EntityType;
   /** Field name for custom fields, or special names like 'pipeline_status', 'linkedin_status', 'email_status' */
@@ -51,23 +56,56 @@ interface DropdownMenuWithAddProps {
   showManagement?: boolean;
   /** Whether to allow adding new values */
   allowAdd?: boolean;
+  /** Enable multi-select mode with checkboxes */
+  multiSelect?: boolean;
 }
 
 export const DropdownMenuWithAdd: React.FC<DropdownMenuWithAddProps> = ({
   options,
   selectedValue,
+  selectedValues = [],
   onSelect,
+  onMultiSelect,
   entityType,
   fieldName,
   onUpdate,
   showManagement = true,
   allowAdd = true,
+  multiSelect = false,
 }) => {
   const { user } = useAuth();
   const [isAdding, setIsAdding] = useState(false);
   const [newValue, setNewValue] = useState('');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Helper to check if a value is selected in multi-select mode
+  const isValueSelected = (value: string): boolean => {
+    if (multiSelect) {
+      return selectedValues.includes(value);
+    }
+    return selectedValue === value;
+  };
+
+  // Handle toggle for multi-select mode
+  const handleMultiSelectToggle = (value: string) => {
+    if (!onMultiSelect) return;
+
+    const newValues = selectedValues.includes(value)
+      ? selectedValues.filter(v => v !== value)
+      : [...selectedValues, value];
+
+    onMultiSelect(newValues);
+  };
+
+  // Handle clear all in multi-select mode
+  const handleClearAll = () => {
+    if (multiSelect && onMultiSelect) {
+      onMultiSelect([]);
+    } else {
+      onSelect('');
+    }
+  };
 
   // Handle add button click
   const handleAddClick = () => {
@@ -149,34 +187,75 @@ export const DropdownMenuWithAdd: React.FC<DropdownMenuWithAddProps> = ({
     <>
       {/* Clear option */}
       <MenuItem
-        onClick={() => onSelect('')}
+        onClick={handleClearAll}
         sx={{
           fontStyle: 'italic',
           color: 'text.secondary',
           fontSize: '14px',
         }}
       >
-        <em>Clear / Not Set</em>
+        <em>{multiSelect ? 'Clear All' : 'Clear / Not Set'}</em>
       </MenuItem>
 
       {/* Divider after clear option */}
       {options.length > 0 && <Divider sx={{ my: 0.5 }} />}
 
       {/* Render existing options */}
-      {options.map((option) => (
-        <DropdownFieldManager
-          key={option.value}
-          value={option.value}
-          label={option.label}
-          entityType={entityType}
-          fieldName={fieldName}
-          isSelected={selectedValue === option.value}
-          onSelect={() => onSelect(option.value)}
-          chipSx={option.chipSx}
-          onUpdate={onUpdate}
-          showManagement={showManagement}
-        />
-      ))}
+      {multiSelect ? (
+        // Multi-select mode: render with checkboxes
+        options.map((option) => (
+          <MenuItem
+            key={option.value}
+            onClick={(e) => {
+              e.stopPropagation();
+              handleMultiSelectToggle(option.value);
+            }}
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              py: 0.5,
+            }}
+          >
+            <Checkbox
+              checked={isValueSelected(option.value)}
+              size="small"
+              sx={{
+                padding: '4px',
+                color: 'rgba(102, 126, 234, 0.5)',
+                '&.Mui-checked': {
+                  color: '#667eea',
+                },
+              }}
+            />
+            <Typography
+              variant="body2"
+              sx={{
+                fontSize: '14px',
+                fontWeight: isValueSelected(option.value) ? 500 : 400,
+              }}
+            >
+              {option.label}
+            </Typography>
+          </MenuItem>
+        ))
+      ) : (
+        // Single-select mode: use DropdownFieldManager with management features
+        options.map((option) => (
+          <DropdownFieldManager
+            key={option.value}
+            value={option.value}
+            label={option.label}
+            entityType={entityType}
+            fieldName={fieldName}
+            isSelected={isValueSelected(option.value)}
+            onSelect={() => onSelect(option.value)}
+            chipSx={option.chipSx}
+            onUpdate={onUpdate}
+            showManagement={showManagement}
+          />
+        ))
+      )}
 
       {/* Divider before add section */}
       {showManagement && allowAdd && options.length > 0 && (

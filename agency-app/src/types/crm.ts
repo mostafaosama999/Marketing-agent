@@ -36,7 +36,7 @@ export interface Company {
   statusLastUpdatedBy?: string; // User ID who last updated the status
 
   // Company Labels - Custom categorization labels (e.g., "Competitor", "Security", etc.)
-  labels?: string; // Selected label value from dropdown options
+  labels?: string[]; // Array of selected label values from dropdown options
   labelsUpdatedBy?: string; // User ID who last updated the labels
   labelsUpdatedAt?: Date; // Timestamp when labels were last updated
 
@@ -177,7 +177,7 @@ export interface CompanyFormData {
   ratingV2?: number | null;
   status?: LeadStatus;
   statusLockedManually?: boolean;
-  labels?: string;
+  labels?: string[];
   customFields?: Record<string, any>;
 }
 
