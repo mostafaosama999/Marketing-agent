@@ -622,12 +622,15 @@ export const CompaniesPage: React.FC = () => {
     // Prepare CSV data
     const csvRows = [
       // Header row
-      ['Name', 'Website', 'Industry', 'Description', 'Lead Count'].join(','),
+      ['Name', 'Website', 'Website Blog Link', 'Rating V2', 'Company LinkedIn Link', 'Industry', 'Description', 'Lead Count'].join(','),
       // Data rows
       ...selectedCompanies.map(company =>
         [
           `"${company.name || ''}"`,
           `"${company.website || ''}"`,
+          `"${company.customFields?.website_blog_link || ''}"`,
+          company.ratingV2 ?? '',
+          `"${company.customFields?.company_linkedin_link || ''}"`,
           `"${company.industry || ''}"`,
           `"${(company.description || '').replace(/"/g, '""')}"`,
           company.leadCount || 0,
