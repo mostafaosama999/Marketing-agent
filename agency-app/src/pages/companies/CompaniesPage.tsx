@@ -21,12 +21,16 @@ import {
   TextField,
   Checkbox,
   FormControlLabel,
+  SpeedDial,
+  SpeedDialAction,
+  SpeedDialIcon,
 } from '@mui/material';
 import {
   Add as AddIcon,
   Archive as ArchiveIcon,
   ViewList as ViewListIcon,
   Article as ArticleIcon,
+  GroupAdd as GroupAddIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import { Company } from '../../types/crm';
@@ -40,11 +44,14 @@ import {
   getLeadCountsForAllCompanies,
   bulkUpdateCompanyFields,
   bulkArchiveCompanies,
+  createCompaniesBatch,
 } from '../../services/api/companies';
 import { subscribeToLeads } from '../../services/api/leads';
 import { buildLeadsMap } from '../../services/api/crossEntityFilterService';
 import { CompanyDialog } from '../../components/features/companies/CompanyDialog';
 import { CompanyTable } from '../../components/features/companies/CompanyTable';
+import { BulkCompanyAddDialog } from '../../components/features/companies/BulkCompanyAddDialog';
+import { BulkCompanyRow, BulkCompanyImportResult } from '../../types/bulkCompany';
 import { WritingProgramTable } from '../../components/features/companies/WritingProgramTable';
 import { CompetitorWorkflowDialog } from '../../components/features/companies/CompetitorWorkflowDialog';
 import { WritingProgramBulkActionsToolbar } from '../../components/features/companies/WritingProgramBulkActionsToolbar';
@@ -115,6 +122,7 @@ export const CompaniesPage: React.FC = () => {
   const [companies, setCompanies] = useState<Array<Company & { leadCount: number }>>([]);
   const [loading, setLoading] = useState(true);
   const [openDialog, setOpenDialog] = useState(false);
+  const [showBulkAddDialog, setShowBulkAddDialog] = useState(false);
   const [openFiltersModal, setOpenFiltersModal] = useState(false);
 
   // View mode state ('all' or 'writing-program')
@@ -1001,6 +1009,34 @@ export const CompaniesPage: React.FC = () => {
     setPendingAnalysisCompany(null);
   };
 
+  const handleBulkAddCompanies = async (
+    rows: BulkCompanyRow[]
+  ): Promise<BulkCompanyImportResult> => {
+    // Transform rows to CompanyFormData
+    const companiesData = rows.map(row => ({
+      name: row.name.trim(),
+      website: row.website?.trim() || undefined,
+      industry: row.industry?.trim() || undefined,
+      description: row.description?.trim() || undefined,
+      ratingV2: row.ratingV2?.trim()
+        ? parseFloat(row.ratingV2)
+        : undefined,
+    }));
+
+    const result = await createCompaniesBatch(companiesData);
+
+    // Show success snackbar
+    if (result.successful > 0) {
+      setSnackbar({
+        open: true,
+        message: `Successfully created/updated ${result.successful} ${result.successful === 1 ? 'company' : 'companies'}`,
+        severity: 'success',
+      });
+    }
+
+    return result;
+  };
+
   if (loading) {
     return (
       <Box
@@ -1265,25 +1301,51 @@ export const CompaniesPage: React.FC = () => {
             </Box>
           </Box>
 
-          {/* Add Company FAB */}
-          <Fab
-            color="primary"
-            aria-label="add company"
-            onClick={handleAddCompany}
+          {/* Speed Dial for Add Actions */}
+          <SpeedDial
+            ariaLabel="Add company actions"
             sx={{
               position: 'fixed',
               bottom: 24,
               right: 24,
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              '&:hover': {
-                background: 'linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%)',
-                transform: 'scale(1.05)',
+              '& .MuiSpeedDial-fab': {
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                '&:hover': {
+                  background: 'linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%)',
+                },
               },
-              transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
             }}
+            icon={<SpeedDialIcon openIcon={<AddIcon />} />}
           >
-            <AddIcon />
-          </Fab>
+            <SpeedDialAction
+              icon={<AddIcon />}
+              tooltipTitle="Add Single Company"
+              onClick={handleAddCompany}
+              sx={{
+                '& .MuiSpeedDialAction-fab': {
+                  bgcolor: 'white',
+                  color: '#667eea',
+                  '&:hover': {
+                    bgcolor: '#f7f8fc',
+                  },
+                },
+              }}
+            />
+            <SpeedDialAction
+              icon={<GroupAddIcon />}
+              tooltipTitle="Bulk Add Companies"
+              onClick={() => setShowBulkAddDialog(true)}
+              sx={{
+                '& .MuiSpeedDialAction-fab': {
+                  bgcolor: 'white',
+                  color: '#764ba2',
+                  '&:hover': {
+                    bgcolor: '#f7f8fc',
+                  },
+                },
+              }}
+            />
+          </SpeedDial>
 
           {/* Add Company Dialog (Create mode only) */}
           <CompanyDialog
@@ -1293,6 +1355,14 @@ export const CompaniesPage: React.FC = () => {
               // Dialog will close automatically
               // Companies list will update automatically via subscription
             }}
+          />
+
+          {/* Bulk Add Companies Dialog */}
+          <BulkCompanyAddDialog
+            open={showBulkAddDialog}
+            onClose={() => setShowBulkAddDialog(false)}
+            onSubmit={handleBulkAddCompanies}
+            existingCompanies={companies}
           />
 
           {/* Advanced Filters Modal with Cross-Entity Support */}

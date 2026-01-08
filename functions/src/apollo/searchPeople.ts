@@ -5,7 +5,7 @@
  * It allows finding multiple contacts matching specific criteria such as
  * job titles, company name, and location.
  *
- * Endpoint: POST /api/v1/mixed_people/search
+ * Endpoint: POST /api/v1/mixed_people/api_search
  * Documentation: https://apolloio.github.io/apollo-api-docs/#people-search
  *
  * Cost: Credits vary based on results (typically 1 credit per person with email revealed)
@@ -50,12 +50,7 @@ interface ApolloPerson {
   };
 }
 
-interface ApolloPaginationInfo {
-  page: number;
-  per_page: number;
-  total_entries: number;
-  total_pages: number;
-}
+// ApolloPaginationInfo interface removed - api_search endpoint returns flat total_entries
 
 interface ApolloApiError {
   error?: string;
@@ -200,9 +195,9 @@ export const searchPeopleCloud = functions.https.onCall(
     try {
       const response = await axios.post<{
         people: ApolloPerson[];
-        pagination: ApolloPaginationInfo;
+        total_entries: number;
       }>(
-        `${APOLLO_BASE_URL}/mixed_people/search`,
+        `${APOLLO_BASE_URL}/mixed_people/api_search`,
         payload,
         {
           headers: {
@@ -213,17 +208,17 @@ export const searchPeopleCloud = functions.https.onCall(
         }
       );
 
-      const { people, pagination } = response.data;
+      const { people, total_entries } = response.data;
 
       if (!people || people.length === 0) {
         functions.logger.info("Apollo API: No people found matching criteria");
         return {
           people: [],
           pagination: {
-            currentPage: pagination?.page || 1,
-            pageSize: pagination?.per_page || 0,
-            totalResults: pagination?.total_entries || 0,
-            totalPages: pagination?.total_pages || 0,
+            currentPage: payload.page || 1,
+            pageSize: payload.per_page || 0,
+            totalResults: total_entries || 0,
+            totalPages: Math.ceil((total_entries || 0) / (payload.per_page || 1)),
           },
           success: true,
           costInfo: {
@@ -276,21 +271,23 @@ export const searchPeopleCloud = functions.https.onCall(
         timestamp: new Date(),
       };
 
+      const totalPages = Math.ceil(total_entries / payload.per_page);
+
       functions.logger.info("Apollo API: Search complete", {
         foundPeople: people.length,
-        page: pagination.page,
-        totalPages: pagination.total_pages,
-        totalResults: pagination.total_entries,
+        page: payload.page,
+        totalPages,
+        totalResults: total_entries,
         estimatedCost: `${estimatedCredits} credits`,
       });
 
       return {
         people: simplifiedPeople,
         pagination: {
-          currentPage: pagination.page,
-          pageSize: pagination.per_page,
-          totalResults: pagination.total_entries,
-          totalPages: pagination.total_pages,
+          currentPage: payload.page,
+          pageSize: payload.per_page,
+          totalResults: total_entries,
+          totalPages,
         },
         success: true,
         costInfo,

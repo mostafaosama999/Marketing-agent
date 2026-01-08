@@ -321,7 +321,7 @@ export async function searchPeople(
       people: ApolloPerson[];
       pagination: ApolloPaginationInfo;
     }>(
-      `${APOLLO_BASE_URL}/mixed_people/search`,
+      `${APOLLO_BASE_URL}/mixed_people/api_search`,
       payload,
       {
         headers: {

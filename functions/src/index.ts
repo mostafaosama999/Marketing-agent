@@ -23,6 +23,7 @@ export {analyzeWritingProgramDetailsCloud} from "./writingProgramAnalyzer";
 export {fetchApolloEmail} from "./apollo/apolloProxy";
 export {enrichOrganizationCloud} from "./apollo/enrichOrganization";
 export {searchPeopleCloud} from "./apollo/searchPeople";
+export {apolloBulkEnrichPeople} from "./apollo/bulkEnrichPeople";
 export {findCompetitorsV2} from "./competitors/findCompetitors";
 
 // Export new profile scraper functions

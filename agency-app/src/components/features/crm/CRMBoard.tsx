@@ -23,7 +23,7 @@ import {
   SpeedDialAction,
   SpeedDialIcon,
 } from '@mui/material';
-import { Add as AddIcon, UploadFile as UploadFileIcon, Archive as ArchiveIcon, PersonAdd as PersonAddIcon, GroupAdd as GroupAddIcon } from '@mui/icons-material';
+import { Add as AddIcon, UploadFile as UploadFileIcon, Archive as ArchiveIcon, PersonAdd as PersonAddIcon, GroupAdd as GroupAddIcon, TravelExplore as TravelExploreIcon } from '@mui/icons-material';
 import { serverTimestamp } from 'firebase/firestore';
 import { useAuth } from '../../../contexts/AuthContext';
 import { Lead, LeadStatus } from '../../../types/lead';
@@ -65,6 +65,7 @@ import {
 } from '../../../services/api/leads';
 import { ArchivedLeadsView } from './ArchivedLeadsView';
 import { BulkLeadAddDialog } from './BulkLeadAddDialog';
+import { ApolloLeadDiscoveryDialog } from './ApolloLeadDiscoveryDialog';
 import { BulkLeadRow, BulkLeadImportResult } from '../../../types/bulkLead';
 import { createLeadsForCompany } from '../../../services/api/leads';
 import { usePipelineConfig } from '../../../hooks/usePipelineConfig';
@@ -176,6 +177,9 @@ function CRMBoard() {
 
   // Bulk add leads dialog state
   const [showBulkAddDialog, setShowBulkAddDialog] = useState(false);
+
+  // Apollo lead discovery dialog state
+  const [showApolloDiscovery, setShowApolloDiscovery] = useState(false);
 
   // Table column visibility state
   const [tableColumns, setTableColumns] = useState<TableColumnConfig[]>(DEFAULT_TABLE_COLUMNS);
@@ -1454,6 +1458,20 @@ function CRMBoard() {
               },
             }}
           />
+          <SpeedDialAction
+            icon={<TravelExploreIcon />}
+            tooltipTitle="Discover Leads with Apollo"
+            onClick={() => setShowApolloDiscovery(true)}
+            sx={{
+              '& .MuiSpeedDialAction-fab': {
+                bgcolor: 'white',
+                color: '#10b981',
+                '&:hover': {
+                  bgcolor: '#f7f8fc',
+                },
+              },
+            }}
+          />
         </SpeedDial>
 
         {/* Alert Snackbar */}
@@ -1537,6 +1555,13 @@ function CRMBoard() {
           onClose={() => setShowBulkAddDialog(false)}
           onSubmit={handleBulkAddLeads}
           companies={companies}
+        />
+
+        {/* Apollo Lead Discovery Dialog */}
+        <ApolloLeadDiscoveryDialog
+          open={showApolloDiscovery}
+          onClose={() => setShowApolloDiscovery(false)}
+          onLeadsAdded={(count) => showAlert(`Successfully imported ${count} lead${count !== 1 ? 's' : ''} from Apollo`)}
         />
 
         {/* Bulk Archive Confirmation Dialog */}

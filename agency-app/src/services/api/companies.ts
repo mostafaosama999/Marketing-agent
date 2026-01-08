@@ -363,6 +363,9 @@ export async function createCompany(
     if (companyData.description !== undefined && companyData.description !== null && companyData.description !== '') {
       docData.description = companyData.description;
     }
+    if (companyData.ratingV2 !== undefined && companyData.ratingV2 !== null) {
+      docData.ratingV2 = companyData.ratingV2;
+    }
 
     const docRef = await addDoc(companiesRef, docData);
     return docRef.id;
@@ -907,4 +910,80 @@ export async function unlockCompanyStatus(
  */
 export async function bulkUpdateCompanyStatuses(companyIds: string[]): Promise<void> {
   return batchUpdateCompanyStatuses(companyIds);
+}
+
+// ============================================================================
+// Bulk Company Creation Functions
+// ============================================================================
+
+/**
+ * Batch create multiple companies from bulk add dialog
+ * Handles duplicate detection - updates existing companies instead of creating duplicates
+ * @param companiesData Array of company form data
+ * @returns Result with success/failure counts and IDs
+ */
+export async function createCompaniesBatch(
+  companiesData: CompanyFormData[]
+): Promise<{
+  successful: number;
+  failed: number;
+  companyIds: string[];
+  errors: string[];
+}> {
+  const errors: string[] = [];
+  const companyIds: string[] = [];
+
+  try {
+    // Get existing companies for duplicate detection
+    const existingCompanies = await getCompanies();
+    const existingCompaniesMap = new Map(
+      existingCompanies.map(c => [c.name.toLowerCase(), c])
+    );
+
+    // Process each company
+    for (const companyData of companiesData) {
+      try {
+        const nameLower = companyData.name.trim().toLowerCase();
+        const existing = existingCompaniesMap.get(nameLower);
+
+        if (existing) {
+          // Update existing company (merge fields, don't overwrite with empty)
+          const updates: Partial<CompanyFormData> = {};
+          if (companyData.website) updates.website = companyData.website;
+          if (companyData.industry) updates.industry = companyData.industry;
+          if (companyData.description) updates.description = companyData.description;
+          if (companyData.ratingV2 !== undefined && companyData.ratingV2 !== null) {
+            updates.ratingV2 = companyData.ratingV2;
+          }
+
+          if (Object.keys(updates).length > 0) {
+            await updateCompany(existing.id, updates);
+          }
+
+          companyIds.push(existing.id);
+        } else {
+          // Create new company
+          const companyId = await createCompany(companyData);
+          companyIds.push(companyId);
+        }
+      } catch (error: any) {
+        errors.push(`Failed to create company "${companyData.name}": ${error.message}`);
+      }
+    }
+
+    return {
+      successful: companyIds.length,
+      failed: companiesData.length - companyIds.length,
+      companyIds,
+      errors,
+    };
+  } catch (error: any) {
+    console.error('Error in batch company creation:', error);
+    return {
+      successful: 0,
+      failed: companiesData.length,
+      companyIds: [],
+      errors: ['Batch creation failed: ' + error.message],
+    };
+  }
 }
