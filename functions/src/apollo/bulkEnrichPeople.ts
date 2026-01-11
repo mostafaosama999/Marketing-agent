@@ -15,6 +15,7 @@ import axios, { AxiosError } from "axios";
 
 const APOLLO_BASE_URL = "https://api.apollo.io/api/v1";
 const DEFAULT_TIMEOUT = 30000; // 30 seconds
+const BATCH_SIZE = 10; // Apollo bulk_match API limit
 
 interface PersonDetail {
   id?: string;
@@ -160,38 +161,64 @@ export const apolloBulkEnrichPeople = functions.https.onCall(
         return detail;
       });
 
-      const payload = {
-        details,
-        reveal_personal_emails: true,
-        reveal_phone_number: false,
-      };
+      // Split details into batches of BATCH_SIZE (Apollo limit is 10 per request)
+      const batches: Array<Record<string, string>[]> = [];
+      for (let i = 0; i < details.length; i += BATCH_SIZE) {
+        batches.push(details.slice(i, i + BATCH_SIZE));
+      }
 
-      functions.logger.info("Apollo API: Sending bulk_match request", {
-        detailsCount: details.length,
-        sampleDetail: details[0],
+      functions.logger.info("Apollo API: Processing bulk_match in batches", {
+        totalPeople: details.length,
+        batchCount: batches.length,
+        batchSize: BATCH_SIZE,
       });
 
-      const response = await axios.post<{
-        matches: ApolloPerson[];
-      }>(
-        `${APOLLO_BASE_URL}/people/bulk_match`,
-        payload,
-        {
-          headers: {
-            "X-Api-Key": apiKey,
-            "Content-Type": "application/json",
-          },
-          timeout: DEFAULT_TIMEOUT,
+      // Process all batches and collect results
+      const allMatches: ApolloPerson[] = [];
+
+      for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+        const batch = batches[batchIndex];
+
+        functions.logger.info(`Apollo API: Processing batch ${batchIndex + 1}/${batches.length}`, {
+          batchSize: batch.length,
+        });
+
+        const payload = {
+          details: batch,
+          reveal_personal_emails: true,
+          reveal_phone_number: false,
+        };
+
+        const response = await axios.post<{
+          matches: ApolloPerson[];
+        }>(
+          `${APOLLO_BASE_URL}/people/bulk_match`,
+          payload,
+          {
+            headers: {
+              "X-Api-Key": apiKey,
+              "Content-Type": "application/json",
+            },
+            timeout: DEFAULT_TIMEOUT,
+          }
+        );
+
+        const { matches } = response.data;
+
+        if (matches && matches.length > 0) {
+          allMatches.push(...matches);
         }
-      );
 
-      const { matches } = response.data;
+        functions.logger.info(`Apollo API: Batch ${batchIndex + 1} complete`, {
+          matchesInBatch: matches?.length || 0,
+        });
+      }
 
-      functions.logger.info("Apollo API: Received response", {
-        matchesCount: matches?.length || 0,
+      functions.logger.info("Apollo API: All batches complete", {
+        totalMatches: allMatches.length,
       });
 
-      if (!matches || matches.length === 0) {
+      if (allMatches.length === 0) {
         functions.logger.info("Apollo API: No matches found");
         return {
           people: [],
@@ -205,7 +232,7 @@ export const apolloBulkEnrichPeople = functions.https.onCall(
       }
 
       // Transform Apollo people to simplified format, filtering out null matches
-      const enrichedPeople = matches
+      const enrichedPeople = allMatches
         .filter((person) => person !== null && person !== undefined)
         .map((person) => {
           return {

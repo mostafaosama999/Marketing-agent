@@ -92,7 +92,7 @@ export const ApolloLeadDiscoveryDialog: React.FC<ApolloLeadDiscoveryDialogProps>
         companyName: companyName.trim(),
         jobTitles: titlesArray.length > 0 ? titlesArray : undefined,
         page: 1,
-        pageSize: 50,
+        pageSize: 100,
       });
 
       const data = result.data as any;
