@@ -359,7 +359,29 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
       }
 
       setSearchProgress('');
-      setSearchResults(allPeople);
+
+      // Filter to only include people from the exact company (Apollo does fuzzy matching)
+      // This prevents "Kong" from matching "Hong Kong" or "China Daily Hong Kong"
+      const companyNameLower = company.name.toLowerCase().trim();
+      const filteredPeople = allPeople.filter(person => {
+        const personCompany = (person.companyName?.toLowerCase() || '').trim();
+        if (!personCompany) return false;
+
+        // Exact match
+        if (personCompany === companyNameLower) return true;
+
+        // Company name with common suffixes (e.g., "Kong" matches "Kong Inc", "Kong, Inc.")
+        const suffixPattern = new RegExp(
+          `^${companyNameLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(,?\\s*(inc\\.?|llc|ltd\\.?|corp\\.?|co\\.?|company|international|technologies|tech))*$`,
+          'i'
+        );
+        if (suffixPattern.test(personCompany)) return true;
+
+        return false;
+      });
+
+      setSearchResults(filteredPeople);
+
       setEstimatedCredits(firstResult.data.costInfo?.credits || 0);
       setActiveStep(1); // Move to results step
     } catch (error) {
