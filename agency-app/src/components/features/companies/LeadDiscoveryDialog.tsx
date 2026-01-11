@@ -41,7 +41,7 @@ import { ApolloSearchPerson } from '../../../types/apollo';
 import { createLeadsBatch, subscribeToLeads } from '../../../services/api/leads';
 import { LeadFormData } from '../../../types/lead';
 import { useAuth } from '../../../contexts/AuthContext';
-import { getUserPreferences, updateApolloJobTitles } from '../../../services/api/userPreferences';
+import { getApolloJobTitles, addApolloJobTitle, removeApolloJobTitle, initializeDefaultJobTitles } from '../../../services/api/apolloJobTitles';
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { getLeadCustomFieldNames } from '../../../services/api/tableColumnsService';
 import { incrementApolloCost } from '../../../services/api/userCostTracking';
@@ -61,7 +61,15 @@ const DEFAULT_JOB_TITLES = [
   'Marketing Manager',
   'Content Manager',
   'Content Marketing Manager',
-  'Head of Content',
+  'Editor',
+  'Content editor',
+  'Technical content',
+  'Product manager',
+  'Technical product manager',
+  'SEO manager',
+  'product marketing ai',
+  'devrel',
+  'PMM',
 ];
 
 // Standard lead fields available for mapping
@@ -196,16 +204,17 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
         setImportedCount(0);
         setEstimatedCredits(0);
 
-        // Load saved job titles from Firestore
+        // Load shared job titles from Firestore
         try {
-          const preferences = await getUserPreferences(user.uid);
-          if (preferences?.apolloJobTitles && preferences.apolloJobTitles.length > 0) {
-            setJobTitles(preferences.apolloJobTitles);
+          await initializeDefaultJobTitles(user.uid);
+          const titles = await getApolloJobTitles();
+          if (titles.length > 0) {
+            setJobTitles(titles);
           } else {
             setJobTitles(DEFAULT_JOB_TITLES);
           }
         } catch (error) {
-          console.error('Error loading user preferences:', error);
+          console.error('Error loading shared job titles:', error);
           setJobTitles(DEFAULT_JOB_TITLES);
         }
       }
@@ -236,12 +245,12 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
       setJobTitles(newJobTitles);
       setJobTitlesInput('');
 
-      // Save to Firestore
+      // Save to shared Firestore document
       if (user) {
         try {
-          await updateApolloJobTitles(user.uid, newJobTitles);
+          await addApolloJobTitle(trimmed, user.uid);
         } catch (error) {
-          console.error('Error saving job titles:', error);
+          console.error('Error saving job title:', error);
         }
       }
     }
@@ -252,12 +261,12 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
     const newJobTitles = jobTitles.filter(t => t !== title);
     setJobTitles(newJobTitles);
 
-    // Save to Firestore
+    // Remove from shared Firestore document
     if (user) {
       try {
-        await updateApolloJobTitles(user.uid, newJobTitles);
+        await removeApolloJobTitle(title, user.uid);
       } catch (error) {
-        console.error('Error saving job titles:', error);
+        console.error('Error removing job title:', error);
       }
     }
   };

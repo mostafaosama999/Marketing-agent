@@ -109,37 +109,50 @@ export async function removeApolloJobTitle(
   }
 }
 
+const DEFAULT_TITLES = [
+  'CMO',
+  'Chief Marketing Officer',
+  'VP Marketing',
+  'Director of Marketing',
+  'Marketing Manager',
+  'Content Manager',
+  'Content Marketing Manager',
+  'Editor',
+  'Content editor',
+  'Technical content',
+  'Product manager',
+  'Technical product manager',
+  'SEO manager',
+  'product marketing ai',
+  'devrel',
+  'PMM',
+];
+
 /**
  * Initialize with default job titles if none exist
  */
 export async function initializeDefaultJobTitles(userId?: string): Promise<void> {
-  const defaultTitles = [
-    'CMO',
-    'Chief Marketing Officer',
-    'VP Marketing',
-    'Director of Marketing',
-    'Marketing Manager',
-    'Content Manager',
-    'Content Marketing Manager',
-    'Editor',
-    'Content editor',
-    'Technical content',
-    'Product manager',
-    'Technical product manager',
-    'SEO manager',
-    'product marketing ai',
-    'devrel',
-    'PMM',
-  ];
-
   try {
     const existing = await getApolloJobTitles();
     if (existing.length === 0) {
-      await setApolloJobTitles(defaultTitles, userId);
+      await setApolloJobTitles(DEFAULT_TITLES, userId);
       console.log('Initialized default Apollo job titles');
     }
   } catch (error) {
     console.error('Error initializing default job titles:', error);
+    throw error;
+  }
+}
+
+/**
+ * Force reset to default job titles (overwrites existing)
+ */
+export async function resetToDefaultJobTitles(userId?: string): Promise<void> {
+  try {
+    await setApolloJobTitles(DEFAULT_TITLES, userId);
+    console.log('Reset Apollo job titles to defaults');
+  } catch (error) {
+    console.error('Error resetting job titles:', error);
     throw error;
   }
 }
