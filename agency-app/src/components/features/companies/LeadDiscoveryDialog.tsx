@@ -272,6 +272,9 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
   };
 
   // Handle search
+  // Progress message for multi-page fetching
+  const [searchProgress, setSearchProgress] = useState('');
+
   const handleSearch = async () => {
     if (jobTitles.length === 0) {
       setSearchError('Please add at least one job title to search for.');
@@ -280,6 +283,7 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
 
     setSearching(true);
     setSearchError(null);
+    setSearchProgress('');
 
     try {
       // Call Firebase Cloud Function to search for people
@@ -288,6 +292,7 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
         {
           companyName: string;
           jobTitles: string[];
+          page?: number;
           pageSize?: number;
         },
         {
@@ -308,19 +313,22 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
         }
       >(functions, 'searchPeopleCloud');
 
-      const result = await searchPeople({
+      // Fetch first page
+      setSearchProgress('Fetching page 1...');
+      const firstResult = await searchPeople({
         companyName: company.name,
         jobTitles,
-        pageSize: 50, // Get up to 50 results
+        page: 1,
+        pageSize: 100,
       });
 
-      if (!result.data.success) {
-        setSearchError(result.data.error || 'Failed to search for leads');
+      if (!firstResult.data.success) {
+        setSearchError(firstResult.data.error || 'Failed to search for leads');
         setSearchResults([]);
         return;
       }
 
-      if (result.data.people.length === 0) {
+      if (firstResult.data.people.length === 0) {
         setSearchError(
           'No leads found matching your criteria. Try different job titles or check if the company name is correct.'
         );
@@ -328,8 +336,31 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
         return;
       }
 
-      setSearchResults(result.data.people);
-      setEstimatedCredits(result.data.costInfo?.credits || 0);
+      // Collect all results
+      let allPeople = [...firstResult.data.people];
+      const totalPages = firstResult.data.pagination?.totalPages || 1;
+
+      // Auto-fetch remaining pages if more exist
+      if (totalPages > 1) {
+        for (let page = 2; page <= totalPages; page++) {
+          setSearchProgress(`Fetching page ${page} of ${totalPages}...`);
+
+          const pageResult = await searchPeople({
+            companyName: company.name,
+            jobTitles,
+            page,
+            pageSize: 100,
+          });
+
+          if (pageResult.data.success && pageResult.data.people?.length > 0) {
+            allPeople = [...allPeople, ...pageResult.data.people];
+          }
+        }
+      }
+
+      setSearchProgress('');
+      setSearchResults(allPeople);
+      setEstimatedCredits(firstResult.data.costInfo?.credits || 0);
       setActiveStep(1); // Move to results step
     } catch (error) {
       console.error('Error searching for leads:', error);
@@ -337,6 +368,7 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
       setSearchResults([]);
     } finally {
       setSearching(false);
+      setSearchProgress('');
     }
   };
 
@@ -1147,7 +1179,7 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
                 },
               }}
             >
-              {searching ? 'Searching...' : 'Search for Leads'}
+              {searching ? (searchProgress || 'Searching...') : 'Search for Leads'}
             </Button>
           </>
         )}
