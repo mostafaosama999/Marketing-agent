@@ -1,6 +1,6 @@
 // src/components/features/crm/ApolloLeadDiscoveryDialog.tsx
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -25,6 +25,7 @@ import {
   Checkbox,
   Paper,
   LinearProgress,
+  Skeleton,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -32,6 +33,7 @@ import {
 } from '@mui/icons-material';
 import { ApolloSearchPerson } from '../../../types';
 import { useAuth } from '../../../contexts/AuthContext';
+import { getApolloJobTitles, initializeDefaultJobTitles } from '../../../services/api/apolloJobTitles';
 
 interface ApolloLeadDiscoveryDialogProps {
   open: boolean;
@@ -51,9 +53,54 @@ export const ApolloLeadDiscoveryDialog: React.FC<ApolloLeadDiscoveryDialogProps>
 
   // Step 1: Configure Search
   const [companyName, setCompanyName] = useState('');
-  const [jobTitles, setJobTitles] = useState('');
+  const [availableJobTitles, setAvailableJobTitles] = useState<string[]>([]);
+  const [selectedJobTitles, setSelectedJobTitles] = useState<Set<string>>(new Set());
+  const [loadingJobTitles, setLoadingJobTitles] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  // Load job titles from Firestore on mount
+  useEffect(() => {
+    const loadJobTitles = async () => {
+      setLoadingJobTitles(true);
+      try {
+        // Initialize defaults if needed, then fetch
+        await initializeDefaultJobTitles(user?.uid);
+        const titles = await getApolloJobTitles();
+        setAvailableJobTitles(titles);
+        // Select all by default
+        setSelectedJobTitles(new Set(titles));
+      } catch (err) {
+        console.error('Error loading job titles:', err);
+      } finally {
+        setLoadingJobTitles(false);
+      }
+    };
+
+    if (open) {
+      loadJobTitles();
+    }
+  }, [open, user?.uid]);
+
+  const toggleJobTitle = (title: string) => {
+    setSelectedJobTitles(prev => {
+      const newSet = new Set(prev);
+      if (newSet.has(title)) {
+        newSet.delete(title);
+      } else {
+        newSet.add(title);
+      }
+      return newSet;
+    });
+  };
+
+  const selectAllJobTitles = () => {
+    setSelectedJobTitles(new Set(availableJobTitles));
+  };
+
+  const deselectAllJobTitles = () => {
+    setSelectedJobTitles(new Set());
+  };
 
   // Step 2: Select Leads
   const [searchResults, setSearchResults] = useState<ApolloSearchPerson[]>([]);
@@ -81,11 +128,8 @@ export const ApolloLeadDiscoveryDialog: React.FC<ApolloLeadDiscoveryDialogProps>
     setSearchProgress('');
 
     try {
-      // Parse job titles (comma-separated)
-      const titlesArray = jobTitles
-        .split(',')
-        .map(t => t.trim())
-        .filter(t => t.length > 0);
+      // Get selected job titles as array
+      const titlesArray = Array.from(selectedJobTitles);
 
       // Call searchPeopleCloud function
       const { getFunctions, httpsCallable } = await import('firebase/functions');
@@ -264,7 +308,6 @@ export const ApolloLeadDiscoveryDialog: React.FC<ApolloLeadDiscoveryDialogProps>
   const handleClose = () => {
     setActiveStep(0);
     setCompanyName('');
-    setJobTitles('');
     setSearchResults([]);
     setSelectedIndices(new Set());
     setEnrichedData([]);
@@ -344,21 +387,73 @@ export const ApolloLeadDiscoveryDialog: React.FC<ApolloLeadDiscoveryDialogProps>
                 fullWidth
                 required
                 disabled={loading}
-                sx={{ mb: 2 }}
+                sx={{ mb: 3 }}
                 placeholder="e.g., PagerDuty"
               />
 
-              <TextField
-                label="Job Titles (comma-separated)"
-                value={jobTitles}
-                onChange={(e) => setJobTitles(e.target.value)}
-                fullWidth
-                disabled={loading}
-                multiline
-                rows={3}
-                placeholder="e.g., CMO, Chief Marketing Officer, VP Marketing, Director of Marketing"
-                helperText="Leave empty to search all roles"
-              />
+              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
+                <Typography variant="subtitle2" sx={{ fontWeight: 600 }}>
+                  Job Titles to Search For
+                </Typography>
+                <Box>
+                  <Button
+                    size="small"
+                    onClick={selectAllJobTitles}
+                    disabled={loading || loadingJobTitles}
+                    sx={{ mr: 1 }}
+                  >
+                    Select All
+                  </Button>
+                  <Button
+                    size="small"
+                    onClick={deselectAllJobTitles}
+                    disabled={loading || loadingJobTitles}
+                  >
+                    Deselect All
+                  </Button>
+                </Box>
+              </Box>
+
+              {loadingJobTitles ? (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                  {[1, 2, 3, 4, 5, 6].map((i) => (
+                    <Skeleton key={i} variant="rounded" width={120} height={32} />
+                  ))}
+                </Box>
+              ) : (
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                  {availableJobTitles.map((title) => (
+                    <Chip
+                      key={title}
+                      label={title}
+                      onClick={() => toggleJobTitle(title)}
+                      disabled={loading}
+                      sx={{
+                        cursor: 'pointer',
+                        bgcolor: selectedJobTitles.has(title)
+                          ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                          : 'rgba(0,0,0,0.08)',
+                        background: selectedJobTitles.has(title)
+                          ? 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)'
+                          : undefined,
+                        color: selectedJobTitles.has(title) ? 'white' : 'text.primary',
+                        '&:hover': {
+                          bgcolor: selectedJobTitles.has(title)
+                            ? 'linear-gradient(135deg, #764ba2 0%, #667eea 100%)'
+                            : 'rgba(0,0,0,0.12)',
+                          background: selectedJobTitles.has(title)
+                            ? 'linear-gradient(135deg, #764ba2 0%, #667eea 100%)'
+                            : undefined,
+                        },
+                      }}
+                    />
+                  ))}
+                </Box>
+              )}
+
+              <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
+                {selectedJobTitles.size} of {availableJobTitles.length} titles selected
+              </Typography>
             </Box>
           )}
 
