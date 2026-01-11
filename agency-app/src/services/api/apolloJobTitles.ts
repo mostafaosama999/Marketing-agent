@@ -8,7 +8,7 @@ import {
   arrayUnion,
   arrayRemove,
 } from 'firebase/firestore';
-import { db } from '../../config/firebase';
+import { db } from '../firebase/firestore';
 
 const COLLECTION = 'settings';
 const DOC_ID = 'apolloJobTitles';

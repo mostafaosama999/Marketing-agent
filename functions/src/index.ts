@@ -15,6 +15,67 @@ export const healthCheck = functions.https.onCall(async (_data, _context) => {
   };
 });
 
+/**
+ * Initialize Apollo job titles in Firestore
+ * Call this once to populate the shared job titles
+ */
+export const initApolloJobTitles = functions.https.onCall(async (_data, context) => {
+  // Require authentication
+  if (!context.auth) {
+    throw new functions.https.HttpsError(
+      "unauthenticated",
+      "You must be logged in to initialize job titles"
+    );
+  }
+
+  const jobTitles = [
+    "CMO",
+    "Chief Marketing Officer",
+    "VP Marketing",
+    "Director of Marketing",
+    "Marketing Manager",
+    "Content Manager",
+    "Content Marketing Manager",
+    "Editor",
+    "Content editor",
+    "Technical content",
+    "Product manager",
+    "Technical product manager",
+    "SEO manager",
+    "product marketing ai",
+    "devrel",
+    "PMM",
+  ];
+
+  try {
+    const db = admin.firestore();
+    const docRef = db.collection("settings").doc("apolloJobTitles");
+
+    await docRef.set({
+      titles: jobTitles,
+      updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      updatedBy: context.auth.uid,
+    });
+
+    functions.logger.info("Initialized Apollo job titles", {
+      count: jobTitles.length,
+      userId: context.auth.uid,
+    });
+
+    return {
+      success: true,
+      message: `Initialized ${jobTitles.length} job titles`,
+      titles: jobTitles,
+    };
+  } catch (error) {
+    functions.logger.error("Error initializing job titles", error);
+    throw new functions.https.HttpsError(
+      "internal",
+      "Failed to initialize job titles"
+    );
+  }
+});
+
 // Export core functions
 export {dailyWebflowSync} from "./webflow/dailySync";
 export {qualifyCompanyBlog} from "./blogQualifier/qualifyBlog";
