@@ -67,6 +67,9 @@ export const ApolloLeadDiscoveryDialog: React.FC<ApolloLeadDiscoveryDialogProps>
   // Step 4: Import Complete
   const [importedCount, setImportedCount] = useState(0);
 
+  // Progress state for multi-page fetching
+  const [searchProgress, setSearchProgress] = useState<string>('');
+
   const handleSearch = async () => {
     if (!companyName.trim()) {
       setError('Please enter a company name');
@@ -75,6 +78,7 @@ export const ApolloLeadDiscoveryDialog: React.FC<ApolloLeadDiscoveryDialogProps>
 
     setLoading(true);
     setError(null);
+    setSearchProgress('');
 
     try {
       // Parse job titles (comma-separated)
@@ -88,28 +92,56 @@ export const ApolloLeadDiscoveryDialog: React.FC<ApolloLeadDiscoveryDialogProps>
       const functions = getFunctions();
       const searchPeople = httpsCallable(functions, 'searchPeopleCloud');
 
-      const result = await searchPeople({
+      // Fetch first page
+      setSearchProgress('Fetching page 1...');
+      const firstResult = await searchPeople({
         companyName: companyName.trim(),
         jobTitles: titlesArray.length > 0 ? titlesArray : undefined,
         page: 1,
         pageSize: 100,
       });
 
-      const data = result.data as any;
+      const firstData = firstResult.data as any;
 
-      if (!data.success) {
-        setError(data.error || 'Failed to search people');
+      if (!firstData.success) {
+        setError(firstData.error || 'Failed to search people');
         return;
       }
 
-      setSearchResults(data.people || []);
-      setTotalResults(data.pagination?.totalResults || 0);
-      setSelectedIndices(new Set());
-
-      if (data.people.length === 0) {
+      if (firstData.people.length === 0) {
         setError('No people found. Try different job titles or company name.');
         return;
       }
+
+      // Collect all results
+      let allPeople = [...(firstData.people || [])];
+      const totalPages = firstData.pagination?.totalPages || 1;
+      const totalResultsCount = firstData.pagination?.totalResults || allPeople.length;
+
+      // Auto-fetch remaining pages if more exist
+      if (totalPages > 1) {
+        for (let page = 2; page <= totalPages; page++) {
+          setSearchProgress(`Fetching page ${page} of ${totalPages}...`);
+
+          const pageResult = await searchPeople({
+            companyName: companyName.trim(),
+            jobTitles: titlesArray.length > 0 ? titlesArray : undefined,
+            page,
+            pageSize: 100,
+          });
+
+          const pageData = pageResult.data as any;
+
+          if (pageData.success && pageData.people?.length > 0) {
+            allPeople = [...allPeople, ...pageData.people];
+          }
+        }
+      }
+
+      setSearchProgress('');
+      setSearchResults(allPeople);
+      setTotalResults(totalResultsCount);
+      setSelectedIndices(new Set());
 
       // Move to step 2
       setActiveStep(1);
@@ -118,6 +150,7 @@ export const ApolloLeadDiscoveryDialog: React.FC<ApolloLeadDiscoveryDialogProps>
       setError(err instanceof Error ? err.message : 'An error occurred while searching');
     } finally {
       setLoading(false);
+      setSearchProgress('');
     }
   };
 
@@ -237,6 +270,7 @@ export const ApolloLeadDiscoveryDialog: React.FC<ApolloLeadDiscoveryDialogProps>
     setEnrichedData([]);
     setError(null);
     setImportedCount(0);
+    setSearchProgress('');
     onClose();
   };
 
@@ -470,7 +504,16 @@ export const ApolloLeadDiscoveryDialog: React.FC<ApolloLeadDiscoveryDialogProps>
           )}
 
           {/* Loading Progress */}
-          {loading && activeStep !== 2 && <LinearProgress sx={{ mt: 2 }} />}
+          {loading && activeStep !== 2 && (
+            <Box sx={{ mt: 2 }}>
+              <LinearProgress />
+              {searchProgress && (
+                <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block', textAlign: 'center' }}>
+                  {searchProgress}
+                </Typography>
+              )}
+            </Box>
+          )}
         </DialogContent>
 
         <DialogActions sx={{ px: 3, pb: 2 }}>
