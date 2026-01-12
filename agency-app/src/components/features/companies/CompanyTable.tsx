@@ -64,6 +64,8 @@ interface CompanyTableProps {
   onSelectCompany?: (companyId: string) => void;
   onSelectAll?: (selected: boolean) => void;
   onFindCompetitors?: (company: Company) => void;
+  /** IDs of companies currently generating offers (from bulk operations) */
+  generatingOffersForIds?: Set<string>;
 }
 
 type SortDirection = 'asc' | 'desc';
@@ -76,6 +78,7 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
   onSelectCompany,
   onSelectAll,
   onFindCompetitors,
+  generatingOffersForIds = new Set(),
 }) => {
   // Get current user for tracking updates
   const { userProfile } = useAuth();
@@ -1526,7 +1529,7 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
                                 e.stopPropagation();
                                 handleGenerateOffers(company);
                               }}
-                              disabled={generatingOffers.has(company.id)}
+                              disabled={generatingOffers.has(company.id) || generatingOffersForIds.has(company.id)}
                               sx={{
                                 color: company.offerAnalysis ? '#10b981' : '#f59e0b',
                                 '&:hover': {
@@ -1540,7 +1543,7 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
                                 },
                               }}
                             >
-                              {generatingOffers.has(company.id) ? (
+                              {(generatingOffers.has(company.id) || generatingOffersForIds.has(company.id)) ? (
                                 <CircularProgress size={16} sx={{ color: '#f59e0b' }} />
                               ) : (
                                 <OfferIcon sx={{ fontSize: '16px' }} />

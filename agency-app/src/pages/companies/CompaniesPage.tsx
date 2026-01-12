@@ -89,6 +89,8 @@ import {
 import {
   analyzeWritingProgram,
   analyzeWritingProgramDetails,
+  analyzeCompanyWebsite,
+  generateOfferIdeas,
 } from '../../services/firebase/cloudFunctions';
 import { updateCompany } from '../../services/api/companies';
 import {
@@ -690,9 +692,96 @@ export const CompaniesPage: React.FC = () => {
     setShowBulkArchiveDialog(true);
   };
 
+  // Track companies currently being analyzed for offers
+  const [generatingOffersForIds, setGeneratingOffersForIds] = useState<Set<string>>(new Set());
+
   const handleBulkGenerateOffers = () => {
     if (selectedCompanyIds.length === 0) return;
-    setShowBulkOfferDialog(true);
+
+    const selectedCompanies = companies.filter(c => selectedCompanyIds.includes(c.id));
+    const companiesWithUrl = selectedCompanies.filter(c =>
+      c.website || c.customFields?.website_blog_link || c.blogAnalysis?.blogUrl
+    );
+
+    if (companiesWithUrl.length === 0) {
+      setSnackbar({
+        open: true,
+        message: 'No selected companies have a website URL',
+        severity: 'warning',
+      });
+      return;
+    }
+
+    // Show starting message
+    setSnackbar({
+      open: true,
+      message: `Starting offer analysis for ${companiesWithUrl.length} companies...`,
+      severity: 'info',
+    });
+
+    // Add all companies to the generating set
+    setGeneratingOffersForIds(prev => {
+      const next = new Set(prev);
+      companiesWithUrl.forEach(c => next.add(c.id));
+      return next;
+    });
+
+    // Clear selection immediately so user can continue working
+    handleClearSelection();
+
+    // Run analysis for each company async (not blocking)
+    let completed = 0;
+    let failed = 0;
+
+    companiesWithUrl.forEach(async (company) => {
+      const websiteUrl = company.website ||
+        (company.customFields?.website_blog_link as string) ||
+        company.blogAnalysis?.blogUrl;
+
+      if (!websiteUrl) return;
+
+      try {
+        // Stage 1: Analyze company website
+        const stage1Result = await analyzeCompanyWebsite(
+          company.id,
+          company.name,
+          websiteUrl,
+          company.blogAnalysis?.blogUrl || undefined
+        );
+
+        // Stage 2: Generate ideas
+        await generateOfferIdeas(
+          company.id,
+          company.name,
+          websiteUrl,
+          stage1Result.companyAnalysis,
+          company.blogAnalysis?.blogUrl || undefined
+        );
+
+        completed++;
+      } catch (error) {
+        console.error(`Error generating offers for ${company.name}:`, error);
+        failed++;
+      } finally {
+        // Remove from generating set
+        setGeneratingOffersForIds(prev => {
+          const next = new Set(prev);
+          next.delete(company.id);
+          return next;
+        });
+
+        // Show completion message when all done
+        if (completed + failed === companiesWithUrl.length) {
+          setSnackbar({
+            open: true,
+            message: failed > 0
+              ? `Completed: ${completed} succeeded, ${failed} failed`
+              : `Successfully generated offers for ${completed} companies`,
+            severity: failed > 0 ? 'warning' : 'success',
+          });
+        }
+      }
+    });
   };
 
   const handleBulkOfferComplete = () => {
@@ -1304,6 +1393,7 @@ export const CompaniesPage: React.FC = () => {
                   }}
                   onSelectAll={handleSelectAll}
                   onFindCompetitors={handleFindCompetitors}
+                  generatingOffersForIds={generatingOffersForIds}
                 />
               ) : (
                 <WritingProgramTable

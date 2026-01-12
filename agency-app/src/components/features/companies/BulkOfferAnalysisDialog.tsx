@@ -107,21 +107,32 @@ export const BulkOfferAnalysisDialog: React.FC<BulkOfferAnalysisDialogProps> = (
     ideasCount?: number,
     companyType?: string
   ) => {
+    console.log(`[updateProgress] Called with: companyId=${companyId}, status=${status}, message=${message}`);
     setProgress((prev) => {
       const newProgress = new Map(prev);
       const companyProgress = newProgress.get(companyId);
+      console.log(`[updateProgress] Found company in map:`, !!companyProgress);
       if (companyProgress) {
-        companyProgress.status = status;
-        companyProgress.message = message;
-        if (cost !== undefined) companyProgress.cost = cost;
-        if (ideasCount !== undefined) companyProgress.ideasCount = ideasCount;
-        if (companyType !== undefined) companyProgress.companyType = companyType;
+        // Create a NEW object instead of mutating the existing one
+        const updatedEntry = {
+          ...companyProgress,
+          status,
+          message,
+          ...(cost !== undefined && { cost }),
+          ...(ideasCount !== undefined && { ideasCount }),
+          ...(companyType !== undefined && { companyType }),
+        };
+        console.log(`[updateProgress] Setting new entry:`, updatedEntry);
+        newProgress.set(companyId, updatedEntry);
       }
+      console.log(`[updateProgress] New map size:`, newProgress.size);
       return newProgress;
     });
   };
 
   const runBulkAnalysis = async () => {
+    console.log('[BulkAnalysis] Starting bulk analysis...');
+    console.log('[BulkAnalysis] Companies:', companies.length);
     setIsRunning(true);
     setIsComplete(false);
     cancelledRef.current = false;
@@ -130,6 +141,7 @@ export const BulkOfferAnalysisDialog: React.FC<BulkOfferAnalysisDialogProps> = (
       const cp = progress.get(company.id);
       return cp && cp.status !== 'skipped';
     });
+    console.log('[BulkAnalysis] Companies to process:', companiesToProcess.length);
 
     for (let i = 0; i < companiesToProcess.length; i++) {
       if (cancelledRef.current) break;
@@ -154,6 +166,7 @@ export const BulkOfferAnalysisDialog: React.FC<BulkOfferAnalysisDialogProps> = (
       // STAGE 1: Analyze company website
       // ========================================
       updateProgress(company.id, 'stage1', 'Analyzing website...');
+      console.log(`[BulkAnalysis] Stage 1 for ${company.name} - URL: ${websiteUrl}`);
 
       try {
         const stage1Result = await analyzeCompanyWebsite(
@@ -162,6 +175,7 @@ export const BulkOfferAnalysisDialog: React.FC<BulkOfferAnalysisDialogProps> = (
           websiteUrl,
           company.blogAnalysis?.blogUrl || undefined
         );
+        console.log(`[BulkAnalysis] Stage 1 complete for ${company.name}:`, stage1Result.companyAnalysis?.companyType);
 
         companyAnalysis = stage1Result.companyAnalysis;
         stage1Cost = stage1Result.costInfo.totalCost;
