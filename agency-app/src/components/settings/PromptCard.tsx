@@ -260,51 +260,7 @@ export const PromptCard: React.FC<PromptCardProps> = ({ prompt, editable = false
             </Box>
           )}
 
-          {/* System Prompt Section */}
-          {(prompt.systemPrompt || isEditing) && (
-            <Box sx={{ mb: 2.5 }}>
-              <Typography
-                variant="subtitle2"
-                sx={{
-                  fontWeight: 600,
-                  color: '#475569',
-                  mb: 1,
-                }}
-              >
-                System Prompt {isEditing && <Chip label="Optional" size="small" sx={{ ml: 1, height: 18, fontSize: '10px' }} />}
-              </Typography>
-              {isEditing ? (
-                <TiptapRichTextEditor
-                  value={editedPrompt.systemPrompt || ''}
-                  onChange={(value) => setEditedPrompt({ ...editedPrompt, systemPrompt: value })}
-                  placeholder="Enter system prompt (optional)... You can format text with bold, italic, lists, etc."
-                  height={250}
-                />
-              ) : (
-                <Paper
-                  sx={{
-                    p: 2,
-                    bgcolor: '#f8fafc',
-                    border: '1px solid #e2e8f0',
-                    borderRadius: 1.5,
-                    maxHeight: 200,
-                    overflow: 'auto',
-                  }}
-                >
-                  <SafeHtmlRenderer
-                    html={prompt.systemPrompt || ''}
-                    sx={{
-                      fontSize: '13px',
-                      color: '#334155',
-                      lineHeight: 1.6,
-                    }}
-                  />
-                </Paper>
-              )}
-            </Box>
-          )}
-
-          {/* User Prompt Section */}
+          {/* Full Prompt Section */}
           <Box>
             <Typography
               variant="subtitle2"

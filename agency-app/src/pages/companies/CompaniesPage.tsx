@@ -61,6 +61,7 @@ import { WebsiteFieldMappingDialog } from '../../components/features/companies/W
 import { ArchivedCompaniesView } from '../../components/features/companies/ArchivedCompaniesView';
 import { CompanyBulkActionsToolbar } from '../../components/features/companies/CompanyBulkActionsToolbar';
 import { CompanyBulkEditDialog } from '../../components/features/companies/CompanyBulkEditDialog';
+import { BulkOfferAnalysisDialog } from '../../components/features/companies/BulkOfferAnalysisDialog';
 import { TableColumnVisibilityMenu } from '../../components/features/crm/TableColumnVisibilityMenu';
 import {
   TableColumnConfig,
@@ -144,6 +145,7 @@ export const CompaniesPage: React.FC = () => {
   const [bulkArchiving, setBulkArchiving] = useState(false);
   const [bulkCascadeToLeads, setBulkCascadeToLeads] = useState(false);
   const [bulkTotalLeadsCount, setBulkTotalLeadsCount] = useState(0);
+  const [showBulkOfferDialog, setShowBulkOfferDialog] = useState(false);
 
   // Writing program analysis state
   const [selectedWritingProgramIds, setSelectedWritingProgramIds] = useState<string[]>([]);
@@ -686,6 +688,21 @@ export const CompaniesPage: React.FC = () => {
     });
     setBulkTotalLeadsCount(totalLeads);
     setShowBulkArchiveDialog(true);
+  };
+
+  const handleBulkGenerateOffers = () => {
+    if (selectedCompanyIds.length === 0) return;
+    setShowBulkOfferDialog(true);
+  };
+
+  const handleBulkOfferComplete = () => {
+    setShowBulkOfferDialog(false);
+    handleClearSelection();
+    setSnackbar({
+      open: true,
+      message: 'Bulk offer analysis complete!',
+      severity: 'success',
+    });
   };
 
   const confirmBulkArchive = async () => {
@@ -1256,6 +1273,7 @@ export const CompaniesPage: React.FC = () => {
                 onExportCSV={handleBulkExportCSV}
                 onDelete={handleBulkDelete}
                 onArchive={handleBulkArchive}
+                onGenerateOffers={handleBulkGenerateOffers}
                 onClear={handleClearSelection}
               />
             ) : (
@@ -1486,6 +1504,14 @@ export const CompaniesPage: React.FC = () => {
             companies={filteredCompanies.filter(c => selectedWritingProgramIds.includes(c.id))}
             onClose={() => setShowBulkAnalysisDialog(false)}
             onComplete={handleBulkAnalysisComplete}
+          />
+
+          {/* Bulk Offer Analysis Dialog */}
+          <BulkOfferAnalysisDialog
+            open={showBulkOfferDialog}
+            companies={companies.filter(c => selectedCompanyIds.includes(c.id))}
+            onClose={() => setShowBulkOfferDialog(false)}
+            onComplete={handleBulkOfferComplete}
           />
 
           {/* Single Company URL Selection Dialog */}

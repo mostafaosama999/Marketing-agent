@@ -64,6 +64,38 @@ export interface Company {
     generalFeedback?: string; // Overall notes/feedback
   };
 
+  // Company Offer Analysis (comprehensive analysis + blog ideas)
+  offerAnalysis?: {
+    companyAnalysis: {
+      companyName: string;
+      companyType: 'Generative AI' | 'AI tool' | 'Data science' | 'Service provider' | 'Content maker';
+      companySummary: string;
+      canTrainLLMs: boolean;
+      reliesOnAI: boolean;
+      businessModel: 'B2B' | 'B2C' | 'Both';
+      country: string;
+      linkedinUrl: string | null;
+      blogUrl: string | null;
+    };
+    ideas: Array<{
+      title: string;
+      whyItFits: string;
+      whatReaderLearns: string[];
+      keyStackTools: string[];
+      angleToAvoidDuplication: string;
+      platform?: string;
+      specificUse?: string;
+      companyTool?: string;
+    }>;
+    promptUsed: 'genai' | 'non-genai';
+    costInfo?: {
+      stage1Cost?: number;
+      stage2Cost?: number;
+      totalCost: number;
+    };
+    analyzedAt: Date;
+  };
+
   // Writing Program Analysis
   writingProgramAnalysis?: {
     hasProgram: boolean;

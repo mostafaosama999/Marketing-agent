@@ -37,6 +37,7 @@ import {
   Business as BusinessIcon,
   AutoAwesome as AutoAwesomeIcon,
   CompareArrows as CompareArrowsIcon,
+  Lightbulb as OfferIcon,
 } from '@mui/icons-material';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -48,6 +49,7 @@ import { getFieldDefinitions, ensureCompanyLabelsFieldDefinition } from '../../.
 import { DropdownMenuWithAdd } from '../crm/DropdownMenuWithAdd';
 import { updateCompanyCustomField, updateCompanyField, updateCompany, setCompanyStatusManually, unlockCompanyStatus, updateCompanyLabels } from '../../../services/api/companies';
 import { bulkFindWritingPrograms, bulkAnalyzeWritingPrograms } from '../../../services/api/bulkWritingProgramService';
+import { analyzeCompanyWebsite, generateOfferIdeas } from '../../../services/firebase/cloudFunctions';
 import { useAuth } from '../../../contexts/AuthContext';
 import { CompanyStatusBadge } from './CompanyStatusBadge';
 import { doc, getDoc } from 'firebase/firestore';
@@ -119,6 +121,8 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
 
   // Writing program analysis state
   const [analyzingCompanies, setAnalyzingCompanies] = useState<Set<string>>(new Set());
+  // Offer generation state (async)
+  const [generatingOffers, setGeneratingOffers] = useState<Set<string>>(new Set());
   const [urlSelectionDialog, setUrlSelectionDialog] = useState<{
     open: boolean;
     companyId: string;
@@ -601,6 +605,74 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
         return next;
       });
     }
+  };
+
+  // Generate offers handler (async - runs in background)
+  const handleGenerateOffers = async (company: Company) => {
+    const websiteUrl =
+      company.website ||
+      (company.customFields?.website_blog_link as string) ||
+      company.blogAnalysis?.blogUrl;
+
+    if (!websiteUrl) {
+      setSnackbar({
+        open: true,
+        message: `${company.name} doesn't have a website URL`,
+        severity: 'error',
+      });
+      return;
+    }
+
+    // Add to generating set
+    setGeneratingOffers(prev => new Set(prev).add(company.id));
+
+    setSnackbar({
+      open: true,
+      message: `Starting offer analysis for ${company.name}...`,
+      severity: 'info',
+    });
+
+    // Run async - don't await
+    (async () => {
+      try {
+        // Stage 1: Analyze website
+        const stage1Result = await analyzeCompanyWebsite(
+          company.id,
+          company.name,
+          websiteUrl,
+          company.blogAnalysis?.blogUrl || undefined
+        );
+
+        // Stage 2: Generate ideas
+        const stage2Result = await generateOfferIdeas(
+          company.id,
+          company.name,
+          websiteUrl,
+          stage1Result.companyAnalysis,
+          company.blogAnalysis?.blogUrl || undefined
+        );
+
+        const totalCost = stage1Result.costInfo.totalCost + stage2Result.costInfo.totalCost;
+
+        setSnackbar({
+          open: true,
+          message: `${company.name}: ${stage2Result.ideas.length} ideas generated ($${totalCost.toFixed(4)})`,
+          severity: 'success',
+        });
+      } catch (error: any) {
+        setSnackbar({
+          open: true,
+          message: `${company.name}: ${error.message || 'Analysis failed'}`,
+          severity: 'error',
+        });
+      } finally {
+        setGeneratingOffers(prev => {
+          const next = new Set(prev);
+          next.delete(company.id);
+          return next;
+        });
+      }
+    })();
   };
 
   // Handle URL selection from dialog
@@ -1369,13 +1441,14 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
                 align="right"
                 sx={{
                   py: 0,
-                  px: 0.75,
+                  px: 1,
                   fontSize: '10px',
                   fontWeight: 600,
                   color: '#64748b',
                   textTransform: 'uppercase',
                   letterSpacing: '0.5px',
                   height: '36px',
+                  minWidth: 120,
                 }}
               >
                 Actions
@@ -1442,8 +1515,40 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
                     {displayColumns.map((column) => renderCell(column.id, company))}
 
                     {/* Actions cell */}
-                    <TableCell align="right" sx={{ px: 0.5 }}>
+                    <TableCell align="right" sx={{ px: 1, minWidth: 120 }}>
                       <Box sx={{ display: 'flex', gap: 0.5, justifyContent: 'flex-end' }}>
+                        {/* Generate Offers Button */}
+                        {(company.website || company.customFields?.website_blog_link || company.blogAnalysis?.blogUrl) && (
+                          <Tooltip title={company.offerAnalysis ? "Regenerate offers" : "Generate offers"}>
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleGenerateOffers(company);
+                              }}
+                              disabled={generatingOffers.has(company.id)}
+                              sx={{
+                                color: company.offerAnalysis ? '#10b981' : '#f59e0b',
+                                '&:hover': {
+                                  backgroundColor: company.offerAnalysis
+                                    ? 'rgba(16, 185, 129, 0.1)'
+                                    : 'rgba(245, 158, 11, 0.1)',
+                                },
+                                '&.Mui-disabled': {
+                                  color: '#f59e0b',
+                                  opacity: 0.6,
+                                },
+                              }}
+                            >
+                              {generatingOffers.has(company.id) ? (
+                                <CircularProgress size={16} sx={{ color: '#f59e0b' }} />
+                              ) : (
+                                <OfferIcon sx={{ fontSize: '16px' }} />
+                              )}
+                            </IconButton>
+                          </Tooltip>
+                        )}
+
                         {/* Writing Program Analysis Button */}
                         {company.website && !company.writingProgramAnalysis && (
                           <Tooltip title="Analyze writing program">

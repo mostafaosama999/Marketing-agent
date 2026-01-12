@@ -11,6 +11,7 @@ import {
   FileDownload as DownloadIcon,
   Close as CloseIcon,
   Archive as ArchiveIcon,
+  AutoAwesome as OfferIcon,
 } from '@mui/icons-material';
 
 interface CompanyBulkActionsToolbarProps {
@@ -19,6 +20,7 @@ interface CompanyBulkActionsToolbarProps {
   onExportCSV: () => void;
   onDelete: () => void;
   onArchive: () => void;
+  onGenerateOffers: () => void;
   onClear: () => void;
 }
 
@@ -28,6 +30,7 @@ export const CompanyBulkActionsToolbar: React.FC<CompanyBulkActionsToolbarProps>
   onExportCSV,
   onDelete,
   onArchive,
+  onGenerateOffers,
   onClear,
 }) => {
   if (selectedCount === 0) return null;
@@ -63,6 +66,26 @@ export const CompanyBulkActionsToolbar: React.FC<CompanyBulkActionsToolbarProps>
 
       {/* Actions */}
       <Box sx={{ display: 'flex', gap: 1.5, flex: 1 }}>
+        {/* Generate Offers */}
+        <Button
+          variant="contained"
+          startIcon={<OfferIcon />}
+          onClick={onGenerateOffers}
+          sx={{
+            bgcolor: 'white',
+            color: '#667eea',
+            textTransform: 'none',
+            fontWeight: 700,
+            boxShadow: '0 2px 8px rgba(0, 0, 0, 0.15)',
+            '&:hover': {
+              bgcolor: '#f8fafc',
+              boxShadow: '0 4px 12px rgba(0, 0, 0, 0.2)',
+            },
+          }}
+        >
+          Generate Offers
+        </Button>
+
         {/* Edit Fields */}
         <Button
           variant="outlined"

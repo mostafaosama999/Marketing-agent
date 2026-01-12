@@ -130,3 +130,8 @@ export {generatePostFromIdeaRAG} from "./linkedinGeneration/generatePostFromIdea
 
 // Export RAG indexing functions
 export {indexNewsletters, indexSingleNewsletter, getRAGStatus} from "./rag/ragFunctions";
+
+// Export Company Offer Analysis functions
+export {analyzeCompanyOffer} from "./offerAnalysis/analyzeCompanyOffer";
+export {analyzeCompanyWebsiteCloud} from "./offerAnalysis/analyzeCompanyWebsite";
+export {generateOfferIdeasCloud} from "./offerAnalysis/generateOfferIdeas";

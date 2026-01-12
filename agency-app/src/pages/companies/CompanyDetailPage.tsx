@@ -81,6 +81,8 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { FieldDefinition } from '../../types/fieldDefinitions';
 import { getFieldDefinitions } from '../../services/api/fieldDefinitionsService';
+import { doc, onSnapshot } from 'firebase/firestore';
+import { db } from '../../services/firebase/firestore';
 
 export const CompanyDetailPage: React.FC = () => {
   const { companyId } = useParams<{ companyId: string }>();
@@ -226,6 +228,35 @@ export const CompanyDetailPage: React.FC = () => {
 
     loadCompany();
   }, [companyId, navigate]);
+
+  // Subscribe to real-time company updates (for customFields changes from other tabs)
+  useEffect(() => {
+    if (!companyId || loading) return;
+
+    const companyRef = doc(db, 'entities', companyId);
+    const unsubscribe = onSnapshot(companyRef, (docSnapshot) => {
+      if (docSnapshot.exists()) {
+        const data = docSnapshot.data();
+        const updatedCompany = {
+          id: docSnapshot.id,
+          ...data,
+          createdAt: data.createdAt?.toDate?.() || data.createdAt,
+          updatedAt: data.updatedAt?.toDate?.() || data.updatedAt,
+        } as Company;
+
+        // Update company state
+        setCompany(updatedCompany);
+
+        // Also update formData to keep custom fields in sync
+        setFormData(prev => ({
+          ...prev,
+          customFields: updatedCompany.customFields || {},
+        }));
+      }
+    });
+
+    return () => unsubscribe();
+  }, [companyId, loading]);
 
   // Load all companies for website mapping dialog
   useEffect(() => {

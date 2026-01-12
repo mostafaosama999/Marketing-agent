@@ -189,13 +189,27 @@ export async function analyzeWritingProgramDetails(
 
 /**
  * Format cost info for display
+ * Handles both formats:
+ * - Legacy: { totalCost, totalTokens }
+ * - Offer Analysis: { stage1Cost, stage2Cost, totalCost }
  */
 export function formatCost(costInfo?: {
-  totalCost: number;
-  totalTokens: number;
+  totalCost?: number;
+  totalTokens?: number;
+  stage1Cost?: number;
+  stage2Cost?: number;
 }): string {
   if (!costInfo) return '';
-  return `$${costInfo.totalCost.toFixed(4)} (${costInfo.totalTokens.toLocaleString()} tokens)`;
+
+  const totalCost = costInfo.totalCost ?? 0;
+
+  // If totalTokens is available, include token count
+  if (costInfo.totalTokens) {
+    return `$${totalCost.toFixed(4)} (${costInfo.totalTokens.toLocaleString()} tokens)`;
+  }
+
+  // Otherwise just show the cost
+  return `$${totalCost.toFixed(4)}`;
 }
 
 /**
@@ -423,4 +437,209 @@ export async function findCompetitors(
 
     throw new Error(error.message || 'Failed to find competitors');
   }
+}
+
+// Company Offer Analysis Types
+export interface CompanyAnalysis {
+  companyName: string;
+  companyType: 'Generative AI' | 'AI tool' | 'Data science' | 'Service provider' | 'Content maker';
+  companySummary: string;
+  canTrainLLMs: boolean;
+  reliesOnAI: boolean;
+  businessModel: 'B2B' | 'B2C' | 'Both';
+  country: string;
+  linkedinUrl: string | null;
+  blogUrl: string | null;
+}
+
+export interface BlogIdea {
+  title: string;
+  whyItFits: string;
+  whatReaderLearns: string[];
+  keyStackTools: string[];
+  angleToAvoidDuplication: string;
+  platform?: string;
+  specificUse?: string;
+  companyTool?: string;
+}
+
+export interface CompanyOfferAnalysisRequest {
+  companyId: string;
+  companyName: string;
+  website: string;
+  blogContent?: string;
+}
+
+export interface CompanyOfferAnalysisResult {
+  companyAnalysis: CompanyAnalysis;
+  ideas: BlogIdea[];
+  promptUsed: 'genai' | 'non-genai';
+  costInfo?: {
+    totalCost: number;
+    totalTokens?: number;
+    inputTokens?: number;
+    outputTokens?: number;
+    stage1Cost?: number;
+    stage2Cost?: number;
+  };
+}
+
+// Stage 1: Website Analysis Response
+export interface WebsiteAnalysisResult {
+  success: boolean;
+  companyAnalysis: CompanyAnalysis;
+  costInfo: {
+    totalCost: number;
+    inputTokens: number;
+    outputTokens: number;
+  };
+  analyzedAt: string;
+}
+
+// Stage 2: Idea Generation Response
+export interface IdeaGenerationResult {
+  success: boolean;
+  ideas: BlogIdea[];
+  promptUsed: 'genai' | 'non-genai';
+  costInfo: {
+    totalCost: number;
+    inputTokens: number;
+    outputTokens: number;
+  };
+  generatedAt: string;
+}
+
+// Extended timeout: 5 minutes (300000 ms) for each stage
+const EXTENDED_TIMEOUT = 300000;
+
+/**
+ * Stage 1: Analyze company website to determine company type
+ * Returns company analysis (type, summary, etc.)
+ */
+export async function analyzeCompanyWebsite(
+  companyId: string,
+  companyName: string,
+  website: string,
+  blogContent?: string
+): Promise<WebsiteAnalysisResult> {
+  const analyzeWebsite = httpsCallable<
+    { companyId: string; companyName: string; website: string; blogContent?: string },
+    WebsiteAnalysisResult
+  >(functions, 'analyzeCompanyWebsiteCloud', { timeout: EXTENDED_TIMEOUT });
+
+  const result = await analyzeWebsite({
+    companyId,
+    companyName,
+    website,
+    blogContent,
+  });
+
+  return result.data;
+}
+
+/**
+ * Stage 2: Generate blog ideas based on company analysis
+ * Requires company analysis from Stage 1
+ */
+export async function generateOfferIdeas(
+  companyId: string,
+  companyName: string,
+  website: string,
+  companyAnalysis: CompanyAnalysis,
+  blogContent?: string
+): Promise<IdeaGenerationResult> {
+  const generateIdeas = httpsCallable<
+    {
+      companyId: string;
+      companyName: string;
+      website: string;
+      companyAnalysis: CompanyAnalysis;
+      blogContent?: string;
+    },
+    IdeaGenerationResult
+  >(functions, 'generateOfferIdeasCloud', { timeout: EXTENDED_TIMEOUT });
+
+  const result = await generateIdeas({
+    companyId,
+    companyName,
+    website,
+    companyAnalysis,
+    blogContent,
+  });
+
+  return result.data;
+}
+
+/**
+ * Analyze company and generate blog ideas (two-step process)
+ * Step 1: Website analysis → returns company type (displayed immediately)
+ * Step 2: Idea generation → returns blog ideas
+ *
+ * @param onStage1Complete - Optional callback when stage 1 completes (for incremental UI updates)
+ */
+export async function analyzeCompanyOfferTwoStep(
+  companyId: string,
+  companyName: string,
+  website: string,
+  blogContent?: string,
+  onStage1Complete?: (analysis: CompanyAnalysis, cost: number) => void
+): Promise<CompanyOfferAnalysisResult> {
+  // Stage 1: Analyze website
+  const stage1Result = await analyzeCompanyWebsite(
+    companyId,
+    companyName,
+    website,
+    blogContent
+  );
+
+  // Notify callback if provided (for incremental UI)
+  if (onStage1Complete) {
+    onStage1Complete(stage1Result.companyAnalysis, stage1Result.costInfo.totalCost);
+  }
+
+  // Stage 2: Generate ideas
+  const stage2Result = await generateOfferIdeas(
+    companyId,
+    companyName,
+    website,
+    stage1Result.companyAnalysis,
+    blogContent
+  );
+
+  // Combine results
+  return {
+    companyAnalysis: stage1Result.companyAnalysis,
+    ideas: stage2Result.ideas,
+    promptUsed: stage2Result.promptUsed,
+    costInfo: {
+      stage1Cost: stage1Result.costInfo.totalCost,
+      stage2Cost: stage2Result.costInfo.totalCost,
+      totalCost: stage1Result.costInfo.totalCost + stage2Result.costInfo.totalCost,
+    },
+  };
+}
+
+/**
+ * Legacy function - calls the original combined cloud function
+ * @deprecated Use analyzeCompanyOfferTwoStep for better reliability
+ */
+export async function analyzeCompanyOffer(
+  companyId: string,
+  companyName: string,
+  website: string,
+  blogContent?: string
+): Promise<CompanyOfferAnalysisResult> {
+  const analyzeOffer = httpsCallable<
+    CompanyOfferAnalysisRequest,
+    CompanyOfferAnalysisResult
+  >(functions, 'analyzeCompanyOffer', { timeout: EXTENDED_TIMEOUT });
+
+  const result = await analyzeOffer({
+    companyId,
+    companyName,
+    website,
+    blogContent,
+  });
+
+  return result.data;
 }

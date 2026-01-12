@@ -89,6 +89,17 @@ function convertToCompany(id: string, data: any): Company {
           : undefined,
       } : undefined,
     } : undefined,
+    offerAnalysis: data.offerAnalysis ? {
+      companyAnalysis: data.offerAnalysis.companyAnalysis,
+      ideas: data.offerAnalysis.ideas || [],
+      promptUsed: data.offerAnalysis.promptUsed,
+      costInfo: data.offerAnalysis.costInfo,
+      analyzedAt: data.offerAnalysis.analyzedAt?.toDate
+        ? data.offerAnalysis.analyzedAt.toDate()
+        : data.offerAnalysis.analyzedAt
+        ? new Date(data.offerAnalysis.analyzedAt)
+        : new Date(),
+    } : undefined,
     offer: data.offer ? {
       blogIdea: data.offer.blogIdea,
       createdAt: data.offer.createdAt?.toDate
