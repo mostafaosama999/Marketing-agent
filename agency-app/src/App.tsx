@@ -19,6 +19,7 @@ import CompaniesPage from './pages/companies/CompaniesPage';
 import CompanyDetailPage from './pages/companies/CompanyDetailPage';
 import LeadDetailPage from './pages/leads/LeadDetailPage';
 import SettingsPage from './pages/settings/SettingsPage';
+import KPIsPage from './pages/analytics/KPIsPage';
 
 // Components
 import Navbar from './components/layout/Navbar';
@@ -91,6 +92,7 @@ function AppContent() {
           <Route path="/analytics" element={<AnalyticsPage />} />
           <Route path="/analytics/outbound" element={<OutboundAnalytics />} />
           <Route path="/inbound-generation" element={<InboundGeneration />} />
+          <Route path="/kpis" element={<KPIsPage />} />
           <Route path="/auth/gmail/callback" element={<GmailCallback />} />
           <Route path="/monitoring" element={<ProjectMonitoring />} />
           <Route path="/settings" element={<SettingsPage />} />

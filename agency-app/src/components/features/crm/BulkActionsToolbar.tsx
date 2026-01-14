@@ -16,6 +16,7 @@ import {
   Close as CloseIcon,
   ChangeCircle as ChangeCircleIcon,
   Archive as ArchiveIcon,
+  Email as EmailIcon,
 } from '@mui/icons-material';
 import { LeadStatus } from '../../../types/lead';
 import { usePipelineConfigContext } from '../../../contexts/PipelineConfigContext';
@@ -25,10 +26,12 @@ interface BulkActionsToolbarProps {
   onChangeStatus: (status: LeadStatus) => void;
   onEditFields: () => void;
   onExportCSV: () => void;
+  onCreateDrafts: () => void; // NEW
   onArchive: () => void;
   onDelete: () => void;
   onClear: () => void;
   isDeleting?: boolean;
+  isCreatingDrafts?: boolean; // NEW
 }
 
 export const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
@@ -36,10 +39,12 @@ export const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
   onChangeStatus,
   onEditFields,
   onExportCSV,
+  onCreateDrafts,
   onArchive,
   onDelete,
   onClear,
   isDeleting = false,
+  isCreatingDrafts = false,
 }) => {
   const { stages } = usePipelineConfigContext();
   const [statusMenuAnchor, setStatusMenuAnchor] = useState<null | HTMLElement>(null);
@@ -148,6 +153,26 @@ export const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
           }}
         >
           Export CSV
+        </Button>
+
+        {/* Create Gmail Drafts */}
+        <Button
+          variant="outlined"
+          startIcon={isCreatingDrafts ? <CircularProgress size={16} sx={{ color: 'white' }} /> : <EmailIcon />}
+          onClick={onCreateDrafts}
+          disabled={isDeleting || isCreatingDrafts}
+          sx={{
+            color: 'white',
+            borderColor: 'white',
+            textTransform: 'none',
+            fontWeight: 600,
+            '&:hover': {
+              borderColor: 'white',
+              bgcolor: 'rgba(255, 255, 255, 0.1)',
+            },
+          }}
+        >
+          {isCreatingDrafts ? 'Creating Drafts...' : 'Create Gmail Drafts'}
         </Button>
 
         {/* Archive */}

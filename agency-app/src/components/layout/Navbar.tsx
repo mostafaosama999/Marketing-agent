@@ -23,6 +23,7 @@ import {
   Business,
   Settings,
   Campaign,
+  Assessment,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLocation, Link } from 'react-router-dom';
@@ -202,6 +203,9 @@ const Navbar: React.FC = () => {
 
     // All roles can see Analytics
     items.push({ label: 'ANALYTICS', path: '/analytics', icon: TrendingUp });
+
+    // All roles can see KPIs
+    items.push({ label: 'KPIS', path: '/kpis', icon: Assessment });
 
     // Managers, CEOs, and Marketing Analysts can see Monitoring
     if (userProfile.role === 'Manager' || userProfile.role === 'CEO' || userProfile.role === 'Marketing Analyst') {

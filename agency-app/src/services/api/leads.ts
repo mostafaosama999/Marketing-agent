@@ -99,6 +99,9 @@ function convertToLead(id: string, data: any): Lead {
             ? {
                 status: data.outreach.email.status,
                 sentAt: safeToDate(data.outreach.email.sentAt),
+                draftCreatedAt: safeToDate(data.outreach.email.draftCreatedAt),
+                draftId: data.outreach.email.draftId,
+                draftUrl: data.outreach.email.draftUrl,
               }
             : undefined,
         }

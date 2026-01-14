@@ -25,6 +25,7 @@ import {
 } from '@mui/icons-material';
 import { subscribeToLeads } from '../../services/api/leads';
 import { Lead, LeadStatus } from '../../types/lead';
+import { OutreachResponseModal } from '../../components/features/analytics/OutreachResponseModal';
 
 // Modern theme
 const modernTheme = createTheme({
@@ -79,6 +80,8 @@ const LeadAnalytics: React.FC = () => {
   const [loading, setLoading] = useState(true);
   const [viewMode] = useState<'daily' | 'weekly'>('weekly'); // Fixed to weekly view
   const [outreachDayRange, setOutreachDayRange] = useState<7 | 14 | 30 | 'all'>('all');
+  const [linkedInModalOpen, setLinkedInModalOpen] = useState(false);
+  const [emailModalOpen, setEmailModalOpen] = useState(false);
 
   // Subscribe to leads
   useEffect(() => {
@@ -177,46 +180,38 @@ const LeadAnalytics: React.FC = () => {
 
   // Helper: Get LinkedIn connection request date from custom fields or outreach object
   const getConnectionRequestDate = (lead: Lead): Date | null => {
-    console.log('[DEBUG] Checking connection request date for lead:', lead.name, lead.id);
-
     // Check custom fields first (linkedin_connection_request_date)
     if (lead.customFields?.linkedin_connection_request_date) {
-      console.log('[DEBUG] Found custom field linkedin_connection_request_date:', lead.customFields.linkedin_connection_request_date);
       try {
         const date = new Date(lead.customFields.linkedin_connection_request_date);
-        console.log('[DEBUG] Parsed custom field date:', date);
         return date;
       } catch (e) {
-        console.warn('Invalid connection request date in custom fields:', lead.customFields.linkedin_connection_request_date);
+        // Invalid date format, skip
       }
     }
 
     // Fall back to outreach.linkedIn.connectionRequest.sentAt
-    console.log('[DEBUG] Checking outreach object:', {
-      hasOutreach: !!lead.outreach,
-      hasLinkedIn: !!lead.outreach?.linkedIn,
-      hasConnectionRequest: !!lead.outreach?.linkedIn?.connectionRequest,
-      connectionRequestStatus: lead.outreach?.linkedIn?.connectionRequest?.status,
-      connectionRequestSentAt: lead.outreach?.linkedIn?.connectionRequest?.sentAt,
-    });
-
     if (lead.outreach?.linkedIn?.connectionRequest?.sentAt) {
       const date = lead.outreach.linkedIn.connectionRequest.sentAt instanceof Date
         ? lead.outreach.linkedIn.connectionRequest.sentAt
         : new Date(lead.outreach.linkedIn.connectionRequest.sentAt);
-      console.log('[DEBUG] Found connection request sentAt:', date);
       return date;
     }
 
-    console.log('[DEBUG] No connection request date found for lead:', lead.name);
     return null;
   };
 
   // Helper: Check if lead has LinkedIn response
   const hasLinkedInResponse = (lead: Lead): boolean => {
-    if (lead.customFields?.linkedin_lead_response) {
-      const response = lead.customFields.linkedin_lead_response;
+    // Check LinkedIn-specific field first, then general field as fallback
+    // Try multiple possible field name variations
+    const response = lead.customFields?.linkedin_lead_response ||
+                     lead.customFields?.lead_response ||
+                     lead.customFields?.['LEAD RESPONSE'] ||
+                     lead.customFields?.['Lead Response'] ||
+                     lead.customFields?.['lead response'];
 
+    if (response) {
       // Explicitly exclude "No Response" and "Not Interested"
       if (
         response === 'No Response' ||
@@ -253,8 +248,14 @@ const LeadAnalytics: React.FC = () => {
 
   // Helper: Check if lead has email response
   const hasEmailResponse = (lead: Lead): boolean => {
-    // Check custom fields for email response
-    const response = lead.customFields?.email_lead_response || lead.customFields?.email_email_lead_response;
+    // Check custom fields for email response (email-specific fields first, then general field as fallback)
+    // Try multiple possible field name variations
+    const response = lead.customFields?.email_lead_response ||
+                     lead.customFields?.email_email_lead_response ||
+                     lead.customFields?.lead_response ||
+                     lead.customFields?.['LEAD RESPONSE'] ||
+                     lead.customFields?.['Lead Response'] ||
+                     lead.customFields?.['lead response'];
 
     if (response) {
       // Explicitly exclude "No Response" and "Not Interested"
@@ -371,12 +372,42 @@ const LeadAnalytics: React.FC = () => {
 
     const linkedInOutreach = leads.filter(lead => {
       const linkedInDate = getLinkedInDate(lead);
-      return linkedInDate !== null && linkedInDate >= cutoffDate;
+      const linkedInStatus = lead.outreach?.linkedIn?.status;
+
+      // For "All Time", include if: has date OR has contact status OR has positive response
+      if (outreachDayRange === 'all') {
+        return linkedInDate !== null ||
+               (linkedInStatus && ['sent', 'opened', 'replied'].includes(linkedInStatus)) ||
+               hasLinkedInResponse(lead);
+      }
+
+      // For specific date ranges, include if has date within range
+      if (linkedInDate !== null && linkedInDate >= cutoffDate) {
+        return true;
+      }
+
+      // Fallback: Include if status shows contact was made
+      return linkedInStatus && ['sent', 'opened', 'replied'].includes(linkedInStatus);
     });
 
     const emailOutreach = leads.filter(lead => {
       const emailDate = getEmailDate(lead);
-      return emailDate !== null && emailDate >= cutoffDate;
+      const emailStatus = lead.outreach?.email?.status;
+
+      // For "All Time", include if: has date OR has contact status OR has positive response
+      if (outreachDayRange === 'all') {
+        return emailDate !== null ||
+               (emailStatus && ['sent', 'opened', 'replied'].includes(emailStatus)) ||
+               hasEmailResponse(lead);
+      }
+
+      // For specific date ranges, include if has date within range
+      if (emailDate !== null && emailDate >= cutoffDate) {
+        return true;
+      }
+
+      // Fallback: Include if status shows contact was made
+      return emailStatus && ['sent', 'opened', 'replied'].includes(emailStatus);
     });
 
     // Calculate total unique leads reached out to (not sum, to avoid double-counting)
@@ -453,7 +484,6 @@ const LeadAnalytics: React.FC = () => {
     });
 
     // Aggregate LinkedIn connection requests by day
-    console.log('[DEBUG] Starting connection request aggregation, total leads:', leads.length);
     let connectionCount = 0;
     leads.forEach(lead => {
       const connectionDate = getConnectionRequestDate(lead);
@@ -461,7 +491,6 @@ const LeadAnalytics: React.FC = () => {
         connectionCount++;
         const dateStr = getDateString(connectionDate);
         dailyConnection[dateStr] = (dailyConnection[dateStr] || 0) + 1;
-        console.log('[DEBUG] Adding connection for lead:', lead.name, 'Date:', connectionDate, 'DateStr:', dateStr, 'Count:', dailyConnection[dateStr]);
 
         // Track earliest date
         if (!earliestDate || connectionDate < earliestDate) {
@@ -469,8 +498,6 @@ const LeadAnalytics: React.FC = () => {
         }
       }
     });
-    console.log('[DEBUG] Total connection requests found:', connectionCount);
-    console.log('[DEBUG] dailyConnection aggregation:', dailyConnection);
 
     // Generate array of dates for the selected range
     const dates: string[] = [];
@@ -501,7 +528,6 @@ const LeadAnalytics: React.FC = () => {
       email: dailyEmail[date] || 0,
       connection: dailyConnection[date] || 0,
     }));
-    console.log('[DEBUG] Final outreachActivityData:', result);
     return result;
   }, [leads, outreachDayRange]);
 
@@ -841,11 +867,20 @@ const LeadAnalytics: React.FC = () => {
               </Grid>
 
               <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
-                <Card sx={{
-                  background: 'linear-gradient(135deg, #4caf50 0%, #388e3c 100%)',
-                  borderRadius: 3,
-                  boxShadow: '0 4px 20px rgba(76, 175, 80, 0.3)',
-                }}>
+                <Card
+                  onClick={() => setLinkedInModalOpen(true)}
+                  sx={{
+                    background: 'linear-gradient(135deg, #4caf50 0%, #388e3c 100%)',
+                    borderRadius: 3,
+                    boxShadow: '0 4px 20px rgba(76, 175, 80, 0.3)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease-in-out',
+                    '&:hover': {
+                      boxShadow: '0 6px 28px rgba(76, 175, 80, 0.4)',
+                      transform: 'translateY(-2px)',
+                    },
+                  }}
+                >
                   <CardContent>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                       <CheckCircleIcon sx={{ fontSize: 40, color: 'white', opacity: 0.9 }} />
@@ -863,11 +898,20 @@ const LeadAnalytics: React.FC = () => {
               </Grid>
 
               <Grid size={{ xs: 12, sm: 6, md: 2.4 }}>
-                <Card sx={{
-                  background: 'linear-gradient(135deg, #ff9800 0%, #f57c00 100%)',
-                  borderRadius: 3,
-                  boxShadow: '0 4px 20px rgba(255, 152, 0, 0.3)',
-                }}>
+                <Card
+                  onClick={() => setEmailModalOpen(true)}
+                  sx={{
+                    background: 'linear-gradient(135deg, #ff9800 0%, #f57c00 100%)',
+                    borderRadius: 3,
+                    boxShadow: '0 4px 20px rgba(255, 152, 0, 0.3)',
+                    cursor: 'pointer',
+                    transition: 'all 0.2s ease-in-out',
+                    '&:hover': {
+                      boxShadow: '0 6px 28px rgba(255, 152, 0, 0.4)',
+                      transform: 'translateY(-2px)',
+                    },
+                  }}
+                >
                   <CardContent>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                       <CheckCircleIcon sx={{ fontSize: 40, color: 'white', opacity: 0.9 }} />
@@ -965,6 +1009,23 @@ const LeadAnalytics: React.FC = () => {
           </>
         )}
       </Box>
+
+      {/* Response Detail Modals */}
+      <OutreachResponseModal
+        open={linkedInModalOpen}
+        onClose={() => setLinkedInModalOpen(false)}
+        leads={leads}
+        modalType="linkedin"
+        outreachDayRange={outreachDayRange}
+      />
+
+      <OutreachResponseModal
+        open={emailModalOpen}
+        onClose={() => setEmailModalOpen(false)}
+        leads={leads}
+        modalType="email"
+        outreachDayRange={outreachDayRange}
+      />
     </ThemeProvider>
   );
 };

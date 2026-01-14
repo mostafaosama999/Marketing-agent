@@ -44,6 +44,7 @@ import TiptapRichTextEditor from '../../components/common/TiptapRichTextEditor';
 import { SafeHtmlRenderer, getHtmlCharCount, isHtmlEmpty } from '../../utils/htmlHelpers';
 import { ReleaseNotesTab } from '../../components/settings/ReleaseNotesTab';
 import { FieldDefinitionsTab } from '../../components/settings/FieldDefinitionsTab';
+import { GmailIntegrationTab } from '../../components/settings/GmailIntegrationTab';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -390,6 +391,7 @@ export const SettingsPage: React.FC = () => {
             <Tab label="AI Prompts" />
             <Tab label="Release Notes" />
             <Tab label="Field Definitions" />
+            <Tab label="Integrations" />
           </Tabs>
         </Box>
 
@@ -752,6 +754,11 @@ export const SettingsPage: React.FC = () => {
           {/* Field Definitions Tab */}
           <TabPanel value={tabValue} index={3}>
             <FieldDefinitionsTab />
+          </TabPanel>
+
+          {/* Tab 4: Integrations */}
+          <TabPanel value={tabValue} index={4}>
+            <GmailIntegrationTab />
           </TabPanel>
         </Box>
       </Box>

@@ -1,0 +1,41 @@
+
+❯ Apart from the UI, does this currently work as I intended? If I edit the full prompt, does it actually get related to the subsequent AI calls?                                 
+  1. Can I just paste in any normal prompt from ChatGPT and then The JSON schema section is going to be appended to the prompt above to force the prompt to output things in     
+  JSON mode. Does it currently work like that?                                                                                                                                   
+
+⏺ The user is asking about how the prompt system currently works. Let me explore how prompts are used in the cloud functions to answer this question.
+
+⏺ Explore(Explore prompt usage in AI calls)
+  ⎿  Done (36 tool uses · 89.8k tokens · 1m 28s)                                                                                                                                
+
+⏺ Based on my exploration, I need to give you an honest answer: No, it doesn't currently work as you intended.
+
+  Here's what I found:
+
+  Current State
+
+  1. The prompts in Settings are NOT used - The PromptCard displays and lets you edit prompts, but these are stored in localStorage and not actually used when generating offers/ideas.
+  2. Cloud Functions have hardcoded prompts - The actual AI calls in analyzeCompanyWebsite and generateOfferIdeas use prompts defined directly in functions/src/offerAnalysis/prompts.ts, not the ones from Settings.
+  3. combinePromptWithSchema() exists but is not called - There's a utility function ready to append the outputSchema to the userPrompt, but it's never invoked in the generation flow.
+
+  What You Want vs What Exists
+  ┌───────────────────────────────────────────┬────────────────────────────────────────────┐
+  │                Your Intent                │              Current Reality               │
+  ├───────────────────────────────────────────┼────────────────────────────────────────────┤
+  │ Paste ChatGPT prompt in "Full Prompt"     │ ✅ Can paste, but ❌ not used in AI calls  │
+  ├───────────────────────────────────────────┼────────────────────────────────────────────┤
+  │ JSON schema appended to force JSON output │ ❌ Not happening - schema is display-only  │
+  ├───────────────────────────────────────────┼────────────────────────────────────────────┤
+  │ Edit prompts to change AI behavior        │ ❌ Edits saved to localStorage but ignored │
+  └───────────────────────────────────────────┴────────────────────────────────────────────┘
+  Do You Want Me to Fix This?
+
+  I can implement the system so it works as you intended:
+  1. Full Prompt - Your ChatGPT prompt that works normally
+  2. Output Structure - JSON schema that gets appended automatically when calling AI
+
+  This would require connecting the Settings prompts to the actual Cloud Functions. Should I plan this implementation?
+
+✻ Sautéed for 4m 14s
+
+───────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────────

@@ -77,6 +77,11 @@ import {
 import { ReleaseNotesBanner } from './ReleaseNotesBanner';
 import { ReleaseNote, UserReleaseNoteState } from '../../../types/releaseNotes';
 import { getLatestReleaseNote, getUserReleaseState } from '../../../services/api/releaseNotesService';
+import { createGmailDraft, checkGmailConnection } from '../../../services/api/gmailService';
+import { getSettings } from '../../../services/api/settings';
+import { getCompany } from '../../../services/api/companies';
+import { replaceTemplateVariables } from '../../../services/api/templateVariablesService';
+import { stripHtmlTags } from '../../../utils/htmlHelpers';
 
 // Modern theme matching KanbanBoard
 const modernTheme = createTheme({
@@ -174,6 +179,9 @@ function CRMBoard() {
   // Bulk delete dialog and loading state
   const [bulkDeleteDialogOpen, setBulkDeleteDialogOpen] = useState(false);
   const [bulkDeleting, setBulkDeleting] = useState(false);
+
+  // Bulk Gmail draft creation state
+  const [creatingDrafts, setCreatingDrafts] = useState(false);
 
   // Bulk add leads dialog state
   const [showBulkAddDialog, setShowBulkAddDialog] = useState(false);
@@ -982,6 +990,119 @@ function CRMBoard() {
     }
   };
 
+  // Bulk create Gmail drafts handler
+  const handleBulkCreateDrafts = async () => {
+    if (selectedLeadIds.length === 0) return;
+
+    if (!window.confirm(`Create Gmail drafts for ${selectedLeadIds.length} lead(s)? This will create drafts in your Gmail account.`)) {
+      return;
+    }
+
+    setCreatingDrafts(true);
+
+    try {
+      // Check Gmail connection and permissions
+      const connectionStatus = await checkGmailConnection();
+      if (!connectionStatus.connected || !connectionStatus.hasComposePermission) {
+        showAlert(connectionStatus.message || 'Gmail not properly configured. Please reconnect Gmail in Settings.');
+        setCreatingDrafts(false);
+        return;
+      }
+
+      // Get offer template from settings
+      const settings = await getSettings();
+      const { offerTemplate, offerHeadline } = settings;
+
+      if (!offerTemplate) {
+        showAlert('No offer template configured. Please set up template in Settings.');
+        setCreatingDrafts(false);
+        return;
+      }
+
+      // Get selected leads with full data
+      const selectedLeads = leads.filter(lead => selectedLeadIds.includes(lead.id));
+
+      // Filter out leads without email
+      const leadsWithEmail = selectedLeads.filter(lead => lead.email);
+
+      if (leadsWithEmail.length === 0) {
+        showAlert('None of the selected leads have email addresses.');
+        setCreatingDrafts(false);
+        return;
+      }
+
+      if (leadsWithEmail.length < selectedLeads.length) {
+        const skipCount = selectedLeads.length - leadsWithEmail.length;
+        if (!window.confirm(`${skipCount} lead(s) don't have email addresses and will be skipped. Continue?`)) {
+          setCreatingDrafts(false);
+          return;
+        }
+      }
+
+      let successCount = 0;
+      let failCount = 0;
+      const errors: string[] = [];
+
+      // Create drafts sequentially to avoid rate limits
+      for (const lead of leadsWithEmail) {
+        try {
+          // Get company data if available
+          let company = null;
+          if (lead.companyId) {
+            company = await getCompany(lead.companyId);
+          }
+
+          // Replace template variables and strip HTML tags from subject
+          const subjectHtml = offerHeadline
+            ? replaceTemplateVariables(offerHeadline, lead, company)
+            : `Opportunity at ${lead.company}`;
+          const subject = stripHtmlTags(subjectHtml);
+          const bodyHtml = replaceTemplateVariables(offerTemplate, lead, company);
+
+          // Create draft
+          const result = await createGmailDraft({
+            leadId: lead.id,
+            to: lead.email,
+            subject,
+            bodyHtml,
+          });
+
+          if (result.success) {
+            successCount++;
+          } else {
+            failCount++;
+            errors.push(`${lead.name}: ${result.error || 'Unknown error'}`);
+          }
+
+          // Small delay to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (error: any) {
+          failCount++;
+          errors.push(`${lead.name}: ${error.message}`);
+        }
+      }
+
+      // Show results
+      let message = `Created ${successCount} draft(s) successfully.`;
+      if (failCount > 0) {
+        message += ` ${failCount} failed.`;
+        if (errors.length > 0) {
+          console.error('Draft creation errors:', errors);
+        }
+      }
+
+      showAlert(message);
+
+      // Clear selection
+      setSelectedLeadIds([]);
+    } catch (error: any) {
+      console.error('Bulk draft creation error:', error);
+      showAlert(`Failed to create drafts: ${error.message}`);
+    } finally {
+      setCreatingDrafts(false);
+    }
+  };
+
   // Open bulk archive dialog
   const handleBulkArchive = () => {
     if (selectedLeadIds.length === 0) return;
@@ -1389,10 +1510,12 @@ function CRMBoard() {
                 onChangeStatus={handleBulkChangeStatus}
                 onEditFields={handleBulkEditFields}
                 onExportCSV={handleBulkExportCSV}
+                onCreateDrafts={handleBulkCreateDrafts}
                 onArchive={handleBulkArchive}
                 onDelete={handleBulkDelete}
                 onClear={handleClearSelection}
                 isDeleting={bulkDeleting}
+                isCreatingDrafts={creatingDrafts}
               />
 
               {/* Table */}

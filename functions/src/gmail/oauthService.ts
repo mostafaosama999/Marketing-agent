@@ -8,8 +8,15 @@ import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import {FieldValue} from "firebase-admin/firestore";
 
-const SCOPES = ["https://www.googleapis.com/auth/gmail.readonly"];
-const REDIRECT_URI = "http://localhost:3000/auth/gmail/callback";
+const SCOPES = [
+  "https://www.googleapis.com/auth/gmail.readonly",
+  "https://www.googleapis.com/auth/gmail.compose", // Allow draft creation
+];
+
+// Support both localhost and production
+const REDIRECT_URI = process.env.GMAIL_REDIRECT_URI ||
+  functions.config().gmail?.redirect_uri ||
+  "http://localhost:3000/auth/gmail/callback";
 
 /**
  * Get OAuth2 client with credentials from Firebase config

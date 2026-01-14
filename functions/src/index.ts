@@ -109,6 +109,7 @@ export {manualEmailSync} from "./gmail/manualEmailSync";
 export {getGmailAuthUrl} from "./gmail/generateAuthUrl";
 export {exchangeGmailOAuthCode} from "./gmail/exchangeOAuthCode";
 export {checkGmailConnectionStatus} from "./gmail/checkGmailConnection";
+export {createGmailDraftCloud} from "./gmail/createDraft";
 
 // Export competitor content tracking functions
 export {extractCompetitorPosts} from "./competitors/extractCompetitorPosts";

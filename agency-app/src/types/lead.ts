@@ -71,6 +71,9 @@ export interface Lead {
     email?: {
       status: 'not_sent' | 'sent' | 'opened' | 'replied' | 'bounced' | 'refused' | 'no_response';
       sentAt?: Date;
+      draftCreatedAt?: Date; // When Gmail draft was created
+      draftId?: string; // Gmail draft ID
+      draftUrl?: string; // Direct link to Gmail draft
     };
   };
 

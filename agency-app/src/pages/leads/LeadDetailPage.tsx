@@ -57,9 +57,10 @@ import { NameConfirmationDialog } from '../../components/features/crm/NameConfir
 import { Company } from '../../types/crm';
 import { getSettings } from '../../services/api/settings';
 import { replaceTemplateVariables } from '../../services/api/templateVariablesService';
-import { SafeHtmlRenderer, copyHtmlToClipboard } from '../../utils/htmlHelpers';
+import { SafeHtmlRenderer, copyHtmlToClipboard, stripHtmlTags } from '../../utils/htmlHelpers';
 import { FieldDefinition } from '../../types/fieldDefinitions';
 import { getFieldDefinitions } from '../../services/api/fieldDefinitionsService';
+import { createGmailDraft, checkGmailConnection } from '../../services/api/gmailService';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -142,6 +143,10 @@ export const LeadDetailPage: React.FC = () => {
   // Copy state for offer preview
   const [headlineCopied, setHeadlineCopied] = useState(false);
   const [messageCopied, setMessageCopied] = useState(false);
+
+  // Gmail draft creation state
+  const [creatingDraft, setCreatingDraft] = useState(false);
+  const [draftCreated, setDraftCreated] = useState(false);
 
   // Delete dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -834,6 +839,101 @@ export const LeadDetailPage: React.FC = () => {
     }
   };
 
+  const handleCreateGmailDraft = async () => {
+    if (!lead || !formData.email) {
+      setSnackbar({
+        open: true,
+        message: 'Lead must have a valid email address',
+        severity: 'error',
+      });
+      return;
+    }
+
+    setCreatingDraft(true);
+
+    try {
+      // Check Gmail connection and permissions
+      const connectionStatus = await checkGmailConnection();
+      if (!connectionStatus.connected || !connectionStatus.hasComposePermission) {
+        setSnackbar({
+          open: true,
+          message: connectionStatus.message || 'Gmail not properly configured. Please reconnect Gmail in Settings.',
+          severity: 'error',
+        });
+        setCreatingDraft(false);
+        return;
+      }
+
+      // Build lead data
+      const leadData = {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        company: formData.company,
+        companyName: formData.company,
+        status: formData.status,
+        customFields: formData.customFields,
+        createdAt: lead?.createdAt,
+        updatedAt: lead?.updatedAt,
+        outreach: lead?.outreach,
+      };
+
+      // Replace template variables and strip HTML tags from subject
+      const subjectHtml = offerHeadline
+        ? replaceTemplateVariables(offerHeadline, leadData, company)
+        : `Opportunity at ${formData.company}`;
+      const subject = stripHtmlTags(subjectHtml);
+      const bodyHtml = offerTemplate
+        ? replaceTemplateVariables(offerTemplate, leadData, company)
+        : '';
+
+      if (!bodyHtml) {
+        setSnackbar({
+          open: true,
+          message: 'No offer template configured. Please set up template in Settings.',
+          severity: 'error',
+        });
+        setCreatingDraft(false);
+        return;
+      }
+
+      // Create draft
+      const result = await createGmailDraft({
+        leadId: lead.id,
+        to: formData.email,
+        subject,
+        bodyHtml,
+      });
+
+      if (result.success) {
+        setDraftCreated(true);
+        setTimeout(() => setDraftCreated(false), 3000);
+
+        // Refresh lead data
+        const updatedLead = await getLead(lead.id);
+        if (updatedLead) {
+          setLead(updatedLead);
+          setEmailStatus(updatedLead.outreach?.email?.status || 'not_sent');
+        }
+
+        setSnackbar({
+          open: true,
+          message: `Draft created successfully! Open in Gmail: ${result.draftUrl}`,
+          severity: 'success',
+        });
+      }
+    } catch (error: any) {
+      console.error('Failed to create Gmail draft:', error);
+      setSnackbar({
+        open: true,
+        message: error.message || 'Failed to create draft. Please try again.',
+        severity: 'error',
+      });
+    } finally {
+      setCreatingDraft(false);
+    }
+  };
+
   // Render offer preview with variables replaced
   const renderPreview = () => {
     const leadData = {
@@ -911,18 +1011,45 @@ export const LeadDetailPage: React.FC = () => {
               <Typography variant="subtitle2" sx={{ fontWeight: 600, color: '#1e293b' }}>
                 Message Body
               </Typography>
-              <IconButton
-                onClick={handleCopyMessage}
-                size="small"
-                sx={{
-                  color: messageCopied ? '#10b981' : '#94a3b8',
-                  '&:hover': {
-                    color: messageCopied ? '#10b981' : '#667eea',
-                  },
-                }}
-              >
-                {messageCopied ? <CheckIcon /> : <CopyIcon />}
-              </IconButton>
+              <Box sx={{ display: 'flex', gap: 1 }}>
+                <IconButton
+                  onClick={handleCopyMessage}
+                  size="small"
+                  sx={{
+                    color: messageCopied ? '#10b981' : '#94a3b8',
+                    '&:hover': {
+                      color: messageCopied ? '#10b981' : '#667eea',
+                    },
+                  }}
+                  title="Copy message"
+                >
+                  {messageCopied ? <CheckIcon /> : <CopyIcon />}
+                </IconButton>
+                <IconButton
+                  onClick={handleCreateGmailDraft}
+                  disabled={creatingDraft || !formData.email}
+                  size="small"
+                  sx={{
+                    color: draftCreated ? '#10b981' : '#667eea',
+                    bgcolor: draftCreated ? '#dcfce7' : 'rgba(102, 126, 234, 0.1)',
+                    '&:hover': {
+                      bgcolor: draftCreated ? '#bbf7d0' : 'rgba(102, 126, 234, 0.2)',
+                    },
+                    '&:disabled': {
+                      opacity: 0.5,
+                    },
+                  }}
+                  title="Create draft in Gmail"
+                >
+                  {creatingDraft ? (
+                    <CircularProgress size={20} sx={{ color: '#667eea' }} />
+                  ) : draftCreated ? (
+                    <CheckIcon />
+                  ) : (
+                    <EmailIcon />
+                  )}
+                </IconButton>
+              </Box>
             </Box>
             <Box
               sx={{

@@ -61,21 +61,29 @@ export interface SyncMetadata {
 }
 
 /**
- * Check if Gmail is connected (has OAuth token)
+ * Check if Gmail is connected with required permissions
  */
-export async function checkGmailConnection(): Promise<{connected: boolean; message: string}> {
+export async function checkGmailConnection(): Promise<{
+  connected: boolean;
+  hasComposePermission?: boolean;
+  message: string;
+}> {
   const functions = getFunctions();
-  const checkStatus = httpsCallable<{}, {connected: boolean; message: string}>(
-    functions,
-    "checkGmailConnectionStatus"
-  );
+  const checkStatus = httpsCallable<
+    {},
+    {connected: boolean; hasComposePermission?: boolean; message: string}
+  >(functions, "checkGmailConnectionStatus");
 
   try {
     const result = await checkStatus({});
     return result.data;
   } catch (error) {
     console.error("Error checking Gmail connection:", error);
-    return {connected: false, message: "Failed to check connection status"};
+    return {
+      connected: false,
+      hasComposePermission: false,
+      message: "Failed to check connection status",
+    };
   }
 }
 
@@ -238,4 +246,58 @@ export function subscribeToSyncMetadata(
   );
 
   return unsubscribe;
+}
+
+/**
+ * Gmail Draft Creation - Interfaces
+ */
+export interface CreateGmailDraftRequest {
+  leadId: string;
+  to: string;
+  subject: string;
+  bodyHtml: string;
+  cc?: string;
+  bcc?: string;
+}
+
+export interface CreateGmailDraftResponse {
+  success: boolean;
+  draftId?: string;
+  draftUrl?: string;
+  message: string;
+  error?: string;
+}
+
+/**
+ * Create a Gmail draft for a lead
+ * @param request Draft creation parameters
+ * @returns Draft creation result with URL
+ */
+export async function createGmailDraft(
+  request: CreateGmailDraftRequest
+): Promise<CreateGmailDraftResponse> {
+  const functions = getFunctions();
+  const createDraft = httpsCallable<CreateGmailDraftRequest, CreateGmailDraftResponse>(
+    functions,
+    "createGmailDraftCloud"
+  );
+
+  try {
+    const result = await createDraft(request);
+    return result.data;
+  } catch (error: any) {
+    console.error("Error creating Gmail draft:", error);
+
+    // Parse specific error messages
+    if (error.code === "unauthenticated") {
+      throw new Error("You must be logged in to create drafts");
+    }
+    if (error.message?.includes("insufficient permissions")) {
+      throw new Error(
+        "Gmail not connected or insufficient permissions. Please reconnect Gmail in Settings."
+      );
+    }
+
+    throw new Error(`Failed to create Gmail draft: ${error.message || error}`);
+  }
 }
