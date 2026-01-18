@@ -210,6 +210,9 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
         'offerAnalysis.promptUsed': completeResult.promptUsed,
         'offerAnalysis.costInfo': completeResult.costInfo,
         'offerAnalysis.analyzedAt': serverTimestamp(),
+        // Set pending approval flag so this shows in notifications
+        pendingOfferApproval: true,
+        pendingOfferApprovalAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
 
@@ -242,11 +245,15 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
       const companyRef = doc(db, 'entities', companyId);
       await updateDoc(companyRef, {
         offerAnalysis: null,
+        // Clear pending approval flag since there's no analysis to approve
+        pendingOfferApproval: false,
+        pendingOfferApprovalAt: null,
         updatedAt: serverTimestamp(),
       });
 
       // Clear local state
       setAnalysisResult(null);
+      setChosenIdea(null);
       setWorkflowState('empty');
       showSnackbar('Ready to run new analysis', 'info');
     } catch (error: any) {
@@ -374,6 +381,9 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
       const companyRef = doc(db, 'entities', companyId);
       await updateDoc(companyRef, {
         'customFields.chosen_idea': ideaTitle,
+        // Clear pending approval flag (CEO has chosen an idea)
+        pendingOfferApproval: false,
+        pendingOfferApprovalAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
 
@@ -389,8 +399,14 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
   const handleClearChoice = async () => {
     try {
       const companyRef = doc(db, 'entities', companyId);
+      // Check if there are ideas to determine if we should set pending back to true
+      const hasIdeas = analysisResult?.ideas && analysisResult.ideas.length > 0;
+
       await updateDoc(companyRef, {
         'customFields.chosen_idea': null,
+        // Re-enable pending approval if there are ideas to choose from
+        pendingOfferApproval: hasIdeas,
+        pendingOfferApprovalAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       });
 

@@ -27,6 +27,7 @@ import {
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLocation, Link } from 'react-router-dom';
+import NotificationBell from './NotificationBell';
 
 // Styled Components for Modern Design
 const ModernAppBar = styled(AppBar)(({ theme }) => ({
@@ -286,11 +287,14 @@ const Navbar: React.FC = () => {
 
         {/* User Section */}
         <UserSection>
+          {/* Notification Bell - Visible to all users */}
+          <NotificationBell />
+
           <RoleBadge
             label={userProfile.role}
             size="small"
           />
-          
+
           <IconButton
             onClick={handleMenuClick}
             sx={{ padding: 0 }}
