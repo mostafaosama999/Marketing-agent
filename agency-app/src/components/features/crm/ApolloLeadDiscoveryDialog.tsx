@@ -52,7 +52,7 @@ export const ApolloLeadDiscoveryDialog: React.FC<ApolloLeadDiscoveryDialogProps>
   const [activeStep, setActiveStep] = useState(0);
 
   // Step 1: Configure Search
-  const [companyName, setCompanyName] = useState('');
+  const [domain, setDomain] = useState('');
   const [availableJobTitles, setAvailableJobTitles] = useState<string[]>([]);
   const [selectedJobTitles, setSelectedJobTitles] = useState<Set<string>>(new Set());
   const [loadingJobTitles, setLoadingJobTitles] = useState(true);
@@ -118,8 +118,8 @@ export const ApolloLeadDiscoveryDialog: React.FC<ApolloLeadDiscoveryDialogProps>
   const [searchProgress, setSearchProgress] = useState<string>('');
 
   const handleSearch = async () => {
-    if (!companyName.trim()) {
-      setError('Please enter a company name');
+    if (!domain.trim()) {
+      setError('Please enter a company domain');
       return;
     }
 
@@ -139,7 +139,7 @@ export const ApolloLeadDiscoveryDialog: React.FC<ApolloLeadDiscoveryDialogProps>
       // Fetch first page
       setSearchProgress('Fetching page 1...');
       const firstResult = await searchPeople({
-        companyName: companyName.trim(),
+        domain: domain.trim(),
         jobTitles: titlesArray.length > 0 ? titlesArray : undefined,
         page: 1,
         pageSize: 100,
@@ -153,7 +153,7 @@ export const ApolloLeadDiscoveryDialog: React.FC<ApolloLeadDiscoveryDialogProps>
       }
 
       if (firstData.people.length === 0) {
-        setError('No people found. Try different job titles or company name.');
+        setError('No people found. Try different job titles or domain.');
         return;
       }
 
@@ -168,7 +168,7 @@ export const ApolloLeadDiscoveryDialog: React.FC<ApolloLeadDiscoveryDialogProps>
           setSearchProgress(`Fetching page ${page} of ${totalPages}...`);
 
           const pageResult = await searchPeople({
-            companyName: companyName.trim(),
+            domain: domain.trim(),
             jobTitles: titlesArray.length > 0 ? titlesArray : undefined,
             page,
             pageSize: 100,
@@ -274,7 +274,7 @@ export const ApolloLeadDiscoveryDialog: React.FC<ApolloLeadDiscoveryDialogProps>
             name: person.name || `${person.firstName} ${person.lastName}`,
             email: person.email || '',
             phone: person.phone || '',
-            company: person.companyName || companyName,
+            company: person.companyName || domain,
             status: 'new_lead',
             customFields: {
               apolloId: person.id,
@@ -307,7 +307,7 @@ export const ApolloLeadDiscoveryDialog: React.FC<ApolloLeadDiscoveryDialogProps>
 
   const handleClose = () => {
     setActiveStep(0);
-    setCompanyName('');
+    setDomain('');
     setSearchResults([]);
     setSelectedIndices(new Set());
     setEnrichedData([]);
@@ -347,7 +347,7 @@ export const ApolloLeadDiscoveryDialog: React.FC<ApolloLeadDiscoveryDialogProps>
             Discover Leads with Apollo
           </Typography>
           <Typography variant="body2" color="text.secondary">
-            {companyName || 'PagerDuty'}
+            {domain || 'Domain'}
           </Typography>
         </DialogTitle>
 
@@ -381,14 +381,14 @@ export const ApolloLeadDiscoveryDialog: React.FC<ApolloLeadDiscoveryDialogProps>
           {activeStep === 0 && (
             <Box>
               <TextField
-                label="Company Name"
-                value={companyName}
-                onChange={(e) => setCompanyName(e.target.value)}
+                label="Company Domain"
+                value={domain}
+                onChange={(e) => setDomain(e.target.value)}
                 fullWidth
                 required
                 disabled={loading}
                 sx={{ mb: 3 }}
-                placeholder="e.g., PagerDuty"
+                placeholder="e.g., pagerduty.com"
               />
 
               <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 1 }}>
@@ -626,7 +626,7 @@ export const ApolloLeadDiscoveryDialog: React.FC<ApolloLeadDiscoveryDialogProps>
             <Button
               variant="contained"
               onClick={handleSearch}
-              disabled={loading || !companyName.trim()}
+              disabled={loading || !domain.trim()}
               startIcon={loading ? <CircularProgress size={20} /> : <SearchIcon />}
               sx={{
                 background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',

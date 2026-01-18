@@ -286,11 +286,21 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
     setSearchProgress('');
 
     try {
+      // Extract domain from company website
+      if (!company.website) {
+        setSearchError('Company website is required to search for leads. Please add a website to the company first.');
+        setSearchResults([]);
+        return;
+      }
+
+      // Extract domain from website URL
+      const domain = company.website.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
+
       // Call Firebase Cloud Function to search for people
       const functions = getFunctions();
       const searchPeople = httpsCallable<
         {
-          companyName: string;
+          domain: string;
           jobTitles: string[];
           page?: number;
           pageSize?: number;
@@ -316,7 +326,7 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
       // Fetch first page
       setSearchProgress('Fetching page 1...');
       const firstResult = await searchPeople({
-        companyName: company.name,
+        domain,
         jobTitles,
         page: 1,
         pageSize: 100,
@@ -330,7 +340,7 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
 
       if (firstResult.data.people.length === 0) {
         setSearchError(
-          'No leads found matching your criteria. Try different job titles or check if the company name is correct.'
+          'No leads found matching your criteria. Try different job titles or check if the company domain is correct.'
         );
         setSearchResults([]);
         return;
@@ -346,7 +356,7 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
           setSearchProgress(`Fetching page ${page} of ${totalPages}...`);
 
           const pageResult = await searchPeople({
-            companyName: company.name,
+            domain,
             jobTitles,
             page,
             pageSize: 100,
@@ -360,25 +370,9 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
 
       setSearchProgress('');
 
-      // Filter to only include people from the exact company (Apollo does fuzzy matching)
-      // This prevents "Kong" from matching "Hong Kong" or "China Daily Hong Kong"
-      const companyNameLower = company.name.toLowerCase().trim();
-      const filteredPeople = allPeople.filter(person => {
-        const personCompany = (person.companyName?.toLowerCase() || '').trim();
-        if (!personCompany) return false;
-
-        // Exact match
-        if (personCompany === companyNameLower) return true;
-
-        // Company name with common suffixes (e.g., "Kong" matches "Kong Inc", "Kong, Inc.")
-        const suffixPattern = new RegExp(
-          `^${companyNameLower.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}(,?\\s*(inc\\.?|llc|ltd\\.?|corp\\.?|co\\.?|company|international|technologies|tech))*$`,
-          'i'
-        );
-        if (suffixPattern.test(personCompany)) return true;
-
-        return false;
-      });
+      // When searching by domain, Apollo returns people from that specific domain
+      // No need for fuzzy matching filter since domain search is already precise
+      const filteredPeople = allPeople;
 
       setSearchResults(filteredPeople);
 
