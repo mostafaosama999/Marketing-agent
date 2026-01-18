@@ -972,6 +972,13 @@ export async function createCompaniesBatch(
           if (companyData.ratingV2 !== undefined && companyData.ratingV2 !== null) {
             updates.ratingV2 = companyData.ratingV2;
           }
+          // Merge custom fields if provided
+          if (companyData.customFields && Object.keys(companyData.customFields).length > 0) {
+            updates.customFields = {
+              ...existing.customFields,
+              ...companyData.customFields,
+            };
+          }
 
           if (Object.keys(updates).length > 0) {
             await updateCompany(existing.id, updates);

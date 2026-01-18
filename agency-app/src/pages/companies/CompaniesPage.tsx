@@ -1121,11 +1121,13 @@ export const CompaniesPage: React.FC = () => {
     // Transform rows to CompanyFormData
     const companiesData = rows.map(row => ({
       name: row.name.trim(),
-      website: row.website?.trim() || undefined,
       industry: row.industry?.trim() || undefined,
       description: row.description?.trim() || undefined,
       ratingV2: row.ratingV2?.trim()
         ? parseFloat(row.ratingV2)
+        : undefined,
+      customFields: row.website?.trim()
+        ? { website_blog_link: row.website.trim() }
         : undefined,
     }));
 
