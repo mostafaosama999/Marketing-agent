@@ -96,6 +96,10 @@ export interface Company {
     analyzedAt: Date;
   };
 
+  // Pending Offer Approval (for CEO notification system)
+  pendingOfferApproval?: boolean; // true when ideas generated, false when idea chosen
+  pendingOfferApprovalAt?: Date; // timestamp when pendingOfferApproval was last set
+
   // Writing Program Analysis
   writingProgramAnalysis?: {
     hasProgram: boolean;

@@ -100,6 +100,12 @@ function convertToCompany(id: string, data: any): Company {
         ? new Date(data.offerAnalysis.analyzedAt)
         : new Date(),
     } : undefined,
+    pendingOfferApproval: data.pendingOfferApproval || false,
+    pendingOfferApprovalAt: data.pendingOfferApprovalAt?.toDate
+      ? data.pendingOfferApprovalAt.toDate()
+      : data.pendingOfferApprovalAt
+      ? new Date(data.pendingOfferApprovalAt)
+      : undefined,
     offer: data.offer ? {
       blogIdea: data.offer.blogIdea,
       createdAt: data.offer.createdAt?.toDate

@@ -3,6 +3,7 @@ import React from 'react';
 import { BrowserRouter as Router, Routes, Route, useLocation } from 'react-router-dom';
 import { CssBaseline, Box } from '@mui/material';
 import { AuthProvider } from './contexts/AuthContext';
+import { NotificationProvider } from './contexts/NotificationContext';
 import { PipelineConfigProvider } from './contexts/PipelineConfigContext';
 import ProtectedRoute from './ProtectedRoute';
 
@@ -105,22 +106,24 @@ function AppContent() {
 function App() {
   return (
     <AuthProvider>
-      <PipelineConfigProvider>
-        <CssBaseline />
-        <Router>
-          <Routes>
-            <Route path="/login" element={<Login onLogin={() => {}} />} />
-            <Route
-              path="/*"
-              element={
-                <ProtectedRoute>
-                  <AppContent />
-                </ProtectedRoute>
-              }
-            />
-          </Routes>
-        </Router>
-      </PipelineConfigProvider>
+      <NotificationProvider>
+        <PipelineConfigProvider>
+          <CssBaseline />
+          <Router>
+            <Routes>
+              <Route path="/login" element={<Login onLogin={() => {}} />} />
+              <Route
+                path="/*"
+                element={
+                  <ProtectedRoute>
+                    <AppContent />
+                  </ProtectedRoute>
+                }
+              />
+            </Routes>
+          </Router>
+        </PipelineConfigProvider>
+      </NotificationProvider>
     </AuthProvider>
   );
 }
