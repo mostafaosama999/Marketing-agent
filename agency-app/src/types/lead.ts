@@ -83,6 +83,9 @@ export interface Lead {
   archivedBy?: string; // User ID who archived the lead
   archiveReason?: string; // Optional reason for archiving
   cascadedFrom?: string; // Company ID if archived as part of company cascade
+
+  // Manual nurture tracking
+  lastContactedDate?: Date; // Manually set date when lead was last contacted (for nurture reminders)
 }
 
 // Lead form data (for create/update operations)

@@ -21,7 +21,11 @@ import {
   TableHead,
   TableRow,
   Divider,
+  TextField,
+  IconButton,
+  Tooltip,
 } from '@mui/material';
+import { Edit as EditIcon, Check as CheckIcon, Close as CloseIcon } from '@mui/icons-material';
 import {
   Dashboard as DashboardIcon,
   TrendingUp as TrendingUpIcon,
@@ -35,7 +39,7 @@ import {
   CloudQueue as APIIcon,
   Spa as NurtureIcon,
 } from '@mui/icons-material';
-import { subscribeToLeads } from '../../services/api/leads';
+import { subscribeToLeads, updateLeadField } from '../../services/api/leads';
 import { Lead, LeadStatus } from '../../types/lead';
 import { useAuth } from '../../contexts/AuthContext';
 import { collection, onSnapshot } from 'firebase/firestore';
@@ -71,6 +75,46 @@ const ProjectMonitoring: React.FC = () => {
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
   const [usersLoading, setUsersLoading] = useState(true);
+  const [editingDateLeadId, setEditingDateLeadId] = useState<string | null>(null);
+  const [editingDateValue, setEditingDateValue] = useState<string>('');
+
+  // Format date for display
+  const formatDate = (date: Date | undefined): string => {
+    if (!date) return '—';
+    const d = date instanceof Date ? date : new Date(date);
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+  };
+
+  // Format date for input
+  const formatDateForInput = (date: Date | undefined): string => {
+    if (!date) return '';
+    const d = date instanceof Date ? date : new Date(date);
+    return d.toISOString().split('T')[0];
+  };
+
+  // Handle save date
+  const handleSaveDate = async (leadId: string) => {
+    try {
+      const dateValue = editingDateValue ? new Date(editingDateValue) : null;
+      await updateLeadField(leadId, 'lastContactedDate', dateValue);
+      setEditingDateLeadId(null);
+      setEditingDateValue('');
+    } catch (error) {
+      console.error('Failed to update last contacted date:', error);
+    }
+  };
+
+  // Handle start editing
+  const handleStartEditingDate = (lead: Lead) => {
+    setEditingDateLeadId(lead.id);
+    setEditingDateValue(formatDateForInput(lead.lastContactedDate));
+  };
+
+  // Handle cancel editing
+  const handleCancelEditingDate = () => {
+    setEditingDateLeadId(null);
+    setEditingDateValue('');
+  };
 
   // Subscribe to leads
   useEffect(() => {
@@ -113,7 +157,16 @@ const ProjectMonitoring: React.FC = () => {
     return daysSinceUpdate <= 7;
   }).length;
 
-  const nurtureLeads = leads.filter(lead => lead.status === 'nurture');
+  const nurtureLeads = leads
+    .filter(lead => lead.status === 'nurture')
+    .sort((a, b) => {
+      // Leads without date go to the bottom
+      if (!a.lastContactedDate && !b.lastContactedDate) return 0;
+      if (!a.lastContactedDate) return 1;
+      if (!b.lastContactedDate) return -1;
+      // Oldest dates first (contacted longest ago = needs follow-up soonest)
+      return new Date(a.lastContactedDate).getTime() - new Date(b.lastContactedDate).getTime();
+    });
 
   const missingData = leads.filter(lead => !lead.email || !lead.phone);
 
@@ -293,6 +346,7 @@ const ProjectMonitoring: React.FC = () => {
                             <TableCell sx={{ fontWeight: 600, bgcolor: '#f8fafc' }}>Lead Name</TableCell>
                             <TableCell sx={{ fontWeight: 600, bgcolor: '#f8fafc' }}>Company</TableCell>
                             <TableCell sx={{ fontWeight: 600, bgcolor: '#f8fafc' }}>Email</TableCell>
+                            <TableCell sx={{ fontWeight: 600, bgcolor: '#f8fafc' }}>Last Contacted</TableCell>
                           </TableRow>
                         </TableHead>
                         <TableBody>
@@ -312,6 +366,65 @@ const ProjectMonitoring: React.FC = () => {
                                 <Typography variant="body2" color="text.secondary">
                                   {lead.email || '—'}
                                 </Typography>
+                              </TableCell>
+                              <TableCell>
+                                {editingDateLeadId === lead.id ? (
+                                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                                    <TextField
+                                      type="date"
+                                      size="small"
+                                      value={editingDateValue}
+                                      onChange={(e) => setEditingDateValue(e.target.value)}
+                                      sx={{
+                                        width: 140,
+                                        '& .MuiInputBase-input': {
+                                          fontSize: '0.8rem',
+                                          py: 0.5,
+                                        }
+                                      }}
+                                    />
+                                    <IconButton
+                                      size="small"
+                                      onClick={() => handleSaveDate(lead.id)}
+                                      sx={{ color: '#4caf50' }}
+                                    >
+                                      <CheckIcon fontSize="small" />
+                                    </IconButton>
+                                    <IconButton
+                                      size="small"
+                                      onClick={handleCancelEditingDate}
+                                      sx={{ color: '#ef4444' }}
+                                    >
+                                      <CloseIcon fontSize="small" />
+                                    </IconButton>
+                                  </Box>
+                                ) : (
+                                  <Box
+                                    sx={{
+                                      display: 'flex',
+                                      alignItems: 'center',
+                                      gap: 0.5,
+                                      cursor: 'pointer',
+                                      '&:hover .edit-icon': { opacity: 1 }
+                                    }}
+                                    onClick={() => handleStartEditingDate(lead)}
+                                  >
+                                    <Typography variant="body2" color="text.secondary">
+                                      {formatDate(lead.lastContactedDate)}
+                                    </Typography>
+                                    <Tooltip title="Edit date">
+                                      <EditIcon
+                                        className="edit-icon"
+                                        sx={{
+                                          fontSize: 14,
+                                          color: '#94a3b8',
+                                          opacity: 0,
+                                          transition: 'opacity 0.2s'
+                                        }}
+                                      />
+                                    </Tooltip>
+                                  </Box>
+                                )}
                               </TableCell>
                             </TableRow>
                           ))}

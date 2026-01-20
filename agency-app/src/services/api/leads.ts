@@ -80,6 +80,7 @@ function convertToLead(id: string, data: any): Lead {
     archivedBy: data.archivedBy,
     archiveReason: data.archiveReason,
     cascadedFrom: data.cascadedFrom,
+    lastContactedDate: safeToDate(data.lastContactedDate),
     outreach: data.outreach
       ? {
           linkedIn: data.outreach.linkedIn
