@@ -18,7 +18,7 @@ const APOLLO_BASE_URL = "https://api.apollo.io/api/v1";
 const DEFAULT_TIMEOUT = 30000; // 30 seconds for search operations
 
 interface SearchPeopleRequest {
-  domain: string;
+  companyName: string;
   jobTitles: string[];
   page?: number;
   pageSize?: number;
@@ -93,7 +93,7 @@ interface SearchPeopleResponse {
 /**
  * Callable Cloud Function to search for people using Apollo.io
  *
- * @param data - Search criteria (company domain, job titles, pagination)
+ * @param data - Search criteria (company name, job titles, pagination)
  * @param context - Firebase callable function context
  * @returns Search results with people and pagination information
  *
@@ -106,7 +106,7 @@ interface SearchPeopleResponse {
  * const searchPeople = httpsCallable(functions, 'searchPeopleCloud');
  *
  * const result = await searchPeople({
- *   domain: 'acme.com',
+ *   companyName: 'Acme Inc',
  *   jobTitles: ['CMO', 'VP Marketing'],
  *   pageSize: 50
  * });
@@ -117,14 +117,14 @@ interface SearchPeopleResponse {
 export const searchPeopleCloud = functions.https.onCall(
   async (data: SearchPeopleRequest, _context): Promise<SearchPeopleResponse> => {
     functions.logger.info("Apollo API: Searching for people", {
-      domain: data.domain,
+      companyName: data.companyName,
       jobTitles: data.jobTitles,
       page: data.page || 1,
     });
 
     // Validate required fields
-    if (!data.domain) {
-      functions.logger.error("Apollo API: Missing company domain");
+    if (!data.companyName) {
+      functions.logger.error("Apollo API: Missing company name");
       return {
         people: [],
         pagination: {
@@ -134,7 +134,7 @@ export const searchPeopleCloud = functions.https.onCall(
           totalPages: 0,
         },
         success: false,
-        error: "Company domain is required",
+        error: "Company name is required",
       };
     }
 
@@ -175,7 +175,7 @@ export const searchPeopleCloud = functions.https.onCall(
     const payload: any = {
       page: data.page || 1,
       per_page: Math.min(data.pageSize || 25, 100), // Max 100 per page
-      q_organization_domains: [data.domain],
+      q_organization_name: data.companyName,
       person_titles: data.jobTitles,
     };
 

@@ -238,11 +238,11 @@ export async function enrichEmail(
  * Search for people using Apollo.io People Search API
  *
  * This function allows you to find multiple contacts matching specific criteria
- * such as job titles, company domain, and location. Useful for bulk lead generation.
+ * such as job titles, company name, and location. Useful for bulk lead generation.
  *
  * Cost: Credits vary based on results and filters used
  *
- * @param request - Search criteria (domain, job titles, pagination)
+ * @param request - Search criteria (company, job titles, pagination)
  * @param apiKey - Apollo.io API key
  * @returns Array of matching people with contact information and pagination data
  *
@@ -250,7 +250,7 @@ export async function enrichEmail(
  * ```typescript
  * // Find all CMOs at a specific company
  * const results = await searchPeople({
- *   domain: 'acme.com',
+ *   companyName: 'Acme Inc',
  *   jobTitles: ['CMO', 'Chief Marketing Officer'],
  *   page: 1,
  *   pageSize: 25
@@ -270,7 +270,7 @@ export async function searchPeople(
   apiKey: string
 ): Promise<SearchPeopleResponse> {
   console.log('Apollo API: Searching for people');
-  console.log(`  Domain: ${request.domain || 'Any'}`);
+  console.log(`  Company: ${request.companyName || 'Any'}`);
   console.log(`  Job Titles: ${request.jobTitles?.join(', ') || 'Any'}`);
   console.log(`  Page: ${request.page || 1}, Size: ${request.pageSize || 25}`);
 
@@ -296,8 +296,8 @@ export async function searchPeople(
   };
 
   // Add optional filters
-  if (request.domain) {
-    payload.q_organization_domains = [request.domain];
+  if (request.companyName) {
+    payload.q_organization_name = request.companyName;
   }
 
   if (request.jobTitles && request.jobTitles.length > 0) {
