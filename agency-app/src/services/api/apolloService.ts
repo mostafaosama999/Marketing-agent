@@ -271,6 +271,7 @@ export async function searchPeople(
 ): Promise<SearchPeopleResponse> {
   console.log('Apollo API: Searching for people');
   console.log(`  Company: ${request.companyName || 'Any'}`);
+  console.log(`  Domain: ${request.domain || 'Any'}`);
   console.log(`  Job Titles: ${request.jobTitles?.join(', ') || 'Any'}`);
   console.log(`  Page: ${request.page || 1}, Size: ${request.pageSize || 25}`);
 
@@ -298,6 +299,10 @@ export async function searchPeople(
   // Add optional filters
   if (request.companyName) {
     payload.q_organization_name = request.companyName;
+  }
+
+  if (request.domain) {
+    payload.q_organization_domains = [request.domain];
   }
 
   if (request.jobTitles && request.jobTitles.length > 0) {

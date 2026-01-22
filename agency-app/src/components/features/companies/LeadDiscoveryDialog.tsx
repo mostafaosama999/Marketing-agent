@@ -288,9 +288,16 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
     try {
       // Call Firebase Cloud Function to search for people
       const functions = getFunctions();
+      // Extract domain from company website if available
+      let domain: string | undefined;
+      if (company.website) {
+        domain = company.website.replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0];
+      }
+
       const searchPeople = httpsCallable<
         {
           companyName: string;
+          domain?: string;
           jobTitles: string[];
           page?: number;
           pageSize?: number;
@@ -317,6 +324,7 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
       setSearchProgress('Fetching page 1...');
       const firstResult = await searchPeople({
         companyName: company.name,
+        domain,
         jobTitles,
         page: 1,
         pageSize: 100,
@@ -347,6 +355,7 @@ export const LeadDiscoveryDialog: React.FC<LeadDiscoveryDialogProps> = ({
 
           const pageResult = await searchPeople({
             companyName: company.name,
+            domain,
             jobTitles,
             page,
             pageSize: 100,

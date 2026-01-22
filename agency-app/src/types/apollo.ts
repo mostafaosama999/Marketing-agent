@@ -272,10 +272,11 @@ export interface ApolloSearchPerson {
 
 /**
  * Simplified request for People Search
- * Common use case: search by company and job titles
+ * Common use case: search by company name and/or domain with job titles
  */
 export interface SearchPeopleRequest {
   companyName?: string;
+  domain?: string;
   jobTitles?: string[];
   keywords?: string;
   locations?: string[];

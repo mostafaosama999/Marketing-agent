@@ -19,6 +19,7 @@ const DEFAULT_TIMEOUT = 30000; // 30 seconds for search operations
 
 interface SearchPeopleRequest {
   companyName: string;
+  domain?: string;
   jobTitles: string[];
   page?: number;
   pageSize?: number;
@@ -118,6 +119,7 @@ export const searchPeopleCloud = functions.https.onCall(
   async (data: SearchPeopleRequest, _context): Promise<SearchPeopleResponse> => {
     functions.logger.info("Apollo API: Searching for people", {
       companyName: data.companyName,
+      domain: data.domain,
       jobTitles: data.jobTitles,
       page: data.page || 1,
     });
@@ -178,6 +180,11 @@ export const searchPeopleCloud = functions.https.onCall(
       q_organization_name: data.companyName,
       person_titles: data.jobTitles,
     };
+
+    // Add domain filter if provided
+    if (data.domain) {
+      payload.q_organization_domains = [data.domain];
+    }
 
     // Add optional filters
     if (data.keywords) {
