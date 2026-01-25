@@ -86,6 +86,11 @@ export interface Lead {
 
   // Manual nurture tracking
   lastContactedDate?: Date; // Manually set date when lead was last contacted (for nurture reminders)
+
+  // Final email for nurture leads
+  finalEmail?: string; // Final email text sent to nurture lead
+  finalEmailUpdatedAt?: Date; // When final email was last updated
+  finalEmailUpdatedBy?: string; // User ID who last updated the final email
 }
 
 // Lead form data (for create/update operations)

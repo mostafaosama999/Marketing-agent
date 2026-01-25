@@ -1,5 +1,6 @@
 // src/pages/analytics/ProjectMonitoring.tsx
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -24,6 +25,8 @@ import {
   TextField,
   IconButton,
   Tooltip,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import { Edit as EditIcon, Check as CheckIcon, Close as CloseIcon } from '@mui/icons-material';
 import {
@@ -39,6 +42,7 @@ import {
   CloudQueue as APIIcon,
   Spa as NurtureIcon,
 } from '@mui/icons-material';
+import LeadNurturingTab from './LeadNurturingTab';
 import { subscribeToLeads, updateLeadField } from '../../services/api/leads';
 import { Lead, LeadStatus } from '../../types/lead';
 import { useAuth } from '../../contexts/AuthContext';
@@ -69,11 +73,47 @@ const STATUS_LABELS: Record<LeadStatus, string> = {
   existing_client: 'Existing Client',
 };
 
+// TabPanel component for tab content
+interface TabPanelProps {
+  children?: React.ReactNode;
+  index: number;
+  value: number;
+}
+
+const TabPanel: React.FC<TabPanelProps> = ({ children, value, index }) => {
+  return (
+    <div
+      role="tabpanel"
+      hidden={value !== index}
+      id={`monitoring-tabpanel-${index}`}
+      aria-labelledby={`monitoring-tab-${index}`}
+    >
+      {value === index && <Box>{children}</Box>}
+    </div>
+  );
+};
+
 const ProjectMonitoring: React.FC = () => {
+  const [searchParams, setSearchParams] = useSearchParams();
+
+  // Initialize tab from URL parameter
+  const getInitialTab = () => {
+    const tabParam = searchParams.get('tab');
+    return tabParam === 'nurturing' ? 1 : 0;
+  };
+  const [currentTab, setCurrentTab] = useState(getInitialTab);
+
   const { userProfile } = useAuth();
   const [leads, setLeads] = useState<Lead[]>([]);
   const [users, setUsers] = useState<UserProfile[]>([]);
   const [loading, setLoading] = useState(true);
+
+  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
+    setCurrentTab(newValue);
+    // Update URL with tab parameter
+    const tabName = newValue === 1 ? 'nurturing' : 'health';
+    setSearchParams({ tab: tabName });
+  };
   const [usersLoading, setUsersLoading] = useState(true);
   const [editingDateLeadId, setEditingDateLeadId] = useState<string | null>(null);
   const [editingDateValue, setEditingDateValue] = useState<string>('');
@@ -201,31 +241,109 @@ const ProjectMonitoring: React.FC = () => {
 
   return (
     <ThemeProvider theme={modernTheme}>
-      <Box sx={{ width: '100%', p: 3 }}>
-        {/* Header */}
-        <Box sx={{ mb: 4 }}>
-          <Typography
-            variant="h4"
-            gutterBottom
+      <Box
+        sx={{
+          minHeight: '100vh',
+          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+        }}
+      >
+        {/* Fixed Header with Tabs */}
+        <Box
+          sx={{
+            position: 'sticky',
+            top: 0,
+            zIndex: 100,
+            background: 'rgba(255, 255, 255, 0.95)',
+            backdropFilter: 'blur(20px)',
+            borderBottom: '1px solid rgba(226, 232, 240, 0.5)',
+            boxShadow: '0 4px 16px rgba(0, 0, 0, 0.08)',
+          }}
+        >
+          <Tabs
+            value={currentTab}
+            onChange={handleTabChange}
+            aria-label="monitoring tabs"
             sx={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 2,
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              backgroundClip: 'text',
-              WebkitBackgroundClip: 'text',
-              color: 'transparent',
+              px: 4,
+              '& .MuiTabs-indicator': {
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                height: 3,
+                borderRadius: '3px 3px 0 0',
+              },
             }}
           >
-            <DashboardIcon fontSize="large" sx={{ color: '#667eea' }} />
-            CRM Health Monitor
-          </Typography>
-          <Typography variant="body1" color="text.secondary">
-            Quick insights into pipeline health and lead activity
-          </Typography>
+            <Tab
+              icon={<DashboardIcon />}
+              iconPosition="start"
+              label="CRM Health"
+              id="monitoring-tab-0"
+              aria-controls="monitoring-tabpanel-0"
+              sx={{
+                textTransform: 'none',
+                fontWeight: 600,
+                fontSize: '15px',
+                minHeight: 64,
+                color: '#64748b',
+                '&.Mui-selected': {
+                  color: '#667eea',
+                },
+                '&:hover': {
+                  color: '#667eea',
+                  background: 'rgba(102, 126, 234, 0.05)',
+                },
+              }}
+            />
+            <Tab
+              icon={<NurtureIcon />}
+              iconPosition="start"
+              label="Lead Nurturing"
+              id="monitoring-tab-1"
+              aria-controls="monitoring-tabpanel-1"
+              sx={{
+                textTransform: 'none',
+                fontWeight: 600,
+                fontSize: '15px',
+                minHeight: 64,
+                color: '#64748b',
+                '&.Mui-selected': {
+                  color: '#667eea',
+                },
+                '&:hover': {
+                  color: '#667eea',
+                  background: 'rgba(102, 126, 234, 0.05)',
+                },
+              }}
+            />
+          </Tabs>
         </Box>
 
-        {loading ? (
+        {/* Tab Panels */}
+        <TabPanel value={currentTab} index={0}>
+          <Box sx={{ p: 3, bgcolor: 'white', minHeight: 'calc(100vh - 64px)' }}>
+            {/* Header */}
+            <Box sx={{ mb: 4 }}>
+              <Typography
+                variant="h4"
+                gutterBottom
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 2,
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  backgroundClip: 'text',
+                  WebkitBackgroundClip: 'text',
+                  color: 'transparent',
+                }}
+              >
+                <DashboardIcon fontSize="large" sx={{ color: '#667eea' }} />
+                CRM Health Monitor
+              </Typography>
+              <Typography variant="body1" color="text.secondary">
+                Quick insights into pipeline health and lead activity
+              </Typography>
+            </Box>
+
+            {loading ? (
           <Box display="flex" justifyContent="center" my={8}>
             <CircularProgress sx={{ color: '#667eea' }} />
           </Box>
@@ -819,6 +937,14 @@ const ProjectMonitoring: React.FC = () => {
             </Grid>
           </>
         )}
+          </Box>
+        </TabPanel>
+
+        <TabPanel value={currentTab} index={1}>
+          <Box sx={{ bgcolor: 'white', minHeight: 'calc(100vh - 64px)' }}>
+            <LeadNurturingTab />
+          </Box>
+        </TabPanel>
       </Box>
     </ThemeProvider>
   );
