@@ -244,6 +244,28 @@ Auto-creates companies when leads added. Lead has `companyId` reference.
 - `generateLinkedInPost`: Blog → LinkedIn post
 - `generateBlogIdea`: Generate blog topic ideas
 
+### Blog Idea Generation Versioning
+
+Each version is a separate cloud function with complete isolation:
+
+| Version | File | Cloud Function | Description |
+|---------|------|----------------|-------------|
+| V1 | `offerAnalysis/generateOfferIdeas.ts` | `generateOfferIdeasCloud` | Template-based (original) |
+| V2 | `offerAnalysis/v2/generateIdeasV2.ts` | `generateOfferIdeasV2Cloud` | 4-stage personalized pipeline |
+
+**Rules:**
+- **V1 file is FROZEN** - do not modify
+- Each new version gets its own directory: `v3/`, `v4/`, etc.
+- Frontend calls each version's cloud function separately via `Promise.all`
+- Frontend combines results for display in tabs
+- Choosing from either version assigns to the same downstream fields
+
+**V2 Pipeline Stages:**
+1. `analyzeCompanyDifferentiators.ts` - Extract unique differentiators from Apollo/blog data
+2. `analyzeContentGaps.ts` - Identify content gaps based on tech stack and audience
+3. `promptsV2.ts` - Generate ideas from company context (no fixed concept table)
+4. `validateIdeas.ts` - LLM-as-Judge validation with personalization scores
+
 ### Integrations
 - `webflowDailySync`: Scheduler (2 AM UTC), sync Webflow CMS
 - `slackNotification`: onCreate trigger for new leads

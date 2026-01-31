@@ -136,3 +136,10 @@ export {indexNewsletters, indexSingleNewsletter, getRAGStatus} from "./rag/ragFu
 export {analyzeCompanyOffer} from "./offerAnalysis/analyzeCompanyOffer";
 export {analyzeCompanyWebsiteCloud} from "./offerAnalysis/analyzeCompanyWebsite";
 export {generateOfferIdeasCloud} from "./offerAnalysis/generateOfferIdeas";
+export {generateOfferIdeasV2Cloud} from "./offerAnalysis/v2/generateIdeasV2";
+
+// Export V2 staged cloud functions (for progressive UI updates)
+export {v2Stage1Cloud} from "./offerAnalysis/v2/stages/stage1Differentiators";
+export {v2Stage2Cloud} from "./offerAnalysis/v2/stages/stage2ContentGaps";
+export {v2Stage3Cloud} from "./offerAnalysis/v2/stages/stage3GenerateIdeas";
+export {v2Stage4Cloud} from "./offerAnalysis/v2/stages/stage4ValidateIdeas";

@@ -643,3 +643,393 @@ export async function analyzeCompanyOffer(
 
   return result.data;
 }
+
+// ============================================================
+// V2 Blog Idea Generation Types
+// ============================================================
+
+/**
+ * V2 Blog Idea - enhanced with personalization fields
+ */
+export interface BlogIdeaV2 {
+  title: string;
+  whyOnlyTheyCanWriteThis: string;
+  specificEvidence: string;
+  targetGap: string;
+  audienceFit: string;
+  whatReaderLearns: string[];
+  keyStackTools: string[];
+  angleToAvoidDuplication: string;
+  differentiatorUsed?: string;
+  contentGapFilled?: string;
+  probability?: number;
+}
+
+/**
+ * Validation scores for V2 ideas
+ */
+export interface IdeaValidationScores {
+  personalization: number;
+  uniqueness: number;
+  buzzwordDensity: number;
+  audienceRelevance: number;
+  overallScore: number;
+}
+
+/**
+ * V2 Idea Validation Result
+ */
+export interface IdeaValidationResult {
+  idea: BlogIdeaV2;
+  isValid: boolean;
+  scores: IdeaValidationScores;
+  rejectionReason?: string;
+  improvementSuggestion?: string;
+}
+
+/**
+ * Company Profile from V2 analysis
+ */
+export interface CompanyProfileV2 {
+  companyName: string;
+  uniqueDifferentiators: Array<{
+    claim: string;
+    evidence: string;
+    uniquenessScore: number;
+    category: string;
+  }>;
+  targetAudience: {
+    primary: string;
+    secondary: string;
+    sophisticationLevel: 'beginner' | 'intermediate' | 'advanced';
+    jobTitles: string[];
+    industries: string[];
+  };
+  contentStyle: {
+    tone: string;
+    technicalDepth: 'low' | 'medium' | 'high';
+    formatPreferences: string[];
+    topicsTheyLike: string[];
+    topicsToAvoid: string[];
+  };
+  growthSignals: {
+    stage: 'early' | 'growth' | 'mature';
+    fundingStage: string | null;
+    teamSize: string | null;
+    recentChanges: string[];
+    likelyPriorities: string[];
+  };
+  techStack: string[];
+  companyType: string;
+  oneLinerDescription: string;
+}
+
+/**
+ * Content Gap from V2 analysis
+ */
+export interface ContentGap {
+  topic: string;
+  gapType: 'tech_stack' | 'audience' | 'differentiation' | 'funnel' | 'trending';
+  whyItMatters: string;
+  whyTheyrePositioned: string;
+  howItDiffersFromCompetitors: string;
+  suggestedAngle: string;
+  priorityScore: number;
+}
+
+/**
+ * V2 Result structure (from 4-stage personalized pipeline)
+ */
+export interface V2IdeaGenerationResult {
+  success: boolean;
+  version: 'v2';
+  ideas: BlogIdeaV2[];
+  validationResults: IdeaValidationResult[];
+  companyProfile: CompanyProfileV2;
+  contentGaps: ContentGap[];
+  costInfo: {
+    stage1Cost: number;
+    stage2Cost: number;
+    stage3Cost: number;
+    stage4Cost: number;
+    totalCost: number;
+  };
+  generatedAt: string;
+  rejectedCount: number;
+  regenerationAttempts: number;
+}
+
+// Extended timeout for V2: 9 minutes (540000 ms) - 4-stage pipeline takes longer
+const V2_TIMEOUT = 540000;
+
+/**
+ * Generate offer ideas using V2 personalized 4-stage pipeline
+ *
+ * Stage 1: Analyze company differentiators
+ * Stage 2: Identify content gaps
+ * Stage 3: Generate ideas from company context
+ * Stage 4: Validate and filter ideas
+ */
+export async function generateOfferIdeasV2(
+  companyId: string,
+  companyName: string,
+  website: string,
+  apolloData?: {
+    industry?: string | null;
+    industries?: string[];
+    employeeCount?: number | null;
+    employeeRange?: string | null;
+    foundedYear?: number | null;
+    totalFunding?: number | null;
+    totalFundingFormatted?: string | null;
+    latestFundingStage?: string | null;
+    technologies?: string[];
+    keywords?: string[];
+    description?: string | null;
+  },
+  blogAnalysis?: {
+    isTechnical?: boolean;
+    hasCodeExamples?: boolean;
+    hasDiagrams?: boolean;
+    isDeveloperB2BSaas?: boolean;
+    monthlyFrequency?: number;
+    contentSummary?: string;
+    rating?: 'low' | 'medium' | 'high';
+  },
+  companyType?: 'Generative AI' | 'AI tool' | 'Data science' | 'Service provider' | 'Content maker'
+): Promise<V2IdeaGenerationResult> {
+  const generateIdeasV2 = httpsCallable<
+    {
+      companyId: string;
+      companyName: string;
+      website: string;
+      apolloData?: typeof apolloData;
+      blogAnalysis?: typeof blogAnalysis;
+      companyType?: typeof companyType;
+    },
+    V2IdeaGenerationResult
+  >(functions, 'generateOfferIdeasV2Cloud', { timeout: V2_TIMEOUT });
+
+  const result = await generateIdeasV2({
+    companyId,
+    companyName,
+    website,
+    apolloData,
+    blogAnalysis,
+    companyType,
+  });
+
+  return result.data;
+}
+
+// ============================================================
+// V2 Staged Cloud Functions (Progressive UI Updates)
+// ============================================================
+
+// Stage 1 timeout: 2 minutes
+const V2_STAGE_TIMEOUT = 120000;
+
+// Stage 3 timeout: 3 minutes (idea generation takes longer)
+const V2_STAGE3_TIMEOUT = 180000;
+
+/**
+ * V2 Stage 1: Analyze company differentiators
+ * Returns: Company profile with unique differentiators
+ * Typical time: 15-20 seconds
+ */
+export interface V2Stage1Response {
+  success: boolean;
+  profile: CompanyProfileV2;
+  costInfo: {
+    totalCost: number;
+    inputCost: number;
+    outputCost: number;
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    model: string;
+  };
+  analyzedAt: string;
+}
+
+export async function v2Stage1Differentiators(
+  companyId: string,
+  companyName: string,
+  website: string,
+  apolloData?: {
+    industry?: string | null;
+    industries?: string[];
+    employeeCount?: number | null;
+    employeeRange?: string | null;
+    foundedYear?: number | null;
+    totalFunding?: number | null;
+    totalFundingFormatted?: string | null;
+    latestFundingStage?: string | null;
+    technologies?: string[];
+    keywords?: string[];
+    description?: string | null;
+  },
+  blogAnalysis?: {
+    isTechnical?: boolean;
+    hasCodeExamples?: boolean;
+    hasDiagrams?: boolean;
+    isDeveloperB2BSaas?: boolean;
+    monthlyFrequency?: number;
+    contentSummary?: string;
+    rating?: 'low' | 'medium' | 'high';
+  },
+  companyType?: 'Generative AI' | 'AI tool' | 'Data science' | 'Service provider' | 'Content maker'
+): Promise<V2Stage1Response> {
+  const stage1 = httpsCallable<
+    {
+      companyId: string;
+      companyName: string;
+      website: string;
+      apolloData?: typeof apolloData;
+      blogAnalysis?: typeof blogAnalysis;
+      companyType?: typeof companyType;
+    },
+    V2Stage1Response
+  >(functions, 'v2Stage1Cloud', { timeout: V2_STAGE_TIMEOUT });
+
+  const result = await stage1({
+    companyId,
+    companyName,
+    website,
+    apolloData,
+    blogAnalysis,
+    companyType,
+  });
+
+  return result.data;
+}
+
+/**
+ * V2 Stage 2: Analyze content gaps
+ * Returns: List of content gap opportunities
+ * Typical time: 15-20 seconds
+ */
+export interface V2Stage2Response {
+  success: boolean;
+  gaps: ContentGap[];
+  costInfo: {
+    totalCost: number;
+    inputCost: number;
+    outputCost: number;
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    model: string;
+  };
+  analyzedAt: string;
+}
+
+export async function v2Stage2ContentGaps(
+  companyId: string,
+  profile: CompanyProfileV2,
+  blogContentSummary?: string
+): Promise<V2Stage2Response> {
+  const stage2 = httpsCallable<
+    {
+      companyId: string;
+      profile: CompanyProfileV2;
+      blogContentSummary?: string;
+    },
+    V2Stage2Response
+  >(functions, 'v2Stage2Cloud', { timeout: V2_STAGE_TIMEOUT });
+
+  const result = await stage2({
+    companyId,
+    profile,
+    blogContentSummary,
+  });
+
+  return result.data;
+}
+
+/**
+ * V2 Stage 3: Generate ideas
+ * Returns: Raw blog ideas (before validation)
+ * Typical time: 20-30 seconds
+ */
+export interface V2Stage3Response {
+  success: boolean;
+  ideas: BlogIdeaV2[];
+  costInfo: {
+    totalCost: number;
+    inputCost: number;
+    outputCost: number;
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    model: string;
+  };
+  generatedAt: string;
+}
+
+export async function v2Stage3GenerateIdeas(
+  companyId: string,
+  profile: CompanyProfileV2,
+  gaps: ContentGap[]
+): Promise<V2Stage3Response> {
+  const stage3 = httpsCallable<
+    {
+      companyId: string;
+      profile: CompanyProfileV2;
+      gaps: ContentGap[];
+    },
+    V2Stage3Response
+  >(functions, 'v2Stage3Cloud', { timeout: V2_STAGE3_TIMEOUT });
+
+  const result = await stage3({
+    companyId,
+    profile,
+    gaps,
+  });
+
+  return result.data;
+}
+
+/**
+ * V2 Stage 4: Validate ideas
+ * Returns: Validated ideas with scores
+ * Typical time: 10-15 seconds (uses GPT-4o-mini)
+ */
+export interface V2Stage4Response {
+  success: boolean;
+  validIdeas: IdeaValidationResult[];
+  rejectedIdeas: IdeaValidationResult[];
+  costInfo: {
+    totalCost: number;
+    inputCost: number;
+    outputCost: number;
+    inputTokens: number;
+    outputTokens: number;
+    totalTokens: number;
+    model: string;
+  };
+  validatedAt: string;
+}
+
+export async function v2Stage4ValidateIdeas(
+  companyId: string,
+  ideas: BlogIdeaV2[],
+  profile: CompanyProfileV2
+): Promise<V2Stage4Response> {
+  const stage4 = httpsCallable<
+    {
+      companyId: string;
+      ideas: BlogIdeaV2[];
+      profile: CompanyProfileV2;
+    },
+    V2Stage4Response
+  >(functions, 'v2Stage4Cloud', { timeout: V2_STAGE_TIMEOUT });
+
+  const result = await stage4({
+    companyId,
+    ideas,
+    profile,
+  });
+
+  return result.data;
+}

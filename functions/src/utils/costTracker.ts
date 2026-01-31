@@ -64,7 +64,13 @@ export type ServiceType =
   | "linkedin-post-from-trend"
   | "linkedin-meme-image"
   | "linkedin-post-ideas-rag"
-  | "linkedin-post-from-idea-rag";
+  | "linkedin-post-from-idea-rag"
+  | "v2-blog-ideas"
+  | "dual-blog-ideas"
+  | "v2-stage1-differentiators"
+  | "v2-stage2-content-gaps"
+  | "v2-stage3-generate-ideas"
+  | "v2-stage4-validate-ideas";
 
 export interface ApiCostRecord {
   userId: string;
