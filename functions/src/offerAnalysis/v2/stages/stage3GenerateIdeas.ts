@@ -3,6 +3,8 @@
  *
  * Wraps generateIdeasFromContext() as a callable cloud function.
  * Returns: Raw blog ideas before validation
+ *
+ * ENHANCED: Now accepts optional matchedConcepts for AI concept tutorials
  */
 
 import * as functions from "firebase-functions";
@@ -12,6 +14,18 @@ import { CompanyProfile } from "../analyzeCompanyDifferentiators";
 import { ContentGap } from "../analyzeContentGaps";
 import { BlogIdeaV2 } from "../promptsV2";
 import { logApiCost, CostInfo } from "../../../utils/costTracker";
+import { MatchedConcept, AIConcept } from "../../../services/aiConcepts";
+
+/**
+ * Simplified matched concept from Stage 1.5
+ */
+interface MatchedConceptSimple {
+  name: string;
+  fitScore: number;
+  fitReason: string;
+  productIntegration: string;
+  tutorialAngle: string;
+}
 
 /**
  * Request for Stage 3
@@ -20,6 +34,8 @@ export interface V2Stage3Request {
   companyId: string;
   profile: CompanyProfile;
   gaps: ContentGap[];
+  // NEW: Optional matched concepts from Stage 1.5
+  matchedConcepts?: MatchedConceptSimple[];
 }
 
 /**
@@ -79,10 +95,36 @@ export const v2Stage3Cloud = functions
       try {
         console.log(`[V2 Stage 3] Starting for: ${data.profile.companyName}`);
 
+        // Convert simplified concepts back to full MatchedConcept format if provided
+        let matchedConcepts: MatchedConcept[] | undefined;
+        if (data.matchedConcepts && data.matchedConcepts.length > 0) {
+          console.log(
+            `[V2 Stage 3] Using ${data.matchedConcepts.length} matched AI concepts`
+          );
+          matchedConcepts = data.matchedConcepts.map((mc) => ({
+            concept: {
+              id: `concept_${mc.name.toLowerCase().replace(/\s+/g, "_")}`,
+              name: mc.name,
+              description: "",
+              whyHot: "",
+              useCases: [],
+              keywords: [],
+              category: "technique" as const,
+              hypeLevel: "peak" as const,
+              lastUpdated: new Date(),
+            } as AIConcept,
+            fitScore: mc.fitScore,
+            fitReason: mc.fitReason,
+            productIntegration: mc.productIntegration,
+            tutorialAngle: mc.tutorialAngle,
+          }));
+        }
+
         const result = await generateIdeasFromContext(
           openai,
           data.profile,
-          data.gaps
+          data.gaps,
+          matchedConcepts
         );
 
         // Log cost

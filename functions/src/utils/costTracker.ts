@@ -68,6 +68,7 @@ export type ServiceType =
   | "v2-blog-ideas"
   | "dual-blog-ideas"
   | "v2-stage1-differentiators"
+  | "v2-stage1.5-concept-matching"
   | "v2-stage2-content-gaps"
   | "v2-stage3-generate-ideas"
   | "v2-stage4-validate-ideas";

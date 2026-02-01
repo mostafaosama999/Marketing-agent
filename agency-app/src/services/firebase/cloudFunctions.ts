@@ -663,6 +663,10 @@ export interface BlogIdeaV2 {
   differentiatorUsed?: string;
   contentGapFilled?: string;
   probability?: number;
+  // AI Concept fields (V2 enhancement)
+  aiConcept?: string;              // Which AI concept this relates to (if any)
+  isConceptTutorial?: boolean;     // Is this a bottom-of-funnel AI tutorial?
+  conceptFitScore?: number;        // How well the concept fits (from matching)
 }
 
 /**
@@ -948,9 +952,54 @@ export async function v2Stage2ContentGaps(
 }
 
 /**
+ * V2 Stage 1.5: AI Concept Matching
+ * Fetches trending AI concepts and matches them to the company
+ * Returns: Matched AI concepts for bottom-of-funnel tutorials
+ * Typical time: 5-15 seconds (concepts are cached 24h)
+ */
+export interface MatchedConceptSimple {
+  name: string;
+  fitScore: number;
+  fitReason: string;
+  productIntegration: string;
+  tutorialAngle: string;
+}
+
+export interface V2Stage1_5Response {
+  success: boolean;
+  matchedConcepts: MatchedConceptSimple[];
+  conceptsEvaluated: number;
+  stage0Cost: number;
+  stage1_5Cost: number;
+  cached: boolean;
+  generatedAt: string;
+}
+
+export async function v2Stage1_5ConceptMatching(
+  companyId: string,
+  profile: CompanyProfileV2
+): Promise<V2Stage1_5Response> {
+  const stage1_5 = httpsCallable<
+    {
+      companyId: string;
+      profile: CompanyProfileV2;
+    },
+    V2Stage1_5Response
+  >(functions, 'v2Stage1_5Cloud', { timeout: V2_STAGE_TIMEOUT });
+
+  const result = await stage1_5({
+    companyId,
+    profile,
+  });
+
+  return result.data;
+}
+
+/**
  * V2 Stage 3: Generate ideas
  * Returns: Raw blog ideas (before validation)
  * Typical time: 20-30 seconds
+ * Enhanced: Now accepts optional matchedConcepts for AI concept tutorials
  */
 export interface V2Stage3Response {
   success: boolean;
@@ -970,13 +1019,15 @@ export interface V2Stage3Response {
 export async function v2Stage3GenerateIdeas(
   companyId: string,
   profile: CompanyProfileV2,
-  gaps: ContentGap[]
+  gaps: ContentGap[],
+  matchedConcepts?: MatchedConceptSimple[]
 ): Promise<V2Stage3Response> {
   const stage3 = httpsCallable<
     {
       companyId: string;
       profile: CompanyProfileV2;
       gaps: ContentGap[];
+      matchedConcepts?: MatchedConceptSimple[];
     },
     V2Stage3Response
   >(functions, 'v2Stage3Cloud', { timeout: V2_STAGE3_TIMEOUT });
@@ -985,6 +1036,7 @@ export async function v2Stage3GenerateIdeas(
     companyId,
     profile,
     gaps,
+    matchedConcepts,
   });
 
   return result.data;

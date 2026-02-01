@@ -1,16 +1,20 @@
 /**
  * V2 Blog Idea Generation - Main Orchestrator
  *
- * 4-Stage Pipeline:
+ * 5-Stage Pipeline (Enhanced):
+ * 0. Extract AI concepts (cached 24h)
  * 1. Analyze company differentiators
+ * 1.5. Match AI concepts to company
  * 2. Identify content gaps
- * 3. Generate ideas (no fixed concept table)
+ * 3. Generate ideas (with matched AI concepts when available)
  * 4. Validate and filter ideas
  *
  * Key differences from V1:
  * - Ideas emerge from company context, not buzzword templates
  * - Multi-stage pipeline for deeper personalization
  * - Validation layer rejects generic ideas
+ *
+ * ENHANCEMENT: Dynamic AI concept matching for bottom-of-funnel tutorials
  */
 
 import * as functions from "firebase-functions";
@@ -33,6 +37,11 @@ import {
   logApiCost,
   CostInfo,
 } from "../../utils/costTracker";
+import {
+  getAIConcepts,
+  MatchedConcept,
+} from "../../services/aiConcepts";
+import { matchConceptsToCompany } from "./stages/stageMatchConcepts";
 
 /**
  * Request for V2 idea generation
@@ -63,9 +72,14 @@ export interface GenerateIdeasV2Response {
   // Intermediate results (for debugging/display)
   companyProfile: CompanyProfile;
   contentGaps: ContentGap[];
+  // AI concept matching results (NEW)
+  matchedConcepts?: MatchedConcept[];
+  conceptsEvaluated?: number;
   // Cost tracking
   costInfo: {
+    stage0Cost: number; // AI concept extraction (usually 0 if cached)
     stage1Cost: number;
+    stage1_5Cost: number; // Concept matching
     stage2Cost: number;
     stage3Cost: number;
     stage4Cost: number;
@@ -90,13 +104,16 @@ function cleanJsonResponse(content: string): string {
 /**
  * Stage 3: Generate ideas based on profile and gaps
  * Exported for use by staged cloud functions
+ *
+ * ENHANCED: Now accepts optional matchedConcepts for AI concept tutorials
  */
 export async function generateIdeasFromContext(
   openai: OpenAI,
   profile: CompanyProfile,
-  gaps: ContentGap[]
+  gaps: ContentGap[],
+  matchedConcepts?: MatchedConcept[]
 ): Promise<{ ideas: BlogIdeaV2[]; costInfo: CostInfo }> {
-  const prompt = buildIdeaGenerationPromptV2(profile, gaps);
+  const prompt = buildIdeaGenerationPromptV2(profile, gaps, matchedConcepts);
 
   console.log(`[V2 Stage 3] Generating ideas for: ${profile.companyName}`);
 
@@ -147,7 +164,9 @@ export async function generateIdeasFromContext(
 /**
  * Main V2 generation function
  *
- * Runs all 4 stages and returns validated ideas
+ * Runs all stages (0, 1, 1.5, 2, 3, 4) and returns validated ideas
+ *
+ * ENHANCED: Now includes AI concept extraction (Stage 0) and matching (Stage 1.5)
  */
 export async function generateIdeasV2(
   openai: OpenAI,
@@ -155,110 +174,249 @@ export async function generateIdeasV2(
   userId: string
 ): Promise<GenerateIdeasV2Response> {
   const startTime = Date.now();
+  let stage0Cost = 0;
   let stage1Cost = 0;
+  let stage1_5Cost = 0;
   let stage2Cost = 0;
   let stage3Cost = 0;
   let stage4Cost = 0;
   let regenerationAttempts = 0;
 
-  console.log(`[V2] Starting pipeline for: ${request.companyName}`);
+  // Track matched concepts for response
+  let matchedConcepts: MatchedConcept[] = [];
+  let conceptsEvaluated = 0;
 
-  // Stage 1: Analyze differentiators (or use existing profile)
-  let profile: CompanyProfile;
+  console.log(`[V2] Starting enhanced pipeline for: ${request.companyName}`);
 
-  if (request.existingProfile) {
-    console.log("[V2] Using existing company profile");
-    profile = request.existingProfile;
-  } else {
-    const stage1Result = await analyzeCompanyDifferentiators(openai, {
-      companyName: request.companyName,
-      website: request.website,
-      apolloData: request.apolloData,
-      blogAnalysis: request.blogAnalysis,
-      companyType: request.companyType,
-    });
-    profile = stage1Result.profile;
-    stage1Cost = stage1Result.costInfo.totalCost;
-  }
+  // Stage 0: Get current AI concepts (cached 24h)
+  // This is cheap/free if cached, ~$0.01 if extraction needed
+  try {
+    console.log("[V2 Stage 0] Fetching AI concepts (cached 24h)...");
+    const conceptsResult = await getAIConcepts(openai, 24);
+    stage0Cost = conceptsResult.extractionCost;
+    conceptsEvaluated = conceptsResult.concepts.length;
 
-  // Stage 2: Analyze content gaps
-  const stage2Result = await analyzeContentGaps(
-    openai,
-    profile,
-    request.blogAnalysis?.contentSummary
-  );
-  const gaps = stage2Result.gaps;
-  stage2Cost = stage2Result.costInfo.totalCost;
+    console.log(
+      `[V2 Stage 0] Got ${conceptsResult.concepts.length} concepts ` +
+        `(cached: ${conceptsResult.cached}, cost: $${stage0Cost.toFixed(4)})`
+    );
 
-  // Stage 3 & 4: Generate and validate (with regeneration loop)
-  const MAX_ATTEMPTS = 3;
-  const MIN_VALID_IDEAS = 3;
+    // Stage 1: Analyze differentiators (or use existing profile)
+    let profile: CompanyProfile;
 
-  let allValidIdeas: IdeaValidationResult[] = [];
-  let allRejectedIdeas: IdeaValidationResult[] = [];
-  let finalIdeas: BlogIdeaV2[] = [];
-
-  while (regenerationAttempts < MAX_ATTEMPTS && allValidIdeas.length < MIN_VALID_IDEAS) {
-    regenerationAttempts++;
-    console.log(`[V2] Attempt ${regenerationAttempts}/${MAX_ATTEMPTS}`);
-
-    // Stage 3: Generate ideas
-    const stage3Result = await generateIdeasFromContext(openai, profile, gaps);
-    stage3Cost += stage3Result.costInfo.totalCost;
-
-    // Stage 4: Validate ideas
-    const stage4Result = await validateIdeas(openai, stage3Result.ideas, profile);
-    stage4Cost += stage4Result.costInfo.totalCost;
-
-    // Accumulate results
-    allValidIdeas.push(...stage4Result.validIdeas);
-    allRejectedIdeas.push(...stage4Result.rejectedIdeas);
-
-    if (allValidIdeas.length >= MIN_VALID_IDEAS) {
-      console.log(`[V2] Got ${allValidIdeas.length} valid ideas, stopping regeneration`);
-      break;
+    if (request.existingProfile) {
+      console.log("[V2 Stage 1] Using existing company profile");
+      profile = request.existingProfile;
+    } else {
+      const stage1Result = await analyzeCompanyDifferentiators(openai, {
+        companyName: request.companyName,
+        website: request.website,
+        apolloData: request.apolloData,
+        blogAnalysis: request.blogAnalysis,
+        companyType: request.companyType,
+      });
+      profile = stage1Result.profile;
+      stage1Cost = stage1Result.costInfo.totalCost;
     }
 
-    if (regenerationAttempts < MAX_ATTEMPTS) {
-      console.log(
-        `[V2] Only ${allValidIdeas.length} valid ideas, regenerating...`
+    // Stage 1.5: Match AI concepts to this company
+    // This is the KEY innovation - strict matching prevents V1's "same for everyone" problem
+    if (conceptsResult.concepts.length > 0) {
+      console.log("[V2 Stage 1.5] Matching AI concepts to company...");
+      const matchingResult = await matchConceptsToCompany(
+        openai,
+        conceptsResult.concepts,
+        profile
       );
+      matchedConcepts = matchingResult.matchedConcepts;
+      stage1_5Cost = matchingResult.matchingCost;
+
+      console.log(
+        `[V2 Stage 1.5] Matched ${matchedConcepts.length}/${conceptsResult.concepts.length} concepts ` +
+          `(cost: $${stage1_5Cost.toFixed(4)})`
+      );
+
+      if (matchedConcepts.length > 0) {
+        console.log(
+          `[V2 Stage 1.5] Top matches: ${matchedConcepts
+            .slice(0, 3)
+            .map((m) => `${m.concept.name} (${m.fitScore}%)`)
+            .join(", ")}`
+        );
+      }
     }
+
+    // Stage 2: Analyze content gaps
+    const stage2Result = await analyzeContentGaps(
+      openai,
+      profile,
+      request.blogAnalysis?.contentSummary
+    );
+    const gaps = stage2Result.gaps;
+    stage2Cost = stage2Result.costInfo.totalCost;
+
+    // Stage 3 & 4: Generate and validate (with regeneration loop)
+    // ENHANCED: Pass matched concepts to Stage 3 for AI concept tutorials
+    const MAX_ATTEMPTS = 3;
+    const MIN_VALID_IDEAS = 3;
+
+    let allValidIdeas: IdeaValidationResult[] = [];
+    let allRejectedIdeas: IdeaValidationResult[] = [];
+    let finalIdeas: BlogIdeaV2[] = [];
+
+    while (regenerationAttempts < MAX_ATTEMPTS && allValidIdeas.length < MIN_VALID_IDEAS) {
+      regenerationAttempts++;
+      console.log(`[V2] Attempt ${regenerationAttempts}/${MAX_ATTEMPTS}`);
+
+      // Stage 3: Generate ideas WITH matched concepts (if any)
+      const stage3Result = await generateIdeasFromContext(
+        openai,
+        profile,
+        gaps,
+        matchedConcepts.length > 0 ? matchedConcepts : undefined
+      );
+      stage3Cost += stage3Result.costInfo.totalCost;
+
+      // Stage 4: Validate ideas
+      const stage4Result = await validateIdeas(openai, stage3Result.ideas, profile);
+      stage4Cost += stage4Result.costInfo.totalCost;
+
+      // Accumulate results
+      allValidIdeas.push(...stage4Result.validIdeas);
+      allRejectedIdeas.push(...stage4Result.rejectedIdeas);
+
+      if (allValidIdeas.length >= MIN_VALID_IDEAS) {
+        console.log(`[V2] Got ${allValidIdeas.length} valid ideas, stopping regeneration`);
+        break;
+      }
+
+      if (regenerationAttempts < MAX_ATTEMPTS) {
+        console.log(
+          `[V2] Only ${allValidIdeas.length} valid ideas, regenerating...`
+        );
+      }
+    }
+
+    // Take top 5 valid ideas by overall score
+    const sortedValidIdeas = allValidIdeas
+      .sort((a, b) => b.scores.overallScore - a.scores.overallScore)
+      .slice(0, 5);
+
+    finalIdeas = sortedValidIdeas.map((v) => v.idea);
+
+    // Calculate total cost (now includes stages 0 and 1.5)
+    const totalCost = stage0Cost + stage1Cost + stage1_5Cost + stage2Cost + stage3Cost + stage4Cost;
+
+    const duration = Date.now() - startTime;
+    const conceptTutorialCount = finalIdeas.filter((i) => i.isConceptTutorial).length;
+
+    console.log(
+      `[V2] Complete: ${finalIdeas.length} ideas (${conceptTutorialCount} AI concept tutorials) ` +
+        `in ${duration}ms, $${totalCost.toFixed(4)}`
+    );
+
+    return {
+      success: true,
+      version: "v2",
+      ideas: finalIdeas,
+      validationResults: sortedValidIdeas,
+      companyProfile: profile,
+      contentGaps: gaps,
+      // NEW: AI concept matching results
+      matchedConcepts: matchedConcepts.length > 0 ? matchedConcepts : undefined,
+      conceptsEvaluated,
+      costInfo: {
+        stage0Cost,
+        stage1Cost,
+        stage1_5Cost,
+        stage2Cost,
+        stage3Cost,
+        stage4Cost,
+        totalCost,
+      },
+      generatedAt: new Date().toISOString(),
+      rejectedCount: allRejectedIdeas.length,
+      regenerationAttempts,
+    };
+  } catch (error) {
+    // If concept extraction/matching fails, fall back to regular V2 pipeline
+    console.warn("[V2] AI concept stages failed, falling back to regular pipeline:", error);
+
+    // Stage 1: Analyze differentiators
+    let profile: CompanyProfile;
+
+    if (request.existingProfile) {
+      profile = request.existingProfile;
+    } else {
+      const stage1Result = await analyzeCompanyDifferentiators(openai, {
+        companyName: request.companyName,
+        website: request.website,
+        apolloData: request.apolloData,
+        blogAnalysis: request.blogAnalysis,
+        companyType: request.companyType,
+      });
+      profile = stage1Result.profile;
+      stage1Cost = stage1Result.costInfo.totalCost;
+    }
+
+    // Stage 2: Analyze content gaps
+    const stage2Result = await analyzeContentGaps(
+      openai,
+      profile,
+      request.blogAnalysis?.contentSummary
+    );
+    const gaps = stage2Result.gaps;
+    stage2Cost = stage2Result.costInfo.totalCost;
+
+    // Stage 3 & 4: Generate and validate (without concepts)
+    const MAX_ATTEMPTS = 3;
+    const MIN_VALID_IDEAS = 3;
+
+    let allValidIdeas: IdeaValidationResult[] = [];
+    let allRejectedIdeas: IdeaValidationResult[] = [];
+
+    while (regenerationAttempts < MAX_ATTEMPTS && allValidIdeas.length < MIN_VALID_IDEAS) {
+      regenerationAttempts++;
+
+      const stage3Result = await generateIdeasFromContext(openai, profile, gaps);
+      stage3Cost += stage3Result.costInfo.totalCost;
+
+      const stage4Result = await validateIdeas(openai, stage3Result.ideas, profile);
+      stage4Cost += stage4Result.costInfo.totalCost;
+
+      allValidIdeas.push(...stage4Result.validIdeas);
+      allRejectedIdeas.push(...stage4Result.rejectedIdeas);
+
+      if (allValidIdeas.length >= MIN_VALID_IDEAS) break;
+    }
+
+    const sortedValidIdeas = allValidIdeas
+      .sort((a, b) => b.scores.overallScore - a.scores.overallScore)
+      .slice(0, 5);
+
+    const totalCost = stage0Cost + stage1Cost + stage1_5Cost + stage2Cost + stage3Cost + stage4Cost;
+
+    return {
+      success: true,
+      version: "v2",
+      ideas: sortedValidIdeas.map((v) => v.idea),
+      validationResults: sortedValidIdeas,
+      companyProfile: profile,
+      contentGaps: gaps,
+      costInfo: {
+        stage0Cost,
+        stage1Cost,
+        stage1_5Cost,
+        stage2Cost,
+        stage3Cost,
+        stage4Cost,
+        totalCost,
+      },
+      generatedAt: new Date().toISOString(),
+      rejectedCount: allRejectedIdeas.length,
+      regenerationAttempts,
+    };
   }
-
-  // Take top 5 valid ideas by overall score
-  const sortedValidIdeas = allValidIdeas
-    .sort((a, b) => b.scores.overallScore - a.scores.overallScore)
-    .slice(0, 5);
-
-  finalIdeas = sortedValidIdeas.map((v) => v.idea);
-
-  // Calculate total cost
-  const totalCost = stage1Cost + stage2Cost + stage3Cost + stage4Cost;
-
-  const duration = Date.now() - startTime;
-  console.log(
-    `[V2] Complete: ${finalIdeas.length} ideas in ${duration}ms, $${totalCost.toFixed(4)}`
-  );
-
-  return {
-    success: true,
-    version: "v2",
-    ideas: finalIdeas,
-    validationResults: sortedValidIdeas,
-    companyProfile: profile,
-    contentGaps: gaps,
-    costInfo: {
-      stage1Cost,
-      stage2Cost,
-      stage3Cost,
-      stage4Cost,
-      totalCost,
-    },
-    generatedAt: new Date().toISOString(),
-    rejectedCount: allRejectedIdeas.length,
-    regenerationAttempts,
-  };
 }
 
 /**

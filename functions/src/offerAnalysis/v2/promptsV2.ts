@@ -3,10 +3,14 @@
  *
  * KEY DIFFERENCE FROM V1: No fixed trending concepts table.
  * Ideas emerge from company-specific context (differentiators, content gaps, tech stack).
+ *
+ * ENHANCEMENT: When matched AI concepts are provided, generates bottom-of-funnel
+ * tutorials that combine company products with trending AI concepts.
  */
 
 import { CompanyProfile } from "./analyzeCompanyDifferentiators";
 import { ContentGap } from "./analyzeContentGaps";
+import { MatchedConcept } from "../../services/aiConcepts/types";
 
 /**
  * V2 Blog Idea structure with additional fields for personalization tracking
@@ -24,6 +28,10 @@ export interface BlogIdeaV2 {
   differentiatorUsed?: string;
   contentGapFilled?: string;
   probability?: number; // For verbalized sampling
+  // AI Concept additions (V2 enhancement)
+  aiConcept?: string; // Which AI concept this relates to (if any)
+  isConceptTutorial?: boolean; // Is this a bottom-of-funnel AI tutorial?
+  conceptFitScore?: number; // How well the concept fits (from matching)
 }
 
 /**
@@ -60,6 +68,50 @@ export const BUZZWORD_BLACKLIST = [
 ];
 
 /**
+ * Build the AI concept opportunities section for the prompt
+ * Only included when matched concepts are provided
+ */
+function buildAIConceptSection(
+  companyName: string,
+  matchedConcepts?: MatchedConcept[]
+): string {
+  if (!matchedConcepts || matchedConcepts.length === 0) {
+    return "";
+  }
+
+  const conceptsFormatted = matchedConcepts
+    .slice(0, 4) // Max 4 concepts to avoid overwhelming the prompt
+    .map(
+      (mc, i) =>
+        `${i + 1}. **${mc.concept.name}** (Fit Score: ${mc.fitScore}%)
+   Why Hot: ${mc.concept.whyHot}
+   Why It Fits ${companyName}: ${mc.fitReason}
+   Product Integration: ${mc.productIntegration}
+   Suggested Tutorial Angle: "${mc.tutorialAngle}"`
+    )
+    .join("\n\n");
+
+  return `================================================================================
+AI CONCEPT OPPORTUNITIES (Matched to ${companyName})
+================================================================================
+
+These trending AI concepts have been identified as GENUINELY relevant to ${companyName}.
+Use them to create BOTTOM-OF-FUNNEL TUTORIALS that show how to use ${companyName}'s product
+WITH these AI concepts.
+
+${conceptsFormatted}
+
+INSTRUCTIONS FOR AI CONCEPT IDEAS:
+- For at least 2-3 of your 5 ideas, create tutorials combining ${companyName} + these concepts
+- Format: "How to [achieve outcome] with ${companyName} using [AI Concept]"
+- These should be PRACTICAL, implementation-focused tutorials
+- The remaining ideas can be regular personalized content
+- For each AI concept idea, set "isConceptTutorial": true and "aiConcept": "[concept name]"
+
+`;
+}
+
+/**
  * Build the V2 idea generation prompt
  *
  * Key differences from V1:
@@ -67,10 +119,14 @@ export const BUZZWORD_BLACKLIST = [
  * 2. Ideas must tie to specific differentiators or content gaps
  * 3. "Competitor test" built into the prompt
  * 4. Technology suggestions come from their actual tech stack
+ *
+ * ENHANCEMENT: When matchedConcepts are provided, includes them as
+ * opportunities for bottom-of-funnel tutorials.
  */
 export function buildIdeaGenerationPromptV2(
   profile: CompanyProfile,
-  gaps: ContentGap[]
+  gaps: ContentGap[],
+  matchedConcepts?: MatchedConcept[]
 ): string {
   // Format differentiators
   const differentiators = profile.uniqueDifferentiators
@@ -144,8 +200,7 @@ CRITICAL RULES
 
 4. **TECHNOLOGY CONSTRAINTS**:
    - Only mention technologies from their tech stack: ${techStack}
-   - Do NOT default to "GPT-5", "MCP", "Green AI", "Agentic AI" unless
-     there's evidence they actually use or care about these
+   - EXCEPTION: If AI CONCEPT OPPORTUNITIES are listed below, you MAY use those concepts
 
 5. **SPECIFICITY**:
    - NOT "How to use AI in your workflow"
@@ -155,6 +210,7 @@ CRITICAL RULES
    - Match their technical depth: ${profile.contentStyle.technicalDepth}
    - Write for: ${audienceDesc}
 
+${buildAIConceptSection(profile.companyName, matchedConcepts)}
 ================================================================================
 GENERATE 5 IDEAS
 ================================================================================
@@ -180,7 +236,9 @@ Higher probability = better fit for this specific company.
       "angleToAvoidDuplication": "How this differs from what competitors might write",
       "differentiatorUsed": "Which differentiator this showcases (if any)",
       "contentGapFilled": "Which content gap this fills (if any)",
-      "probability": 0.85
+      "probability": 0.85,
+      "aiConcept": "Name of the AI concept this idea uses (null if not an AI concept idea)",
+      "isConceptTutorial": false
     }
   ]
 }

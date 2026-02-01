@@ -140,6 +140,10 @@ export {generateOfferIdeasV2Cloud} from "./offerAnalysis/v2/generateIdeasV2";
 
 // Export V2 staged cloud functions (for progressive UI updates)
 export {v2Stage1Cloud} from "./offerAnalysis/v2/stages/stage1Differentiators";
+export {v2Stage1_5Cloud} from "./offerAnalysis/v2/stages/stage1_5ConceptMatching";
 export {v2Stage2Cloud} from "./offerAnalysis/v2/stages/stage2ContentGaps";
 export {v2Stage3Cloud} from "./offerAnalysis/v2/stages/stage3GenerateIdeas";
 export {v2Stage4Cloud} from "./offerAnalysis/v2/stages/stage4ValidateIdeas";
+
+// Export AI Concepts management functions (for V2 enhancement)
+export {refreshAIConceptsCloud, getAIConceptsStatusCloud} from "./offerAnalysis/v2/aiConceptsFunctions";

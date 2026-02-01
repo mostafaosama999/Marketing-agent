@@ -22,8 +22,10 @@ import {
   IdeaValidationResult,
   CompanyProfileV2,
   ContentGap,
+  MatchedConceptSimple,
   // V2 staged functions for progressive UI
   v2Stage1Differentiators,
+  v2Stage1_5ConceptMatching,
   v2Stage2ContentGaps,
   v2Stage3GenerateIdeas,
   v2Stage4ValidateIdeas,
@@ -32,6 +34,7 @@ import { OfferIdeasReviewUI } from './OfferIdeasReviewUI';
 import { ApprovedIdeasDisplay } from './ApprovedIdeasDisplay';
 import { CompanyAnalysisResults } from './CompanyAnalysisResults';
 import { BlogIdeasDisplay, BlogIdeasDisplayDual } from './BlogIdeasDisplay';
+import { V2StageProgressDisplay } from './V2StageProgressDisplay';
 import { doc, updateDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { db } from '../../../services/firebase/firestore';
 
@@ -68,6 +71,7 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
       validationResults?: IdeaValidationResult[];
       companyProfile?: CompanyProfileV2;
       contentGaps?: ContentGap[];
+      matchedConcepts?: MatchedConceptSimple[];
       costInfo?: any;
     };
     dualVersionGeneration?: boolean;
@@ -103,6 +107,17 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
 
   // V2 staged progress state
   const [v2StageStatus, setV2StageStatus] = useState<string | null>(null);
+
+  // V2 stage results for progressive display
+  const [v2StageResults, setV2StageResults] = useState<{
+    profile?: CompanyProfileV2;
+    matchedConcepts?: MatchedConceptSimple[];
+    conceptsEvaluated?: number;
+    contentGaps?: ContentGap[];
+    rawIdeas?: BlogIdeaV2[];
+    validatedIdeas?: IdeaValidationResult[];
+    currentStage: 'idle' | 'stage1' | 'stage1_5' | 'stage2' | 'stage3' | 'stage4' | 'complete';
+  }>({ currentStage: 'idle' });
 
   // Load existing approved ideas if they exist
   useEffect(() => {
@@ -255,9 +270,13 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
       // ========================================
       let v2Profile: CompanyProfileV2 | undefined;
       let v2Gaps: ContentGap[] = [];
+      let v2MatchedConcepts: MatchedConceptSimple[] = [];
       let v2RawIdeas: BlogIdeaV2[] = [];
       let v2ValidationResults: IdeaValidationResult[] = [];
       let v2TotalCost = 0;
+
+      // Initialize progressive display
+      setV2StageResults({ currentStage: 'stage1' });
 
       // V2 Stage 1: Analyze differentiators
       setV2StageStatus('V2: Analyzing company profile...');
@@ -271,28 +290,72 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
       );
       v2Profile = v2Stage1Result.profile;
       v2TotalCost += v2Stage1Result.costInfo.totalCost;
+
+      // Update progressive display with Stage 1 results
+      setV2StageResults(prev => ({
+        ...prev,
+        profile: v2Profile,
+        currentStage: 'stage1_5',
+      }));
       showSnackbar(`V2: Found ${v2Profile.uniqueDifferentiators.length} differentiators`, 'info');
 
-      // V2 Stage 2: Analyze content gaps
-      setV2StageStatus('V2: Finding content gaps...');
-      const v2Stage2Result = await v2Stage2ContentGaps(
-        companyId,
-        v2Profile,
-        company.blogAnalysis?.contentSummary
-      );
+      // V2 Stage 1.5: AI Concept Matching (runs in parallel with Stage 2 for speed)
+      setV2StageStatus('V2: Matching AI concepts & finding content gaps...');
+
+      // Start Stage 1.5 and Stage 2 in parallel
+      const [v2Stage1_5Result, v2Stage2Result] = await Promise.all([
+        v2Stage1_5ConceptMatching(companyId, v2Profile).catch(err => {
+          console.warn('Stage 1.5 failed (AI concepts optional):', err);
+          return {
+            matchedConcepts: [] as MatchedConceptSimple[],
+            conceptsEvaluated: 0,
+            stage0Cost: 0,
+            stage1_5Cost: 0,
+            cached: false,
+          };
+        }),
+        v2Stage2ContentGaps(companyId, v2Profile, company.blogAnalysis?.contentSummary),
+      ]);
+
+      // Process Stage 1.5 results
+      v2MatchedConcepts = v2Stage1_5Result.matchedConcepts;
+      v2TotalCost += (v2Stage1_5Result.stage0Cost || 0) + (v2Stage1_5Result.stage1_5Cost || 0);
+
+      if (v2MatchedConcepts.length > 0) {
+        showSnackbar(`V2: Matched ${v2MatchedConcepts.length} AI concepts (${v2Stage1_5Result.cached ? 'cached' : 'fresh'})`, 'info');
+      }
+
+      // Process Stage 2 results
       v2Gaps = v2Stage2Result.gaps;
       v2TotalCost += v2Stage2Result.costInfo.totalCost;
+
+      // Update progressive display with Stage 1.5 and Stage 2 results
+      setV2StageResults(prev => ({
+        ...prev,
+        matchedConcepts: v2MatchedConcepts,
+        conceptsEvaluated: v2Stage1_5Result.conceptsEvaluated || 0,
+        contentGaps: v2Gaps,
+        currentStage: 'stage3',
+      }));
       showSnackbar(`V2: Found ${v2Gaps.length} content gaps`, 'info');
 
-      // V2 Stage 3: Generate ideas (show immediately after this!)
+      // V2 Stage 3: Generate ideas WITH matched concepts
       setV2StageStatus('V2: Generating personalized ideas...');
       const v2Stage3Result = await v2Stage3GenerateIdeas(
         companyId,
         v2Profile,
-        v2Gaps
+        v2Gaps,
+        v2MatchedConcepts.length > 0 ? v2MatchedConcepts : undefined
       );
       v2RawIdeas = v2Stage3Result.ideas;
       v2TotalCost += v2Stage3Result.costInfo.totalCost;
+
+      // Update progressive display with Stage 3 results
+      setV2StageResults(prev => ({
+        ...prev,
+        rawIdeas: v2RawIdeas,
+        currentStage: 'stage4',
+      }));
 
       // Wait for V1 to complete
       const v1Result = await v1Promise;
@@ -314,12 +377,14 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
           validationResults: undefined, // Not yet validated
           companyProfile: v2Profile,
           contentGaps: v2Gaps,
+          matchedConcepts: v2MatchedConcepts, // Include matched AI concepts
           costInfo: { totalCost: v2TotalCost },
         },
         dualVersionGeneration: true,
       };
       setAnalysisResult(intermediateResult);
-      showSnackbar(`V1: ${v1Result.ideas.length} ideas, V2: ${v2RawIdeas.length} ideas (validating...)`, 'info');
+      const conceptMsg = v2MatchedConcepts.length > 0 ? ` + ${v2MatchedConcepts.length} AI concepts` : '';
+      showSnackbar(`V1: ${v1Result.ideas.length} ideas, V2: ${v2RawIdeas.length} ideas${conceptMsg} (validating...)`, 'info');
 
       // V2 Stage 4: Validate ideas (runs after ideas are visible)
       setV2StageStatus('V2: Validating ideas...');
@@ -330,6 +395,13 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
       );
       v2ValidationResults = v2Stage4Result.validIdeas;
       v2TotalCost += v2Stage4Result.costInfo.totalCost;
+
+      // Update progressive display with Stage 4 results
+      setV2StageResults(prev => ({
+        ...prev,
+        validatedIdeas: v2ValidationResults,
+        currentStage: 'complete',
+      }));
 
       // Use validated ideas if any passed, otherwise keep raw ideas
       const finalV2Ideas = v2ValidationResults.length > 0
@@ -354,8 +426,10 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
           validationResults: v2ValidationResults,
           companyProfile: v2Profile,
           contentGaps: v2Gaps,
+          matchedConcepts: v2MatchedConcepts, // Include matched AI concepts
           costInfo: {
             stage1Cost: v2Stage1Result.costInfo.totalCost,
+            stage1_5Cost: (v2Stage1_5Result.stage0Cost || 0) + (v2Stage1_5Result.stage1_5Cost || 0),
             stage2Cost: v2Stage2Result.costInfo.totalCost,
             stage3Cost: v2Stage3Result.costInfo.totalCost,
             stage4Cost: v2Stage4Result.costInfo.totalCost,
@@ -417,6 +491,7 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
       // Clear local state
       setAnalysisResult(null);
       setChosenIdea(null);
+      setV2StageResults({ currentStage: 'idle' });
       setWorkflowState('empty');
       showSnackbar('Ready to run new analysis', 'info');
     } catch (error: any) {
@@ -743,52 +818,17 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
               </>
             )}
 
-            {/* Loading indicator for Stage 2 */}
-            <Box
-              sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                alignItems: 'center',
-                justifyContent: 'center',
-                padding: 6,
-                mt: 4,
-                background: 'rgba(255, 255, 255, 0.95)',
-                backdropFilter: 'blur(20px)',
-                borderRadius: 3,
-                border: '2px dashed #667eea',
-              }}
-            >
-              <CircularProgress
-                size={50}
-                thickness={4}
-                sx={{
-                  color: '#764ba2',
-                  mb: 2,
-                }}
+            {/* V2 Progressive Stage Display */}
+            <Box sx={{ mt: 3 }}>
+              <V2StageProgressDisplay
+                profile={v2StageResults.profile}
+                matchedConcepts={v2StageResults.matchedConcepts}
+                conceptsEvaluated={v2StageResults.conceptsEvaluated}
+                contentGaps={v2StageResults.contentGaps}
+                rawIdeas={v2StageResults.rawIdeas}
+                validatedIdeas={v2StageResults.validatedIdeas}
+                currentStage={v2StageResults.currentStage}
               />
-              <Typography
-                variant="h6"
-                sx={{
-                  fontWeight: 600,
-                  color: '#1e293b',
-                  mb: 1,
-                }}
-              >
-                {v2StageStatus || 'Generating Blog Ideas...'}
-              </Typography>
-              <Typography
-                variant="body2"
-                sx={{
-                  color: '#64748b',
-                  textAlign: 'center',
-                  maxWidth: '500px',
-                }}
-              >
-                {v2StageStatus
-                  ? 'V1 runs in parallel while V2 stages complete sequentially with progress updates.'
-                  : `Creating blog ideas based on ${analysisResult?.companyAnalysis?.companyType || 'company'} analysis.`
-                }
-              </Typography>
             </Box>
           </Box>
         );
@@ -847,6 +887,7 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
                 v1Ideas={analysisResult.ideas}
                 v2Ideas={analysisResult.v2.ideas}
                 v2ValidationResults={analysisResult.v2.validationResults}
+                matchedConcepts={analysisResult.v2.matchedConcepts}
                 chosenIdeaTitle={chosenIdea}
                 chosenIdeaVersion={chosenIdeaVersion}
                 onChooseIdea={handleChooseIdea}

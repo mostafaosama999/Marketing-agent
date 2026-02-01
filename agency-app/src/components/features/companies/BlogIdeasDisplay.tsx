@@ -32,6 +32,8 @@ import {
   History as V1Icon,
   Star as StarIcon,
   TrendingUp as ScoreIcon,
+  Psychology as AIConceptIcon,
+  Bolt as TutorialIcon,
 } from '@mui/icons-material';
 
 export interface BlogIdea {
@@ -58,6 +60,10 @@ export interface BlogIdeaV2 {
   differentiatorUsed?: string;
   contentGapFilled?: string;
   probability?: number;
+  // AI Concept fields (V2 enhancement)
+  aiConcept?: string;              // Which AI concept this relates to (if any)
+  isConceptTutorial?: boolean;     // Is this a bottom-of-funnel AI tutorial?
+  conceptFitScore?: number;        // How well the concept fits (from matching)
 }
 
 // Validation scores for V2 ideas
@@ -85,11 +91,21 @@ interface BlogIdeasDisplayProps {
   onClearChoice?: () => void;
 }
 
+// Matched AI concept for display
+export interface MatchedConceptDisplay {
+  name: string;
+  fitScore: number;
+  fitReason: string;
+}
+
 // Props for dual-version display
 export interface BlogIdeasDisplayDualProps {
   v1Ideas: BlogIdea[];
   v2Ideas: BlogIdeaV2[];
   v2ValidationResults?: IdeaValidationResult[];
+  // AI Concept matching info (NEW)
+  matchedConcepts?: MatchedConceptDisplay[];
+  conceptsEvaluated?: number;
   chosenIdeaTitle?: string | null;
   chosenIdeaVersion?: 'v1' | 'v2' | null;
   onChooseIdea?: (ideaTitle: string, sourceVersion: 'v1' | 'v2') => void;
@@ -743,6 +759,28 @@ const V2IdeaCard: React.FC<{
                 {idea.title}
               </Typography>
 
+              {/* AI Concept Tutorial Badge */}
+              {idea.isConceptTutorial && idea.aiConcept && (
+                <Tooltip title={`AI Concept Tutorial: ${idea.aiConcept}${idea.conceptFitScore ? ` (${idea.conceptFitScore}% fit)` : ''}`}>
+                  <Chip
+                    icon={<AIConceptIcon sx={{ fontSize: '14px !important' }} />}
+                    label={idea.aiConcept}
+                    size="small"
+                    sx={{
+                      background: 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)',
+                      color: 'white',
+                      fontWeight: 700,
+                      fontSize: '10px',
+                      height: '22px',
+                      flexShrink: 0,
+                      '& .MuiChip-icon': {
+                        color: 'white',
+                      },
+                    }}
+                  />
+                </Tooltip>
+              )}
+
               {/* Score Badge */}
               {scores && (
                 <Chip
@@ -1154,6 +1192,57 @@ const V2IdeaCard: React.FC<{
               </Typography>
             </Box>
 
+            {/* AI Concept Tutorial Info */}
+            {idea.isConceptTutorial && idea.aiConcept && (
+              <Box
+                sx={{
+                  p: 1.5,
+                  background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.08) 0%, rgba(190, 24, 93, 0.08) 100%)',
+                  borderRadius: 2,
+                  border: '1px solid rgba(236, 72, 153, 0.2)',
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
+                  <TutorialIcon sx={{ color: '#ec4899', fontSize: '16px' }} />
+                  <Typography
+                    variant="subtitle2"
+                    sx={{
+                      fontWeight: 700,
+                      color: '#be185d',
+                      fontSize: '11px',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.5px',
+                    }}
+                  >
+                    AI Concept Tutorial
+                  </Typography>
+                  {idea.conceptFitScore && (
+                    <Chip
+                      label={`${idea.conceptFitScore}% fit`}
+                      size="small"
+                      sx={{
+                        bgcolor: 'rgba(236, 72, 153, 0.15)',
+                        color: '#be185d',
+                        fontWeight: 600,
+                        fontSize: '9px',
+                        height: '18px',
+                      }}
+                    />
+                  )}
+                </Box>
+                <Typography
+                  variant="body2"
+                  sx={{
+                    color: '#831843',
+                    fontSize: '12px',
+                    lineHeight: 1.6,
+                  }}
+                >
+                  This idea combines <strong>{idea.aiConcept}</strong> with the company's product to create a practical, implementation-focused tutorial.
+                </Typography>
+              </Box>
+            )}
+
             {/* Differentiator Used / Content Gap Filled */}
             {(idea.differentiatorUsed || idea.contentGapFilled) && (
               <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, pt: 1 }}>
@@ -1228,6 +1317,8 @@ export const BlogIdeasDisplayDual: React.FC<BlogIdeasDisplayDualProps> = ({
   v1Ideas,
   v2Ideas,
   v2ValidationResults,
+  matchedConcepts,
+  conceptsEvaluated,
   chosenIdeaTitle,
   chosenIdeaVersion,
   onChooseIdea,
@@ -1419,10 +1510,70 @@ export const BlogIdeasDisplayDual: React.FC<BlogIdeasDisplayDualProps> = ({
           }}
         >
           {activeTab === 'v2'
-            ? 'V2 ideas are generated using a 4-stage pipeline that analyzes company differentiators, content gaps, and validates each idea for personalization and uniqueness.'
+            ? 'V2 ideas are generated using a 5-stage pipeline that analyzes company differentiators, matches trending AI concepts, content gaps, and validates each idea for personalization and uniqueness.'
             : 'V1 ideas are generated using template-based prompts with trending AI concepts. These may be more generic across different companies.'}
         </Typography>
       </Box>
+
+      {/* Matched AI Concepts Summary (V2 only) */}
+      {activeTab === 'v2' && matchedConcepts && matchedConcepts.length > 0 && (
+        <Box
+          sx={{
+            mb: 2,
+            p: 1.5,
+            background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.06) 0%, rgba(190, 24, 93, 0.06) 100%)',
+            borderRadius: 2,
+            border: '1px solid rgba(236, 72, 153, 0.15)',
+          }}
+        >
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+            <AIConceptIcon sx={{ color: '#ec4899', fontSize: '18px' }} />
+            <Typography
+              sx={{
+                fontSize: '12px',
+                fontWeight: 700,
+                color: '#be185d',
+                textTransform: 'uppercase',
+                letterSpacing: '0.5px',
+              }}
+            >
+              AI Concepts Matched ({matchedConcepts.length}/{conceptsEvaluated || '?'})
+            </Typography>
+          </Box>
+          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+            {matchedConcepts.map((concept, idx) => (
+              <Tooltip key={idx} title={concept.fitReason}>
+                <Chip
+                  icon={<TutorialIcon sx={{ fontSize: '12px !important' }} />}
+                  label={`${concept.name} (${concept.fitScore}%)`}
+                  size="small"
+                  sx={{
+                    background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.15) 0%, rgba(190, 24, 93, 0.15) 100%)',
+                    color: '#be185d',
+                    fontWeight: 600,
+                    fontSize: '10px',
+                    height: '24px',
+                    border: '1px solid rgba(236, 72, 153, 0.3)',
+                    '& .MuiChip-icon': {
+                      color: '#ec4899',
+                    },
+                  }}
+                />
+              </Tooltip>
+            ))}
+          </Box>
+          <Typography
+            sx={{
+              fontSize: '11px',
+              color: '#831843',
+              mt: 1,
+              fontStyle: 'italic',
+            }}
+          >
+            Ideas marked with the pink AI badge are bottom-of-funnel tutorials combining these concepts with the company's product.
+          </Typography>
+        </Box>
+      )}
 
       {/* Ideas List */}
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
