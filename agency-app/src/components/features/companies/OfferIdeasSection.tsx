@@ -42,6 +42,7 @@ import {
   v2Stage2ContentGaps,
   v2Stage3GenerateIdeas,
   v2Stage4ValidateIdeas,
+  sendOfferSlackNotification,
 } from '../../../services/firebase/cloudFunctions';
 import { OfferIdeasReviewUI } from './OfferIdeasReviewUI';
 import { ApprovedIdeasDisplay } from './ApprovedIdeasDisplay';
@@ -138,6 +139,9 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
 
   // Track if pipelines are currently running (to prevent onSnapshot from overwriting)
   const isRunningRef = useRef(false);
+  // Ref mirror of analysisResult for reading inside async callbacks
+  const analysisResultRef = useRef(analysisResult);
+  useEffect(() => { analysisResultRef.current = analysisResult; }, [analysisResult]);
 
   // Snackbar state
   const [snackbar, setSnackbar] = useState<{
@@ -537,10 +541,25 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
         (company.customFields?.specific_requirements as string | undefined) ||
         undefined;
 
-      // Fire all 3 pipelines independently (not awaited together)
-      const v1Done = runV1Pipeline(stage1Result.companyAnalysis, websiteUrl, blogContent);
-      const v2Done = runV2Pipeline(stage1Result.companyAnalysis, websiteUrl, apolloData, blogAnalysisData);
-      const v3Done = runV3Pipeline(stage1Result.companyAnalysis, websiteUrl, apolloData, blogAnalysisData, specificRequirements);
+      // Fire all 3 pipelines independently — each returns idea count for Slack
+      let v1Count = 0, v2Count = 0, v3Count = 0;
+      let v1PipelineCost = 0, v2PipelineCost = 0, v3PipelineCost = 0;
+
+      const v1Done = runV1Pipeline(stage1Result.companyAnalysis, websiteUrl, blogContent)
+        .then(() => {
+          v1Count = analysisResultRef.current?.ideas?.length || 0;
+          v1PipelineCost = analysisResultRef.current?.costInfo?.stage2CostV1 || 0;
+        });
+      const v2Done = runV2Pipeline(stage1Result.companyAnalysis, websiteUrl, apolloData, blogAnalysisData)
+        .then(() => {
+          v2Count = analysisResultRef.current?.v2?.ideas?.length || 0;
+          v2PipelineCost = analysisResultRef.current?.v2?.costInfo?.totalCost || 0;
+        });
+      const v3Done = runV3Pipeline(stage1Result.companyAnalysis, websiteUrl, apolloData, blogAnalysisData, specificRequirements)
+        .then(() => {
+          v3Count = analysisResultRef.current?.v3?.ideas?.length || 0;
+          v3PipelineCost = analysisResultRef.current?.v3?.costInfo?.totalCost || 0;
+        });
 
       // Wait for all to settle (success or error)
       await Promise.allSettled([v1Done, v2Done, v3Done]);
@@ -548,6 +567,14 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
       // All pipelines done
       isRunningRef.current = false;
       setOverallState('complete');
+
+      // Send Slack notification now that all versions are done
+      try {
+        const totalCost = stage1Result.costInfo.totalCost + v1PipelineCost + v2PipelineCost + v3PipelineCost;
+        await sendOfferSlackNotification(company.name, v1Count, v2Count, v3Count, totalCost);
+      } catch (slackErr) {
+        console.warn('Slack notification failed:', slackErr);
+      }
 
     } catch (error: any) {
       console.error('Error in company analysis (Step 1):', error);

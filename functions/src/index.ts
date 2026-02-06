@@ -149,3 +149,6 @@ export {v2Stage4Cloud} from "./offerAnalysis/v2/stages/stage4ValidateIdeas";
 
 // Export AI Concepts management functions (for V2 enhancement)
 export {refreshAIConceptsCloud, getAIConceptsStatusCloud} from "./offerAnalysis/v2/aiConceptsFunctions";
+
+// Export Slack notification for offer generation
+export {sendOfferSlackNotificationCloud} from "./notifications/sendOfferSlackNotification";

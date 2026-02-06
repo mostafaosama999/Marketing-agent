@@ -235,11 +235,11 @@ export const BulkOfferAnalysisDialog: React.FC<BulkOfferAnalysisDialogProps> = (
               description: company.apolloEnrichment.description,
             } : undefined,
             company.blogAnalysis ? {
-              isTechnical: company.blogAnalysis.isTechnical,
-              hasCodeExamples: company.blogAnalysis.hasCodeExamples,
+              isTechnical: company.blogAnalysis.blogNature?.isTechnical,
+              hasCodeExamples: company.blogAnalysis.blogNature?.hasCodeExamples,
               isDeveloperB2BSaas: company.blogAnalysis.isDeveloperB2BSaas,
               monthlyFrequency: company.blogAnalysis.monthlyFrequency,
-              rating: company.blogAnalysis.rating as 'low' | 'medium' | 'high' | undefined,
+              rating: company.blogAnalysis.blogNature?.rating,
             } : undefined,
             companyAnalysis.companyType
           ),

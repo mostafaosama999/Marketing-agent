@@ -1289,3 +1289,21 @@ export async function v2Stage4ValidateIdeas(
 
   return result.data;
 }
+
+/**
+ * Send Slack notification after all offer versions complete
+ */
+export async function sendOfferSlackNotification(
+  companyName: string,
+  v1Count: number,
+  v2Count: number,
+  v3Count: number,
+  totalCost?: number
+): Promise<void> {
+  const sendNotification = httpsCallable<
+    { companyName: string; v1Count: number; v2Count: number; v3Count: number; totalCost?: number },
+    { success: boolean }
+  >(functions, 'sendOfferSlackNotificationCloud', { timeout: 30000 });
+
+  await sendNotification({ companyName, v1Count, v2Count, v3Count, totalCost });
+}
