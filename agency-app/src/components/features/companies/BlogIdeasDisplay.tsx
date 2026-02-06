@@ -79,6 +79,7 @@ export interface IdeaValidationScores {
   uniqueness: number;
   buzzwordDensity: number;
   audienceRelevance: number;
+  timeliness: number;
   overallScore: number;
 }
 
