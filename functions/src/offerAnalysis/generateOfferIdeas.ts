@@ -18,7 +18,6 @@ import {
   calculateCost,
   logApiCost,
 } from "../utils/costTracker";
-import {sendSlackMessage} from "../utils/slackUtils";
 import {CompanyAnalysis} from "./analyzeCompanyWebsite";
 
 /**
@@ -253,16 +252,8 @@ export const generateOfferIdeasCloud = functions
 
         console.log(`[Stage 2] Complete: ${ideas.length} ideas generated`);
 
-        // Send Slack notification for CEO
-        try {
-          await sendSlackMessage(
-            `🔔 New offers generated for *${companyName}*\nCEO approval required.`
-          );
-          console.log(`[Stage 2] Slack notification sent for: ${companyName}`);
-        } catch (slackError) {
-          // Log but don't fail the function if Slack notification fails
-          console.warn("[Stage 2] Slack notification failed:", slackError);
-        }
+        // NOTE: Slack notification moved to frontend (sent after ALL V1/V2/V3 complete)
+        // See sendOfferSlackNotificationCloud
 
         return {
           success: true,

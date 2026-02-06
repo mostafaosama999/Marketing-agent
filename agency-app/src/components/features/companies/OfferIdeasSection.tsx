@@ -139,9 +139,6 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
 
   // Track if pipelines are currently running (to prevent onSnapshot from overwriting)
   const isRunningRef = useRef(false);
-  // Ref mirror of analysisResult for reading inside async callbacks
-  const analysisResultRef = useRef(analysisResult);
-  useEffect(() => { analysisResultRef.current = analysisResult; }, [analysisResult]);
 
   // Snackbar state
   const [snackbar, setSnackbar] = useState<{
@@ -244,7 +241,7 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
     stage1CompanyAnalysis: any,
     websiteUrl: string,
     blogContent: string | undefined,
-  ) => {
+  ): Promise<{ count: number; cost: number }> => {
     setV1Status('generating');
     try {
       const v1Result = await generateOfferIdeas(
@@ -275,10 +272,12 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
 
       setV1Status('complete');
       showSnackbar(`V1: ${v1Result.ideas.length} ideas ready`, 'success');
+      return { count: v1Result.ideas.length, cost: v1Result.costInfo.totalCost };
     } catch (err: any) {
       console.error('V1 pipeline failed:', err);
       setV1Status('error');
       showSnackbar(`V1 failed: ${err.message}`, 'error');
+      return { count: 0, cost: 0 };
     }
   };
 
@@ -287,7 +286,7 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
     websiteUrl: string,
     apolloData: any,
     blogAnalysisData: any,
-  ) => {
+  ): Promise<{ count: number; cost: number }> => {
     setV2Status('generating');
     setV2StageResults({ currentStage: 'stage1' });
 
@@ -396,10 +395,12 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
       setV2Status('complete');
       const conceptMsg = v2MatchedConcepts.length > 0 ? ` + ${v2MatchedConcepts.length} AI concepts` : '';
       showSnackbar(`V2: ${finalV2Ideas.length} ideas ready${conceptMsg}`, 'success');
+      return { count: finalV2Ideas.length, cost: v2TotalCost };
     } catch (err: any) {
       console.error('V2 pipeline failed:', err);
       setV2Status('error');
       showSnackbar(`V2 failed: ${err.message}`, 'error');
+      return { count: 0, cost: 0 };
     }
   };
 
@@ -409,7 +410,7 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
     apolloData: any,
     blogAnalysisData: any,
     specificRequirements: string | undefined,
-  ) => {
+  ): Promise<{ count: number; cost: number }> => {
     setV3Status('generating');
     try {
       const v3Result = await generateOfferIdeasV3(
@@ -425,7 +426,7 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
       if (!v3Result) {
         setV3Status('error');
         showSnackbar('V3 returned no results', 'error');
-        return;
+        return { count: 0, cost: 0 };
       }
 
       // Update local state
@@ -453,10 +454,12 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
 
       setV3Status('complete');
       showSnackbar(`V3: ${v3Result.ideas.length} ideas ready`, 'success');
+      return { count: v3Result.ideas.length, cost: v3Result.costInfo?.totalCost || 0 };
     } catch (err: any) {
       console.error('V3 pipeline failed:', err);
       setV3Status('error');
       showSnackbar(`V3 failed: ${err.message}`, 'error');
+      return { count: 0, cost: 0 };
     }
   };
 
@@ -541,37 +544,26 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
         (company.customFields?.specific_requirements as string | undefined) ||
         undefined;
 
-      // Fire all 3 pipelines independently — each returns idea count for Slack
-      let v1Count = 0, v2Count = 0, v3Count = 0;
-      let v1PipelineCost = 0, v2PipelineCost = 0, v3PipelineCost = 0;
-
-      const v1Done = runV1Pipeline(stage1Result.companyAnalysis, websiteUrl, blogContent)
-        .then(() => {
-          v1Count = analysisResultRef.current?.ideas?.length || 0;
-          v1PipelineCost = analysisResultRef.current?.costInfo?.stage2CostV1 || 0;
-        });
-      const v2Done = runV2Pipeline(stage1Result.companyAnalysis, websiteUrl, apolloData, blogAnalysisData)
-        .then(() => {
-          v2Count = analysisResultRef.current?.v2?.ideas?.length || 0;
-          v2PipelineCost = analysisResultRef.current?.v2?.costInfo?.totalCost || 0;
-        });
-      const v3Done = runV3Pipeline(stage1Result.companyAnalysis, websiteUrl, apolloData, blogAnalysisData, specificRequirements)
-        .then(() => {
-          v3Count = analysisResultRef.current?.v3?.ideas?.length || 0;
-          v3PipelineCost = analysisResultRef.current?.v3?.costInfo?.totalCost || 0;
-        });
-
-      // Wait for all to settle (success or error)
-      await Promise.allSettled([v1Done, v2Done, v3Done]);
+      // Fire all 3 pipelines independently — each returns { count, cost }
+      const [v1Settled, v2Settled, v3Settled] = await Promise.allSettled([
+        runV1Pipeline(stage1Result.companyAnalysis, websiteUrl, blogContent),
+        runV2Pipeline(stage1Result.companyAnalysis, websiteUrl, apolloData, blogAnalysisData),
+        runV3Pipeline(stage1Result.companyAnalysis, websiteUrl, apolloData, blogAnalysisData, specificRequirements),
+      ]);
 
       // All pipelines done
       isRunningRef.current = false;
       setOverallState('complete');
 
+      // Extract counts/costs from settled results
+      const v1 = v1Settled.status === 'fulfilled' ? v1Settled.value : { count: 0, cost: 0 };
+      const v2 = v2Settled.status === 'fulfilled' ? v2Settled.value : { count: 0, cost: 0 };
+      const v3 = v3Settled.status === 'fulfilled' ? v3Settled.value : { count: 0, cost: 0 };
+      const totalCost = stage1Result.costInfo.totalCost + v1.cost + v2.cost + v3.cost;
+
       // Send Slack notification now that all versions are done
       try {
-        const totalCost = stage1Result.costInfo.totalCost + v1PipelineCost + v2PipelineCost + v3PipelineCost;
-        await sendOfferSlackNotification(company.name, v1Count, v2Count, v3Count, totalCost);
+        await sendOfferSlackNotification(company.name, v1.count, v2.count, v3.count, totalCost);
       } catch (slackErr) {
         console.warn('Slack notification failed:', slackErr);
       }
