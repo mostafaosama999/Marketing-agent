@@ -1979,8 +1979,13 @@ export interface BlogIdeasDisplayTripleProps {
   v3Status: VersionStatus;
   v3Debug?: any;
   onOpenV3Debug?: () => void;
-  // Common
+  // Costs
   totalCost?: number;
+  v1Cost?: number;
+  v2Cost?: number;
+  v3Cost?: number;
+  stage1Cost?: number;
+  // Common
   chosenIdeaTitle?: string | null;
   chosenIdeaVersion?: 'v1' | 'v2' | 'v3' | null;
   onChooseIdea?: (title: string, version: 'v1' | 'v2' | 'v3') => void;
@@ -2081,6 +2086,10 @@ export const BlogIdeasDisplayTriple: React.FC<BlogIdeasDisplayTripleProps> = ({
   v3Debug,
   onOpenV3Debug,
   totalCost,
+  v1Cost,
+  v2Cost,
+  v3Cost,
+  stage1Cost,
   chosenIdeaTitle,
   chosenIdeaVersion,
   onChooseIdea,
@@ -2453,6 +2462,13 @@ export const BlogIdeasDisplayTriple: React.FC<BlogIdeasDisplayTripleProps> = ({
                   />
                 ))}
               </Box>
+              {v2Cost != null && v2Cost > 0 && (
+                <Box sx={{ mt: 1.5, textAlign: 'right' }}>
+                  <Typography sx={{ fontSize: '11px', color: '#94a3b8', fontWeight: 500 }}>
+                    V2 Cost: <span style={{ color: '#8b5cf6', fontWeight: 700 }}>${v2Cost.toFixed(4)}</span>
+                  </Typography>
+                </Box>
+              )}
             </>
           ) : v2Status === 'generating' && v2StageResults ? (
             /* V2 Progressive Stage Display */
@@ -2592,6 +2608,13 @@ export const BlogIdeasDisplayTriple: React.FC<BlogIdeasDisplayTripleProps> = ({
           ) : (
             <TabStatusDisplay status={v1Status} version="V1" color="#667eea" />
           )}
+          {v1Cost != null && v1Cost > 0 && (
+            <Box sx={{ mt: 1.5, textAlign: 'right' }}>
+              <Typography sx={{ fontSize: '11px', color: '#94a3b8', fontWeight: 500 }}>
+                V1 Cost: <span style={{ color: '#667eea', fontWeight: 700 }}>${v1Cost.toFixed(4)}</span>
+              </Typography>
+            </Box>
+          )}
         </>
       )}
 
@@ -2721,6 +2744,13 @@ export const BlogIdeasDisplayTriple: React.FC<BlogIdeasDisplayTripleProps> = ({
             </Box>
           ) : (
             <TabStatusDisplay status={v3Status} version="V3" color="#0f766e" />
+          )}
+          {v3Cost != null && v3Cost > 0 && (
+            <Box sx={{ mt: 1.5, textAlign: 'right' }}>
+              <Typography sx={{ fontSize: '11px', color: '#94a3b8', fontWeight: 500 }}>
+                V3 Cost: <span style={{ color: '#0f766e', fontWeight: 700 }}>${v3Cost.toFixed(4)}</span>
+              </Typography>
+            </Box>
           )}
         </>
       )}

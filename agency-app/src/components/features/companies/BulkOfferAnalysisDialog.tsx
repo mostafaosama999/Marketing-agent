@@ -36,6 +36,7 @@ import { Company } from '../../../types/crm';
 import {
   analyzeCompanyWebsite,
   generateOfferIdeas,
+  generateOfferIdeasV2,
   generateOfferIdeasV3,
   CompanyAnalysis,
 } from '../../../services/firebase/cloudFunctions';
@@ -205,63 +206,129 @@ export const BulkOfferAnalysisDialog: React.FC<BulkOfferAnalysisDialogProps> = (
         if (cancelledRef.current) break;
 
         // ========================================
-        // STAGE 2: Generate V1 ideas
+        // STAGE 2: Generate V1, V2, V3 ideas in parallel
         // ========================================
-        const stage2Result = await generateOfferIdeas(
-          company.id,
-          company.name,
-          websiteUrl,
-          companyAnalysis,
-          company.blogAnalysis?.blogUrl || undefined
-        );
-
-        // ========================================
-        // STAGE 3: Generate independent V3 ideas (best-effort)
-        // ========================================
-        let v3IdeasCount = 0;
-        let v3Cost = 0;
-        let v3Debug: any = undefined;
-        try {
-          const v3Result = await generateOfferIdeasV3(
+        const [v1Result, v2Result, v3Result] = await Promise.allSettled([
+          // V1
+          generateOfferIdeas(
+            company.id,
+            company.name,
+            websiteUrl,
+            companyAnalysis,
+            company.blogAnalysis?.blogUrl || undefined
+          ),
+          // V2
+          generateOfferIdeasV2(
+            company.id,
+            company.name,
+            websiteUrl,
+            company.apolloEnrichment ? {
+              industry: company.apolloEnrichment.industry,
+              industries: company.apolloEnrichment.industries,
+              employeeCount: company.apolloEnrichment.employeeCount,
+              employeeRange: company.apolloEnrichment.employeeRange,
+              totalFunding: company.apolloEnrichment.totalFunding,
+              totalFundingFormatted: company.apolloEnrichment.totalFundingFormatted,
+              latestFundingStage: company.apolloEnrichment.latestFundingStage,
+              technologies: company.apolloEnrichment.technologies,
+              keywords: company.apolloEnrichment.keywords,
+              description: company.apolloEnrichment.description,
+            } : undefined,
+            company.blogAnalysis ? {
+              isTechnical: company.blogAnalysis.isTechnical,
+              hasCodeExamples: company.blogAnalysis.hasCodeExamples,
+              isDeveloperB2BSaas: company.blogAnalysis.isDeveloperB2BSaas,
+              monthlyFrequency: company.blogAnalysis.monthlyFrequency,
+              rating: company.blogAnalysis.rating as 'low' | 'medium' | 'high' | undefined,
+            } : undefined,
+            companyAnalysis.companyType
+          ),
+          // V3
+          generateOfferIdeasV3(
             company.id,
             company.name,
             websiteUrl,
             undefined,
             undefined,
             companyAnalysis.companyType
-          );
+          ),
+        ]);
 
-          v3IdeasCount = v3Result.ideas.length;
-          v3Cost = v3Result.costInfo.totalCost;
-          v3Debug = v3Result.debug;
+        let v1IdeasCount = 0;
+        let v1Cost = 0;
+        let v2IdeasCount = 0;
+        let v2Cost = 0;
+        let v3IdeasCount = 0;
+        let v3Cost = 0;
+        let v3Debug: any = undefined;
 
-          await updateDoc(doc(db, 'entities', company.id), {
-            'offerAnalysis.v3': {
-              ideas: v3Result.ideas,
-              validationResults: v3Result.validationResults,
-              matchedConcepts: v3Result.matchedConcepts,
-              trendConceptsUsed: v3Result.trendConceptsUsed,
-              debug: v3Result.debug,
-              costInfo: v3Result.costInfo,
-              generatedAt: v3Result.generatedAt,
-              regenerationAttempts: v3Result.regenerationAttempts,
-              rejectedCount: v3Result.rejectedCount,
-            },
-            'offerAnalysis.tripleVersionGeneration': true,
-            updatedAt: serverTimestamp(),
-          });
-        } catch (v3Error) {
-          console.error(`[BulkAnalysis] V3 failed for ${company.name}:`, v3Error);
+        // Process V1 result
+        if (v1Result.status === 'fulfilled') {
+          v1IdeasCount = v1Result.value.ideas.length;
+          v1Cost = v1Result.value.costInfo.totalCost;
+        } else {
+          console.error(`[BulkAnalysis] V1 failed for ${company.name}:`, v1Result.reason);
         }
 
-        const totalCostForCompany = stage1Cost + stage2Result.costInfo.totalCost + v3Cost;
+        // Process V2 result & save
+        if (v2Result.status === 'fulfilled') {
+          v2IdeasCount = v2Result.value.ideas.length;
+          v2Cost = v2Result.value.costInfo.totalCost;
+          await updateDoc(doc(db, 'entities', company.id), {
+            'offerAnalysis.v2': {
+              ideas: v2Result.value.ideas,
+              validationResults: v2Result.value.validationResults,
+              companyProfile: v2Result.value.companyProfile,
+              contentGaps: v2Result.value.contentGaps,
+              matchedConcepts: v2Result.value.matchedConcepts,
+              costInfo: v2Result.value.costInfo,
+            },
+            'offerAnalysis.dualVersionGeneration': true,
+            'offerAnalysis.costInfo.stage2CostV2': v2Cost,
+            updatedAt: serverTimestamp(),
+          });
+        } else {
+          console.error(`[BulkAnalysis] V2 failed for ${company.name}:`, v2Result.reason);
+        }
+
+        // Process V3 result & save
+        if (v3Result.status === 'fulfilled') {
+          v3IdeasCount = v3Result.value.ideas.length;
+          v3Cost = v3Result.value.costInfo.totalCost;
+          v3Debug = v3Result.value.debug;
+          await updateDoc(doc(db, 'entities', company.id), {
+            'offerAnalysis.v3': {
+              ideas: v3Result.value.ideas,
+              validationResults: v3Result.value.validationResults,
+              matchedConcepts: v3Result.value.matchedConcepts,
+              trendConceptsUsed: v3Result.value.trendConceptsUsed,
+              debug: v3Result.value.debug,
+              costInfo: v3Result.value.costInfo,
+              generatedAt: v3Result.value.generatedAt,
+              regenerationAttempts: v3Result.value.regenerationAttempts,
+              rejectedCount: v3Result.value.rejectedCount,
+            },
+            'offerAnalysis.tripleVersionGeneration': true,
+            'offerAnalysis.costInfo.stage2CostV3': v3Cost,
+            updatedAt: serverTimestamp(),
+          });
+        } else {
+          console.error(`[BulkAnalysis] V3 failed for ${company.name}:`, v3Result.reason);
+        }
+
+        // V1 must succeed for the overall company to be "success"
+        if (v1Result.status === 'rejected') {
+          throw v1Result.reason;
+        }
+
+        const totalCostForCompany = stage1Cost + v1Cost + v2Cost + v3Cost;
 
         updateProgress(
           company.id,
           'success',
           companyAnalysis.companyType,
           totalCostForCompany,
-          stage2Result.ideas.length + v3IdeasCount,
+          v1IdeasCount + v2IdeasCount + v3IdeasCount,
           companyAnalysis.companyType,
           v3Debug
         );

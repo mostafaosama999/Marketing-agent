@@ -860,6 +860,10 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
             (analysisResult?.v2?.costInfo?.totalCost || 0) +
             (analysisResult?.v3?.costInfo?.totalCost || 0)
           }
+          stage1Cost={analysisResult?.costInfo?.stage1Cost}
+          v1Cost={analysisResult?.costInfo?.stage2CostV1}
+          v2Cost={analysisResult?.v2?.costInfo?.totalCost}
+          v3Cost={analysisResult?.v3?.costInfo?.totalCost}
           chosenIdeaTitle={chosenIdea}
           chosenIdeaVersion={chosenIdeaVersion}
           onChooseIdea={handleChooseIdea}

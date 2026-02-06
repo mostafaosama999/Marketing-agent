@@ -91,6 +91,7 @@ import {
   analyzeWritingProgramDetails,
   analyzeCompanyWebsite,
   generateOfferIdeas,
+  generateOfferIdeasV2,
   generateOfferIdeasV3,
 } from '../../services/firebase/cloudFunctions';
 import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
@@ -752,43 +753,94 @@ export const CompaniesPage: React.FC = () => {
           company.blogAnalysis?.blogUrl || undefined
         );
 
-        // Stage 2: Generate V1 ideas
-        await generateOfferIdeas(
-          company.id,
-          company.name,
-          websiteUrl,
-          stage1Result.companyAnalysis,
-          company.blogAnalysis?.blogUrl || undefined
-        );
-
-        // Stage 3: Generate independent V3 ideas (best-effort)
-        try {
-          const v3Result = await generateOfferIdeasV3(
+        // Stage 2: Generate V1, V2, V3 ideas in parallel
+        const [v1Result, v2Result, v3Result] = await Promise.allSettled([
+          generateOfferIdeas(
+            company.id,
+            company.name,
+            websiteUrl,
+            stage1Result.companyAnalysis,
+            company.blogAnalysis?.blogUrl || undefined
+          ),
+          generateOfferIdeasV2(
+            company.id,
+            company.name,
+            websiteUrl,
+            company.apolloEnrichment ? {
+              industry: company.apolloEnrichment.industry,
+              industries: company.apolloEnrichment.industries,
+              employeeCount: company.apolloEnrichment.employeeCount,
+              employeeRange: company.apolloEnrichment.employeeRange,
+              totalFunding: company.apolloEnrichment.totalFunding,
+              totalFundingFormatted: company.apolloEnrichment.totalFundingFormatted,
+              latestFundingStage: company.apolloEnrichment.latestFundingStage,
+              technologies: company.apolloEnrichment.technologies,
+              keywords: company.apolloEnrichment.keywords,
+              description: company.apolloEnrichment.description,
+            } : undefined,
+            company.blogAnalysis ? {
+              isTechnical: company.blogAnalysis.isTechnical,
+              hasCodeExamples: company.blogAnalysis.hasCodeExamples,
+              isDeveloperB2BSaas: company.blogAnalysis.isDeveloperB2BSaas,
+              monthlyFrequency: company.blogAnalysis.monthlyFrequency,
+              rating: company.blogAnalysis.rating as 'low' | 'medium' | 'high' | undefined,
+            } : undefined,
+            stage1Result.companyAnalysis.companyType
+          ),
+          generateOfferIdeasV3(
             company.id,
             company.name,
             websiteUrl,
             undefined,
             undefined,
             stage1Result.companyAnalysis.companyType
-          );
+          ),
+        ]);
 
+        // V1 must succeed
+        if (v1Result.status === 'rejected') {
+          throw v1Result.reason;
+        }
+
+        // Save V2 results if successful
+        if (v2Result.status === 'fulfilled') {
           await updateDoc(doc(db, 'entities', company.id), {
-            'offerAnalysis.v3': {
-              ideas: v3Result.ideas,
-              validationResults: v3Result.validationResults,
-              matchedConcepts: v3Result.matchedConcepts,
-              trendConceptsUsed: v3Result.trendConceptsUsed,
-              debug: v3Result.debug,
-              costInfo: v3Result.costInfo,
-              generatedAt: v3Result.generatedAt,
-              regenerationAttempts: v3Result.regenerationAttempts,
-              rejectedCount: v3Result.rejectedCount,
+            'offerAnalysis.v2': {
+              ideas: v2Result.value.ideas,
+              validationResults: v2Result.value.validationResults,
+              companyProfile: v2Result.value.companyProfile,
+              contentGaps: v2Result.value.contentGaps,
+              matchedConcepts: v2Result.value.matchedConcepts,
+              costInfo: v2Result.value.costInfo,
             },
-            'offerAnalysis.tripleVersionGeneration': true,
+            'offerAnalysis.dualVersionGeneration': true,
+            'offerAnalysis.costInfo.stage2CostV2': v2Result.value.costInfo.totalCost,
             updatedAt: serverTimestamp(),
           });
-        } catch (v3Error) {
-          console.error(`[BulkOffers] V3 failed for ${company.name}:`, v3Error);
+        } else {
+          console.error(`[BulkOffers] V2 failed for ${company.name}:`, v2Result.reason);
+        }
+
+        // Save V3 results if successful
+        if (v3Result.status === 'fulfilled') {
+          await updateDoc(doc(db, 'entities', company.id), {
+            'offerAnalysis.v3': {
+              ideas: v3Result.value.ideas,
+              validationResults: v3Result.value.validationResults,
+              matchedConcepts: v3Result.value.matchedConcepts,
+              trendConceptsUsed: v3Result.value.trendConceptsUsed,
+              debug: v3Result.value.debug,
+              costInfo: v3Result.value.costInfo,
+              generatedAt: v3Result.value.generatedAt,
+              regenerationAttempts: v3Result.value.regenerationAttempts,
+              rejectedCount: v3Result.value.rejectedCount,
+            },
+            'offerAnalysis.tripleVersionGeneration': true,
+            'offerAnalysis.costInfo.stage2CostV3': v3Result.value.costInfo.totalCost,
+            updatedAt: serverTimestamp(),
+          });
+        } else {
+          console.error(`[BulkOffers] V3 failed for ${company.name}:`, v3Result.reason);
         }
 
         completed++;
