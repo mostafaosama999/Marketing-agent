@@ -177,18 +177,24 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
         if (isRunningRef.current) return;
 
         if (offerAnalysis) {
-          // Update per-version statuses — only promote to 'complete', never downgrade
+          // Update per-version statuses — only promote to 'complete' or 'error', never downgrade from 'generating'
           setV1Status(prev => {
-            if (prev === 'generating' || prev === 'error') return prev;
-            return offerAnalysis.ideas?.length > 0 ? 'complete' : prev;
+            if (prev === 'generating') return prev;
+            if (offerAnalysis.ideas?.length > 0) return 'complete';
+            if (offerAnalysis.v1Error) return 'error';
+            return prev;
           });
           setV2Status(prev => {
-            if (prev === 'generating' || prev === 'error') return prev;
-            return offerAnalysis.v2?.ideas?.length > 0 ? 'complete' : prev;
+            if (prev === 'generating') return prev;
+            if (offerAnalysis.v2?.ideas?.length > 0) return 'complete';
+            if (offerAnalysis.v2Error) return 'error';
+            return prev;
           });
           setV3Status(prev => {
-            if (prev === 'generating' || prev === 'error') return prev;
-            return offerAnalysis.v3?.ideas?.length > 0 ? 'complete' : prev;
+            if (prev === 'generating') return prev;
+            if (offerAnalysis.v3?.ideas?.length > 0) return 'complete';
+            if (offerAnalysis.v3Error) return 'error';
+            return prev;
           });
 
           // Update local analysis result
@@ -280,6 +286,12 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
       return { count: v1Result.ideas.length, cost: v1Result.costInfo.totalCost };
     } catch (err: any) {
       console.error('V1 pipeline failed:', err);
+      // Persist error to Firestore (works even if component unmounted)
+      const companyRef = doc(db, 'entities', companyId);
+      await updateDoc(companyRef, {
+        'offerAnalysis.v1Error': err.message || 'V1 pipeline failed',
+        updatedAt: serverTimestamp(),
+      }).catch(e => console.error('Failed to persist V1 error:', e));
       setV1Status('error');
       showSnackbar(`V1 failed: ${err.message}`, 'error');
       return { count: 0, cost: 0 };
@@ -403,6 +415,12 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
       return { count: finalV2Ideas.length, cost: v2TotalCost };
     } catch (err: any) {
       console.error('V2 pipeline failed:', err);
+      // Persist error to Firestore (works even if component unmounted)
+      const companyRef = doc(db, 'entities', companyId);
+      await updateDoc(companyRef, {
+        'offerAnalysis.v2Error': err.message || 'V2 pipeline failed',
+        updatedAt: serverTimestamp(),
+      }).catch(e => console.error('Failed to persist V2 error:', e));
       setV2Status('error');
       showSnackbar(`V2 failed: ${err.message}`, 'error');
       return { count: 0, cost: 0 };
@@ -462,6 +480,12 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
       return { count: v3Result.ideas.length, cost: v3Result.costInfo?.totalCost || 0 };
     } catch (err: any) {
       console.error('V3 pipeline failed:', err);
+      // Persist error to Firestore (works even if component unmounted)
+      const companyRef = doc(db, 'entities', companyId);
+      await updateDoc(companyRef, {
+        'offerAnalysis.v3Error': err.message || 'V3 pipeline failed',
+        updatedAt: serverTimestamp(),
+      }).catch(e => console.error('Failed to persist V3 error:', e));
       setV3Status('error');
       showSnackbar(`V3 failed: ${err.message}`, 'error');
       return { count: 0, cost: 0 };
@@ -569,6 +593,17 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
       const v2 = v2Settled.status === 'fulfilled' ? v2Settled.value : { count: 0, cost: 0 };
       const v3 = v3Settled.status === 'fulfilled' ? v3Settled.value : { count: 0, cost: 0 };
       const totalCost = stage1Result.costInfo.totalCost + v1.cost + v2.cost + v3.cost;
+
+      // Set pending approval flag now that ALL versions are done
+      const totalIdeas = v1.count + v2.count + v3.count;
+      if (totalIdeas > 0) {
+        const companyRef = doc(db, 'entities', companyId);
+        await updateDoc(companyRef, {
+          pendingOfferApproval: true,
+          pendingOfferApprovalAt: serverTimestamp(),
+          updatedAt: serverTimestamp(),
+        });
+      }
 
       // Send Slack notification now that all versions are done
       try {

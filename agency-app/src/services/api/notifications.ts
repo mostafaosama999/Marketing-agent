@@ -113,8 +113,12 @@ export function subscribeToRecentlyChosenOffers(
       const notifications: PendingOfferNotification[] = [];
       snapshot.forEach((doc) => {
         const data = doc.data();
-        // Only include if there's offer analysis (ideas were generated at some point)
-        if (data.offerAnalysis && data.offerAnalysis.ideas?.length > 0) {
+        // Only include if there's offer analysis with ideas from any version
+        if (data.offerAnalysis && (
+          data.offerAnalysis.ideas?.length > 0 ||
+          data.offerAnalysis.v2?.ideas?.length > 0 ||
+          data.offerAnalysis.v3?.ideas?.length > 0
+        )) {
           notifications.push(convertToNotification(doc.id, data));
         }
       });

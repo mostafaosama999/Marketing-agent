@@ -234,9 +234,7 @@ export const generateOfferIdeasCloud = functions
             analyzedAt: offerAnalysisData.analyzedAt,
             totalCost: offerAnalysisData.costInfo.totalCost,
           },
-          // Set pending offer approval flag for CEO notification
-          pendingOfferApproval: true,
-          pendingOfferApprovalAt: FieldValue.serverTimestamp(),
+          // NOTE: pendingOfferApproval is now set by the frontend after ALL V1/V2/V3 pipelines complete
           updatedAt: FieldValue.serverTimestamp(),
         }, {merge: true});
 
