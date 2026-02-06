@@ -65,9 +65,9 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
   const hasApproved = hasApprovedIdeas(company);
   const hasAnalysis = !!company.offerAnalysis;
   const hasAnyIdeas = hasAnalysis && (
-    (company.offerAnalysis?.ideas?.length > 0) ||
-    (company.offerAnalysis?.v2?.ideas?.length > 0) ||
-    (company.offerAnalysis?.v3?.ideas?.length > 0)
+    ((company.offerAnalysis?.ideas?.length ?? 0) > 0) ||
+    ((company.offerAnalysis?.v2?.ideas?.length ?? 0) > 0) ||
+    ((company.offerAnalysis?.v3?.ideas?.length ?? 0) > 0)
   );
 
   const [overallState, setOverallState] = useState<OverallState>(
@@ -76,13 +76,13 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
 
   // Per-version independent status
   const [v1Status, setV1Status] = useState<VersionStatus>(
-    company.offerAnalysis?.ideas?.length > 0 ? 'complete' : 'idle'
+    (company.offerAnalysis?.ideas?.length ?? 0) > 0 ? 'complete' : 'idle'
   );
   const [v2Status, setV2Status] = useState<VersionStatus>(
-    company.offerAnalysis?.v2?.ideas?.length > 0 ? 'complete' : 'idle'
+    (company.offerAnalysis?.v2?.ideas?.length ?? 0) > 0 ? 'complete' : 'idle'
   );
   const [v3Status, setV3Status] = useState<VersionStatus>(
-    company.offerAnalysis?.v3?.ideas?.length > 0 ? 'complete' : 'idle'
+    (company.offerAnalysis?.v3?.ideas?.length ?? 0) > 0 ? 'complete' : 'idle'
   );
 
   // Analysis result state (local mirror of Firestore data)

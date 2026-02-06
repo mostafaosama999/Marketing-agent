@@ -91,7 +91,25 @@ export interface Company {
     costInfo?: {
       stage1Cost?: number;
       stage2Cost?: number;
+      stage2CostV1?: number;
+      stage2CostV2?: number;
+      stage2CostV3?: number;
       totalCost: number;
+    };
+    dualVersionGeneration?: boolean;
+    tripleVersionGeneration?: boolean;
+    v2?: {
+      ideas: any[];
+      validationResults?: any[];
+      matchedConcepts?: any[];
+      costInfo?: any;
+      [key: string]: any;
+    };
+    v3?: {
+      ideas: any[];
+      validationResults?: any[];
+      costInfo?: any;
+      [key: string]: any;
     };
     analyzedAt: Date;
   };
