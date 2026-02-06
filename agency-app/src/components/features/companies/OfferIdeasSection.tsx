@@ -854,28 +854,17 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
           v3Status={v3Status}
           v3Debug={analysisResult?.v3?.debug}
           onOpenV3Debug={() => setIsV3DebugOpen(true)}
+          totalCost={
+            (analysisResult?.costInfo?.stage1Cost || 0) +
+            (analysisResult?.costInfo?.stage2CostV1 || 0) +
+            (analysisResult?.v2?.costInfo?.totalCost || 0) +
+            (analysisResult?.v3?.costInfo?.totalCost || 0)
+          }
           chosenIdeaTitle={chosenIdea}
           chosenIdeaVersion={chosenIdeaVersion}
           onChooseIdea={handleChooseIdea}
           onClearChoice={handleClearChoice}
         />
-
-        {/* Cost Info */}
-        {analysisResult?.costInfo && (
-          <Box
-            sx={{
-              mt: 4,
-              p: 2,
-              background: 'rgba(102, 126, 234, 0.08)',
-              borderRadius: 2,
-              textAlign: 'center',
-            }}
-          >
-            <Typography variant="caption" sx={{ color: '#64748b', fontSize: '0.75rem' }}>
-              Analysis Cost: {formatCost(analysisResult.costInfo)}
-            </Typography>
-          </Box>
-        )}
       </Box>
     );
   };

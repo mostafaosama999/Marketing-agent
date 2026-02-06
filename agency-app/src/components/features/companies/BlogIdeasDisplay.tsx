@@ -1980,6 +1980,7 @@ export interface BlogIdeasDisplayTripleProps {
   v3Debug?: any;
   onOpenV3Debug?: () => void;
   // Common
+  totalCost?: number;
   chosenIdeaTitle?: string | null;
   chosenIdeaVersion?: 'v1' | 'v2' | 'v3' | null;
   onChooseIdea?: (title: string, version: 'v1' | 'v2' | 'v3') => void;
@@ -2079,6 +2080,7 @@ export const BlogIdeasDisplayTriple: React.FC<BlogIdeasDisplayTripleProps> = ({
   v3Status,
   v3Debug,
   onOpenV3Debug,
+  totalCost,
   chosenIdeaTitle,
   chosenIdeaVersion,
   onChooseIdea,
@@ -2237,6 +2239,31 @@ export const BlogIdeasDisplayTriple: React.FC<BlogIdeasDisplayTripleProps> = ({
           )}
         </Box>
       </Box>
+
+      {/* Total Cost */}
+      {totalCost != null && totalCost > 0 && (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            gap: 0.75,
+            mb: 1.5,
+            py: 0.75,
+            px: 2,
+            background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.06) 0%, rgba(118, 75, 162, 0.06) 100%)',
+            borderRadius: 2,
+            border: '1px solid rgba(102, 126, 234, 0.12)',
+          }}
+        >
+          <Typography sx={{ fontSize: '12px', color: '#64748b', fontWeight: 500 }}>
+            Total Generation Cost:
+          </Typography>
+          <Typography sx={{ fontSize: '12px', color: '#667eea', fontWeight: 700 }}>
+            ${totalCost.toFixed(4)}
+          </Typography>
+        </Box>
+      )}
 
       {/* Version Tabs */}
       <Box sx={{ borderBottom: '1px solid #e2e8f0', mb: 2 }}>
