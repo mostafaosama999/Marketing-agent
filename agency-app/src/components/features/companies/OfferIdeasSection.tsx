@@ -166,25 +166,30 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
         const data = docSnapshot.data();
         const offerAnalysis = data?.offerAnalysis;
 
-        // Always sync chosen idea
+        // Always sync chosen idea (independent of pipeline state)
         const chosenIdeaValue = data?.customFields?.['chosen_idea'];
         const chosenIdeaVersionValue = data?.customFields?.['chosen_idea_version'] as 'v1' | 'v2' | 'v3' | undefined;
         setChosenIdea(chosenIdeaValue || null);
         setChosenIdeaVersion(chosenIdeaVersionValue || null);
 
-        // Only update from Firestore when we're NOT actively running pipelines
-        // (prevents onSnapshot from overwriting in-progress local state)
-        if (!isRunningRef.current && offerAnalysis) {
-          // Update per-version statuses from persisted data
-          if (offerAnalysis.ideas?.length > 0) {
-            setV1Status('complete');
-          }
-          if (offerAnalysis.v2?.ideas?.length > 0) {
-            setV2Status('complete');
-          }
-          if (offerAnalysis.v3?.ideas?.length > 0) {
-            setV3Status('complete');
-          }
+        // Skip all offerAnalysis updates while pipelines are running.
+        // Each pipeline manages its own state updates directly.
+        if (isRunningRef.current) return;
+
+        if (offerAnalysis) {
+          // Update per-version statuses — only promote to 'complete', never downgrade
+          setV1Status(prev => {
+            if (prev === 'generating' || prev === 'error') return prev;
+            return offerAnalysis.ideas?.length > 0 ? 'complete' : prev;
+          });
+          setV2Status(prev => {
+            if (prev === 'generating' || prev === 'error') return prev;
+            return offerAnalysis.v2?.ideas?.length > 0 ? 'complete' : prev;
+          });
+          setV3Status(prev => {
+            if (prev === 'generating' || prev === 'error') return prev;
+            return offerAnalysis.v3?.ideas?.length > 0 ? 'complete' : prev;
+          });
 
           // Update local analysis result
           setAnalysisResult({
@@ -513,6 +518,10 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
 
       // Switch to running state — tabs will now be visible
       setOverallState('running');
+      // Set all versions to generating upfront (before async pipeline calls)
+      setV1Status('generating');
+      setV2Status('generating');
+      setV3Status('generating');
 
       // Prepare shared data
       const apolloData = company.apolloEnrichment ? {
