@@ -2084,7 +2084,7 @@ export const BlogIdeasDisplayTriple: React.FC<BlogIdeasDisplayTripleProps> = ({
   onChooseIdea,
   onClearChoice,
 }) => {
-  const [activeTab, setActiveTab] = useState<'v1' | 'v2' | 'v3'>('v2');
+  const [activeTab, setActiveTab] = useState<'v1' | 'v2' | 'v3'>('v1');
   const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
   const userSwitchedTab = useRef(false);
 
@@ -2092,11 +2092,11 @@ export const BlogIdeasDisplayTriple: React.FC<BlogIdeasDisplayTripleProps> = ({
   useEffect(() => {
     if (userSwitchedTab.current) return;
 
-    // Priority: V2 > V1 > V3 for auto-switch
-    if (v2Status === 'complete' && v2Ideas.length > 0) {
-      setActiveTab('v2');
-    } else if (v1Status === 'complete' && v1Ideas.length > 0) {
+    // Priority: V1 > V2 > V3 for auto-switch
+    if (v1Status === 'complete' && v1Ideas.length > 0) {
       setActiveTab('v1');
+    } else if (v2Status === 'complete' && v2Ideas.length > 0) {
+      setActiveTab('v2');
     } else if (v3Status === 'complete' && v3Ideas.length > 0) {
       setActiveTab('v3');
     }
@@ -2253,35 +2253,6 @@ export const BlogIdeasDisplayTriple: React.FC<BlogIdeasDisplayTripleProps> = ({
           }}
         >
           <Tab
-            value="v2"
-            icon={
-              <Badge
-                badgeContent={getTabBadge(v2Status, v2Ideas.length)}
-                color="secondary"
-                sx={{
-                  '& .MuiBadge-badge': {
-                    background: versionColors.v2.gradient,
-                    color: 'white',
-                    fontWeight: 700,
-                    fontSize: '10px',
-                  },
-                }}
-              >
-                <V2Icon sx={{ fontSize: '18px' }} />
-              </Badge>
-            }
-            label="V2 (Personalized)"
-            iconPosition="start"
-            sx={{
-              textTransform: 'none',
-              fontWeight: 600,
-              fontSize: '13px',
-              minHeight: 42,
-              color: activeTab === 'v2' ? '#8b5cf6' : '#64748b',
-              '&.Mui-selected': { color: '#8b5cf6' },
-            }}
-          />
-          <Tab
             value="v1"
             icon={
               <Badge
@@ -2308,6 +2279,35 @@ export const BlogIdeasDisplayTriple: React.FC<BlogIdeasDisplayTripleProps> = ({
               minHeight: 42,
               color: activeTab === 'v1' ? '#667eea' : '#64748b',
               '&.Mui-selected': { color: '#667eea' },
+            }}
+          />
+          <Tab
+            value="v2"
+            icon={
+              <Badge
+                badgeContent={getTabBadge(v2Status, v2Ideas.length)}
+                color="secondary"
+                sx={{
+                  '& .MuiBadge-badge': {
+                    background: versionColors.v2.gradient,
+                    color: 'white',
+                    fontWeight: 700,
+                    fontSize: '10px',
+                  },
+                }}
+              >
+                <V2Icon sx={{ fontSize: '18px' }} />
+              </Badge>
+            }
+            label="V2 (Personalized)"
+            iconPosition="start"
+            sx={{
+              textTransform: 'none',
+              fontWeight: 600,
+              fontSize: '13px',
+              minHeight: 42,
+              color: activeTab === 'v2' ? '#8b5cf6' : '#64748b',
+              '&.Mui-selected': { color: '#8b5cf6' },
             }}
           />
           <Tab
