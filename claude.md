@@ -322,6 +322,16 @@ Each version is a separate cloud function with complete isolation:
 
 ---
 
+## Feature Documentation
+
+**CRITICAL: Before working on any feature, check `/docs` for existing documentation.** Features in this codebase are complex and have non-obvious constraints (frozen files, caching strategies, multi-pipeline independence requirements). Reading the relevant doc first prevents breaking existing behavior.
+
+| Doc | Feature |
+|-----|---------|
+| `docs/OFFER_IDEA_GENERATION.md` | V1/V2/V3 blog idea generation, AI concepts, bulk ops, costs |
+
+---
+
 ## Best Practices & Troubleshooting
 
 ### Feature Independence (CRITICAL)
