@@ -28,14 +28,28 @@ interface MatchedConceptSimple {
 }
 
 /**
+ * Simplified raw concept from Stage 0 (for fallback injection)
+ */
+interface RawConceptSimple {
+  name: string;
+  description: string;
+  whyHot: string;
+  useCases: string[];
+  category: string;
+  hypeLevel: string;
+}
+
+/**
  * Request for Stage 3
  */
 export interface V2Stage3Request {
   companyId: string;
   profile: CompanyProfile;
   gaps: ContentGap[];
-  // NEW: Optional matched concepts from Stage 1.5
+  // Optional matched concepts from Stage 1.5
   matchedConcepts?: MatchedConceptSimple[];
+  // Optional raw concepts from Stage 0 (fallback when no matches)
+  allConcepts?: RawConceptSimple[];
 }
 
 /**
@@ -120,11 +134,31 @@ export const v2Stage3Cloud = functions
           }));
         }
 
+        // Convert simplified raw concepts to AIConcept format for fallback
+        let allConcepts: AIConcept[] | undefined;
+        if (data.allConcepts && data.allConcepts.length > 0) {
+          console.log(
+            `[V2 Stage 3] ${data.allConcepts.length} raw concepts available as fallback`
+          );
+          allConcepts = data.allConcepts.map((c) => ({
+            id: `concept_${c.name.toLowerCase().replace(/\s+/g, "_")}`,
+            name: c.name,
+            description: c.description,
+            whyHot: c.whyHot,
+            useCases: c.useCases,
+            keywords: [],
+            category: c.category as AIConcept["category"],
+            hypeLevel: c.hypeLevel as AIConcept["hypeLevel"],
+            lastUpdated: new Date(),
+          }));
+        }
+
         const result = await generateIdeasFromContext(
           openai,
           data.profile,
           data.gaps,
-          matchedConcepts
+          matchedConcepts,
+          allConcepts
         );
 
         // Log cost

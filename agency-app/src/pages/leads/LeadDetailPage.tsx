@@ -40,6 +40,7 @@ import {
   Unarchive as UnarchiveIcon,
   ContentCopy as CopyIcon,
   Check as CheckIcon,
+  Reply as ReplyIcon,
 } from '@mui/icons-material';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -60,7 +61,7 @@ import { replaceTemplateVariables } from '../../services/api/templateVariablesSe
 import { SafeHtmlRenderer, copyHtmlToClipboard, stripHtmlTags } from '../../utils/htmlHelpers';
 import { FieldDefinition } from '../../types/fieldDefinitions';
 import { getFieldDefinitions } from '../../services/api/fieldDefinitionsService';
-import { createGmailDraft, checkGmailConnection } from '../../services/api/gmailService';
+import { createGmailDraft, createFollowUpDraft, checkGmailConnection } from '../../services/api/gmailService';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -139,6 +140,8 @@ export const LeadDetailPage: React.FC = () => {
   // Offer template state (fetched from global settings)
   const [offerTemplate, setOfferTemplate] = useState<string>('');
   const [offerHeadline, setOfferHeadline] = useState<string>('');
+  const [followUpTemplate, setFollowUpTemplate] = useState<string>('');
+  const [followUpSubject, setFollowUpSubject] = useState<string>('');
 
   // Copy state for offer preview
   const [headlineCopied, setHeadlineCopied] = useState(false);
@@ -147,6 +150,8 @@ export const LeadDetailPage: React.FC = () => {
   // Gmail draft creation state
   const [creatingDraft, setCreatingDraft] = useState(false);
   const [draftCreated, setDraftCreated] = useState(false);
+  const [creatingFollowUp, setCreatingFollowUp] = useState(false);
+  const [followUpCreated, setFollowUpCreated] = useState(false);
 
   // Delete dialog state
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
@@ -257,6 +262,8 @@ export const LeadDetailPage: React.FC = () => {
         const settings = await getSettings();
         setOfferTemplate(settings.offerTemplate);
         setOfferHeadline(settings.offerHeadline || '');
+        setFollowUpTemplate(settings.followUpTemplate || '');
+        setFollowUpSubject(settings.followUpSubject || '');
       } catch (error) {
         console.error('Error loading offer template:', error);
       }
@@ -934,6 +941,97 @@ export const LeadDetailPage: React.FC = () => {
     }
   };
 
+  // Handle follow-up draft creation
+  const handleCreateFollowUpDraft = async () => {
+    if (!lead || !formData.email) {
+      setSnackbar({ open: true, message: 'Lead must have a valid email address', severity: 'error' });
+      return;
+    }
+
+    if (!followUpTemplate) {
+      setSnackbar({ open: true, message: 'No follow-up template configured. Please set up the template in Settings > Follow-up Template.', severity: 'error' });
+      return;
+    }
+
+    setCreatingFollowUp(true);
+
+    try {
+      const connectionStatus = await checkGmailConnection();
+      if (!connectionStatus.connected || !connectionStatus.hasComposePermission) {
+        setSnackbar({
+          open: true,
+          message: connectionStatus.message || 'Gmail not properly configured. Please reconnect Gmail in Settings.',
+          severity: 'error',
+        });
+        setCreatingFollowUp(false);
+        return;
+      }
+
+      const leadData = {
+        name: formData.name,
+        email: formData.email,
+        phone: formData.phone,
+        company: formData.company,
+        companyName: formData.company,
+        status: formData.status,
+        customFields: formData.customFields,
+        createdAt: lead?.createdAt,
+        updatedAt: lead?.updatedAt,
+        outreach: lead?.outreach,
+      };
+
+      const originalSubject = lead.outreach?.email?.originalSubject || `Opportunity at ${formData.company}`;
+
+      let subject: string;
+      if (followUpSubject) {
+        const subjectHtml = replaceTemplateVariables(followUpSubject, leadData, company);
+        subject = stripHtmlTags(subjectHtml);
+      } else {
+        subject = `Re: ${originalSubject}`;
+      }
+
+      const bodyHtml = replaceTemplateVariables(followUpTemplate, leadData, company);
+
+      const result = await createFollowUpDraft({
+        leadId: lead.id,
+        to: formData.email,
+        subject,
+        bodyHtml,
+        originalSubject,
+      });
+
+      if (result.success) {
+        setFollowUpCreated(true);
+        setTimeout(() => setFollowUpCreated(false), 3000);
+
+        // Refresh lead data
+        const updatedLead = await getLead(lead.id);
+        if (updatedLead) {
+          setLead(updatedLead);
+        }
+
+        const threadMsg = result.threadFound
+          ? ' (threaded as reply)'
+          : ' (new email - original thread not found)';
+
+        setSnackbar({
+          open: true,
+          message: `Follow-up draft created${threadMsg}! Open in Gmail: ${result.draftUrl}`,
+          severity: 'success',
+        });
+      }
+    } catch (error: any) {
+      console.error('Failed to create follow-up draft:', error);
+      setSnackbar({
+        open: true,
+        message: error.message || 'Failed to create follow-up draft. Please try again.',
+        severity: 'error',
+      });
+    } finally {
+      setCreatingFollowUp(false);
+    }
+  };
+
   // Render offer preview with variables replaced
   const renderPreview = () => {
     const leadData = {
@@ -1047,6 +1145,47 @@ export const LeadDetailPage: React.FC = () => {
                     <CheckIcon />
                   ) : (
                     <EmailIcon />
+                  )}
+                </IconButton>
+                <IconButton
+                  onClick={handleCreateFollowUpDraft}
+                  disabled={
+                    creatingFollowUp ||
+                    !formData.email ||
+                    lead?.outreach?.email?.status === 'replied' ||
+                    lead?.outreach?.email?.followUpStatus === 'sent'
+                  }
+                  size="small"
+                  sx={{
+                    color: followUpCreated || lead?.outreach?.email?.followUpStatus === 'sent'
+                      ? '#10b981'
+                      : '#764ba2',
+                    bgcolor: followUpCreated || lead?.outreach?.email?.followUpStatus === 'sent'
+                      ? '#dcfce7'
+                      : 'rgba(118, 75, 162, 0.1)',
+                    '&:hover': {
+                      bgcolor: followUpCreated || lead?.outreach?.email?.followUpStatus === 'sent'
+                        ? '#bbf7d0'
+                        : 'rgba(118, 75, 162, 0.2)',
+                    },
+                    '&:disabled': {
+                      opacity: 0.5,
+                    },
+                  }}
+                  title={
+                    lead?.outreach?.email?.followUpStatus === 'sent'
+                      ? 'Follow-up already sent'
+                      : lead?.outreach?.email?.status === 'replied'
+                        ? 'Lead already replied'
+                        : 'Create follow-up draft in Gmail'
+                  }
+                >
+                  {creatingFollowUp ? (
+                    <CircularProgress size={20} sx={{ color: '#764ba2' }} />
+                  ) : followUpCreated || lead?.outreach?.email?.followUpStatus === 'sent' ? (
+                    <CheckIcon />
+                  ) : (
+                    <ReplyIcon />
                   )}
                 </IconButton>
               </Box>

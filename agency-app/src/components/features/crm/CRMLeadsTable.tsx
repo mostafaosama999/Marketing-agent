@@ -29,6 +29,7 @@ import {
   AutoAwesome as ApolloIcon,
   ContentCopy as CopyIcon,
   Check as CheckIcon,
+  OpenInNew,
 } from '@mui/icons-material';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -63,6 +64,7 @@ interface CRMLeadsTableProps {
   onUpdateStatus: (leadId: string, status: LeadStatus) => void;
   onUpdateLinkedInStatus: (leadId: string, status: string) => void;
   onUpdateEmailStatus: (leadId: string, status: string) => void;
+  onUpdateFollowUpStatus: (leadId: string, status: 'not_sent' | 'sent') => void;
   selectedLeadIds: string[];
   onSelectLead: (leadId: string) => void;
   onSelectAll: (selected: boolean) => void;
@@ -142,6 +144,7 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
   onUpdateStatus,
   onUpdateLinkedInStatus,
   onUpdateEmailStatus,
+  onUpdateFollowUpStatus,
   selectedLeadIds,
   onSelectLead,
   onSelectAll,
@@ -160,6 +163,8 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
   const [selectedLeadForLinkedIn, setSelectedLeadForLinkedIn] = useState<Lead | null>(null);
   const [emailMenuAnchor, setEmailMenuAnchor] = useState<null | HTMLElement>(null);
   const [selectedLeadForEmail, setSelectedLeadForEmail] = useState<Lead | null>(null);
+  const [followUpMenuAnchor, setFollowUpMenuAnchor] = useState<null | HTMLElement>(null);
+  const [selectedLeadForFollowUp, setSelectedLeadForFollowUp] = useState<Lead | null>(null);
   const [collapsedCompanies, setCollapsedCompanies] = useState<Set<string>>(new Set());
 
   // Dropdown field definitions
@@ -429,6 +434,25 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
       onUpdateEmailStatus(selectedLeadForEmail.id, newStatus);
     }
     handleEmailMenuClose();
+  };
+
+  // Follow-up status menu handlers
+  const handleFollowUpClick = (event: React.MouseEvent<HTMLElement>, lead: Lead) => {
+    event.stopPropagation();
+    setFollowUpMenuAnchor(event.currentTarget);
+    setSelectedLeadForFollowUp(lead);
+  };
+
+  const handleFollowUpMenuClose = () => {
+    setFollowUpMenuAnchor(null);
+    setSelectedLeadForFollowUp(null);
+  };
+
+  const handleFollowUpStatusChange = (newStatus: 'not_sent' | 'sent') => {
+    if (selectedLeadForFollowUp) {
+      onUpdateFollowUpStatus(selectedLeadForFollowUp.id, newStatus);
+    }
+    handleFollowUpMenuClose();
   };
 
   // Custom field dropdown menu handlers
@@ -781,6 +805,10 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
         case 'email_outreach_status':
           aValue = a.outreach?.email?.status;
           bValue = b.outreach?.email?.status;
+          break;
+        case 'follow_up_status':
+          aValue = a.outreach?.email?.followUpStatus || 'not_sent';
+          bValue = b.outreach?.email?.followUpStatus || 'not_sent';
           break;
         case 'createdAt':
           aValue = a.createdAt;
@@ -1252,6 +1280,64 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
                 },
               }}
             />
+          </TableCell>
+        );
+      }
+
+      case 'follow_up_status': {
+        const fuStatus = lead.outreach?.email?.followUpStatus;
+        const fuDraftUrl = lead.outreach?.email?.followUpDraftUrl;
+        if (!fuStatus || fuStatus === 'not_sent') {
+          return (
+            <TableCell key={columnId}>
+              <Chip
+                label="Not Sent"
+                size="small"
+                onClick={(e) => handleFollowUpClick(e, lead)}
+                sx={{
+                  bgcolor: '#f3f4f6',
+                  color: '#6b7280',
+                  fontWeight: 500,
+                  fontSize: '10px',
+                  height: '20px',
+                  cursor: 'pointer',
+                  '&:hover': { bgcolor: '#e5e7eb' },
+                }}
+              />
+            </TableCell>
+          );
+        }
+        return (
+          <TableCell key={columnId}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+              <Chip
+                label="Sent"
+                size="small"
+                onClick={(e) => handleFollowUpClick(e, lead)}
+                sx={{
+                  bgcolor: '#dbeafe',
+                  color: '#0077b5',
+                  fontWeight: 500,
+                  fontSize: '10px',
+                  height: '20px',
+                  cursor: 'pointer',
+                  '&:hover': { opacity: 0.8 },
+                }}
+              />
+              {fuDraftUrl && (
+                <IconButton
+                  size="small"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    window.open(fuDraftUrl, '_blank');
+                  }}
+                  sx={{ p: 0.25 }}
+                  title="Open follow-up draft in Gmail"
+                >
+                  <OpenInNew sx={{ fontSize: 14, color: '#0077b5' }} />
+                </IconButton>
+              )}
+            </Box>
           </TableCell>
         );
       }
@@ -1896,6 +1982,38 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
             handleEmailMenuClose();
           }}
         />
+      </Menu>
+
+      {/* Follow-Up Status Menu */}
+      <Menu
+        anchorEl={followUpMenuAnchor}
+        open={Boolean(followUpMenuAnchor)}
+        onClose={handleFollowUpMenuClose}
+      >
+        <MenuItem onClick={() => handleFollowUpStatusChange('not_sent')}>
+          <Chip
+            label="Not Sent"
+            size="small"
+            sx={{
+              bgcolor: '#f3f4f6',
+              color: '#6b7280',
+              fontWeight: 500,
+              mr: 1,
+            }}
+          />
+        </MenuItem>
+        <MenuItem onClick={() => handleFollowUpStatusChange('sent')}>
+          <Chip
+            label="Sent"
+            size="small"
+            sx={{
+              bgcolor: '#dbeafe',
+              color: '#0077b5',
+              fontWeight: 500,
+              mr: 1,
+            }}
+          />
+        </MenuItem>
       </Menu>
 
       {/* Custom Field Dropdown Menu */}

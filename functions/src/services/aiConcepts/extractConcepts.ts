@@ -18,34 +18,61 @@ import {
 /**
  * Prompt for extracting AI concepts from raw signals
  */
-const CONCEPT_EXTRACTION_PROMPT = `You are an AI trends analyst. Analyze these recent AI news/papers and extract the TOP 10 distinct AI CONCEPTS that are currently hot or gaining traction.
+const CONCEPT_EXTRACTION_PROMPT = `You are an AI trends analyst specializing in the AGENTIC AI ecosystem.
 
-IMPORTANT: Extract CONCEPTS, not news articles. Focus on:
-- Paradigms (Agentic AI, Multimodal AI)
-- Techniques (RAG, Fine-tuning, RLHF, Prompt Engineering)
-- Protocols (MCP - Model Context Protocol, A2A)
-- Architectures (Mixture of Experts, Transformers)
-- Tools/Frameworks (LangChain, LlamaIndex, CrewAI)
+Analyze these recent AI news/papers and extract 8-10 distinct AI CONCEPTS that are currently hot.
 
-NOT acceptable outputs:
-- Specific company announcements ("OpenAI releases GPT-5")
-- Product launches ("Claude 3.5 Sonnet")
-- General news ("AI regulation in EU")
+================================================================================
+PRIORITY FOCUS (80% of concepts should be from this domain):
+================================================================================
+
+AGENTIC AI ECOSYSTEM — extract concepts about:
+- Autonomous AI agents, multi-agent systems, agent orchestration
+- Model Context Protocol (MCP) — updates, new servers, integrations
+- Agent communication protocols (A2A, ACP, ANP)
+- Agent frameworks (CrewAI, LangGraph, AutoGen, OpenAI Agents SDK)
+- Agentic Context Engineering (ACE), context management for agents
+- Agent security, Agent IAM, zero-trust identity for agents
+- Agent tool use, function calling, code execution
+- Agentic workflows in specific domains (DevOps, data pipelines, sales, etc.)
+
+================================================================================
+SECONDARY FOCUS (20% of concepts):
+================================================================================
+
+OTHER AI DEVELOPMENTS — include 1-2 concepts about:
+- New flagship models (GPT-5, Claude updates, Gemini, etc.)
+- Efficiency techniques (quantization, edge AI, on-device LLMs)
+- RAG improvements, long context optimization, memory management
+- Alignment and safety research
+
+================================================================================
+IMPORTANT RULES
+================================================================================
+
+Extract CONCEPTS, not news articles:
+- YES: "Agentic AI", "MCP Tool Ecosystem", "Multi-Agent Orchestration"
+- NO: "OpenAI releases GPT-5" (that's news, not a concept)
+- NO: "AI regulation in EU" (that's policy, not a technical concept)
+
+However, new model releases ARE valid as concepts when described generically:
+- YES: "GPT-5 / Latest Frontier Models" (the concept of new capabilities)
+- YES: "Claude Code / AI Coding Agents" (the concept, not the announcement)
 
 For each concept, provide:
 1. name: Short memorable name (2-4 words max)
 2. description: 1-2 sentence explanation of what it IS
 3. whyHot: Why is this trending NOW? What's driving interest?
-4. useCases: 3-4 practical applications
-5. keywords: Technical terms associated with it (for matching to company tech stacks)
+4. useCases: 3-4 practical applications for B2B companies
+5. keywords: Technical terms for matching to company tech stacks
 6. category: paradigm | technique | protocol | architecture | tool
 7. hypeLevel: emerging | peak | maturing | declining
 
-RULES:
-- Focus on CONCEPTS that are actionable for B2B companies
-- Avoid outdated concepts (check if signals suggest declining interest)
-- Concepts should be specific enough to write tutorials about
+ADDITIONAL RULES:
+- Concepts must be actionable for B2B companies (can write tutorials about them)
 - Each concept should be distinct (no duplicates like "AI Agents" and "Agentic AI")
+- Prefer concepts at "peak" or "emerging" hype level
+- Include at least 1 concept about new models/capabilities
 
 RAW SIGNALS:
 {signals}
@@ -94,7 +121,7 @@ export async function extractConceptsFromSignals(
       {
         role: "system",
         content:
-          "You are an AI trends analyst. Extract distinct AI concepts from news signals. Output only valid JSON.",
+          "You are an AI trends analyst specializing in the Agentic AI ecosystem. Extract 8-10 distinct AI concepts from news signals, with 80% focus on agentic AI trends (MCP, agents, orchestration, protocols) and 20% on other significant AI developments. Output only valid JSON.",
       },
       { role: "user", content: prompt },
     ],

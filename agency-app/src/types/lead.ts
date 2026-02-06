@@ -74,6 +74,11 @@ export interface Lead {
       draftCreatedAt?: Date; // When Gmail draft was created
       draftId?: string; // Gmail draft ID
       draftUrl?: string; // Direct link to Gmail draft
+      originalSubject?: string; // Subject of original email (for follow-up threading)
+      followUpStatus?: 'not_sent' | 'sent';
+      followUpDraftCreatedAt?: Date;
+      followUpDraftId?: string;
+      followUpDraftUrl?: string;
     };
   };
 

@@ -38,6 +38,7 @@ import {
   AutoAwesome as AutoAwesomeIcon,
   CompareArrows as CompareArrowsIcon,
   Lightbulb as OfferIcon,
+  BugReport as DebugIcon,
 } from '@mui/icons-material';
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider';
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
@@ -49,10 +50,10 @@ import { getFieldDefinitions, ensureCompanyLabelsFieldDefinition } from '../../.
 import { DropdownMenuWithAdd } from '../crm/DropdownMenuWithAdd';
 import { updateCompanyCustomField, updateCompanyField, updateCompany, setCompanyStatusManually, unlockCompanyStatus, updateCompanyLabels } from '../../../services/api/companies';
 import { bulkFindWritingPrograms, bulkAnalyzeWritingPrograms } from '../../../services/api/bulkWritingProgramService';
-import { analyzeCompanyWebsite, generateOfferIdeas } from '../../../services/firebase/cloudFunctions';
+import { analyzeCompanyWebsite, generateOfferIdeas, generateOfferIdeasV3 } from '../../../services/firebase/cloudFunctions';
 import { useAuth } from '../../../contexts/AuthContext';
 import { CompanyStatusBadge } from './CompanyStatusBadge';
-import { doc, getDoc } from 'firebase/firestore';
+import { doc, getDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 import { db } from '../../../services/firebase/firestore';
 import { LeadStatus } from '../../../types/lead';
 
@@ -138,6 +139,11 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
     message: string;
     severity: 'success' | 'error' | 'info';
   }>({ open: false, message: '', severity: 'success' });
+  const [v3DebugByCompany, setV3DebugByCompany] = useState<Record<string, any>>({});
+  const [v3DebugDialog, setV3DebugDialog] = useState<{
+    companyName: string;
+    debug: any;
+  } | null>(null);
 
   // Rating user display names (first letter only)
   const [ratingUserNames, setRatingUserNames] = useState<Map<string, string>>(new Map());
@@ -646,7 +652,7 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
           company.blogAnalysis?.blogUrl || undefined
         );
 
-        // Stage 2: Generate ideas
+        // Stage 2: Generate V1 ideas (existing flow)
         const stage2Result = await generateOfferIdeas(
           company.id,
           company.name,
@@ -655,11 +661,47 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
           company.blogAnalysis?.blogUrl || undefined
         );
 
-        const totalCost = stage1Result.costInfo.totalCost + stage2Result.costInfo.totalCost;
+        // Stage 3: Generate independent V3 ideas (best-effort, does not block V1 success)
+        let v3IdeasCount = 0;
+        let v3Cost = 0;
+        try {
+          const v3Result = await generateOfferIdeasV3(
+            company.id,
+            company.name,
+            websiteUrl,
+            undefined,
+            undefined,
+            stage1Result.companyAnalysis.companyType
+          );
+
+          v3IdeasCount = v3Result.ideas.length;
+          v3Cost = v3Result.costInfo.totalCost;
+          setV3DebugByCompany((prev) => ({ ...prev, [company.id]: v3Result.debug }));
+
+          await updateDoc(doc(db, 'entities', company.id), {
+            'offerAnalysis.v3': {
+              ideas: v3Result.ideas,
+              validationResults: v3Result.validationResults,
+              matchedConcepts: v3Result.matchedConcepts,
+              trendConceptsUsed: v3Result.trendConceptsUsed,
+              debug: v3Result.debug,
+              costInfo: v3Result.costInfo,
+              generatedAt: v3Result.generatedAt,
+              regenerationAttempts: v3Result.regenerationAttempts,
+              rejectedCount: v3Result.rejectedCount,
+            },
+            'offerAnalysis.tripleVersionGeneration': true,
+            updatedAt: serverTimestamp(),
+          });
+        } catch (v3Error) {
+          console.error(`[V3] Failed for ${company.name}:`, v3Error);
+        }
+
+        const totalCost = stage1Result.costInfo.totalCost + stage2Result.costInfo.totalCost + v3Cost;
 
         setSnackbar({
           open: true,
-          message: `${company.name}: ${stage2Result.ideas.length} ideas generated ($${totalCost.toFixed(4)})`,
+          message: `${company.name}: V1 ${stage2Result.ideas.length}, V3 ${v3IdeasCount} ideas ($${totalCost.toFixed(4)})`,
           severity: 'success',
         });
       } catch (error: any) {
@@ -700,6 +742,29 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
     }
     setUrlSelectionDialog(null);
     setSelectedUrl('');
+  };
+
+  const getCompanyV3Debug = (company: Company): any => {
+    const runtimeDebug = v3DebugByCompany[company.id];
+    if (runtimeDebug) return runtimeDebug;
+    const persistedOfferAnalysis = company.offerAnalysis as any;
+    return persistedOfferAnalysis?.v3?.debug || null;
+  };
+
+  const openV3DebugModal = (company: Company) => {
+    const debugPayload = getCompanyV3Debug(company);
+    if (!debugPayload) {
+      setSnackbar({
+        open: true,
+        message: `${company.name}: no V3 debug data available yet`,
+        severity: 'info',
+      });
+      return;
+    }
+    setV3DebugDialog({
+      companyName: company.name,
+      debug: debugPayload,
+    });
   };
 
   // Helper function to check if a custom field is a date
@@ -1621,6 +1686,26 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
                             <OpenInNewIcon sx={{ fontSize: '16px' }} />
                           </IconButton>
                         </Tooltip>
+
+                        {getCompanyV3Debug(company) && (
+                          <Tooltip title="View V3 debug">
+                            <IconButton
+                              size="small"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                openV3DebugModal(company);
+                              }}
+                              sx={{
+                                color: '#6366f1',
+                                '&:hover': {
+                                  backgroundColor: 'rgba(99, 102, 241, 0.12)',
+                                },
+                              }}
+                            >
+                              <DebugIcon sx={{ fontSize: '16px' }} />
+                            </IconButton>
+                          </Tooltip>
+                        )}
                       </Box>
                     </TableCell>
                   </TableRow>
@@ -1962,6 +2047,36 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
           >
             Analyze Selected URL
           </Button>
+        </DialogActions>
+      </Dialog>
+
+      <Dialog
+        open={Boolean(v3DebugDialog)}
+        onClose={() => setV3DebugDialog(null)}
+        maxWidth="md"
+        fullWidth
+      >
+        <DialogTitle>V3 Debug Trace - {v3DebugDialog?.companyName}</DialogTitle>
+        <DialogContent dividers>
+          <Box
+            component="pre"
+            sx={{
+              m: 0,
+              p: 2,
+              maxHeight: 480,
+              overflow: 'auto',
+              bgcolor: '#0f172a',
+              color: '#e2e8f0',
+              borderRadius: 1,
+              fontSize: 12,
+              lineHeight: 1.5,
+            }}
+          >
+            {JSON.stringify(v3DebugDialog?.debug || {}, null, 2)}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setV3DebugDialog(null)}>Close</Button>
         </DialogActions>
       </Dialog>
 

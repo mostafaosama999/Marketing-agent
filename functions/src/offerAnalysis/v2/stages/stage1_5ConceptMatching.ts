@@ -34,15 +34,30 @@ export interface MatchedConceptSimple {
 }
 
 /**
+ * Simplified raw concept for fallback injection in Stage 3
+ */
+export interface RawConceptSimple {
+  name: string;
+  description: string;
+  whyHot: string;
+  useCases: string[];
+  category: string;
+  hypeLevel: string;
+}
+
+/**
  * Response from Stage 1.5
  */
 export interface V2Stage1_5Response {
   success: boolean;
   matchedConcepts: MatchedConceptSimple[];
+  allConcepts: RawConceptSimple[];
   conceptsEvaluated: number;
   stage0Cost: number;
   stage1_5Cost: number;
   cached: boolean;
+  stale?: boolean;
+  ageHours?: number;
   generatedAt: string;
 }
 
@@ -108,10 +123,13 @@ export const v2Stage1_5Cloud = functions
           return {
             success: true,
             matchedConcepts: [],
+            allConcepts: [],
             conceptsEvaluated: 0,
             stage0Cost,
             stage1_5Cost: 0,
             cached: conceptsResult.cached,
+            stale: conceptsResult.stale,
+            ageHours: conceptsResult.ageHours,
             generatedAt: new Date().toISOString(),
           };
         }
@@ -166,13 +184,27 @@ export const v2Stage1_5Cloud = functions
           }
         );
 
+        // Simplify raw concepts for frontend pass-through to Stage 3
+        const simplifiedAllConcepts: RawConceptSimple[] =
+          conceptsResult.concepts.map((c) => ({
+            name: c.name,
+            description: c.description,
+            whyHot: c.whyHot,
+            useCases: c.useCases,
+            category: c.category,
+            hypeLevel: c.hypeLevel,
+          }));
+
         return {
           success: true,
           matchedConcepts: simplifiedConcepts,
+          allConcepts: simplifiedAllConcepts,
           conceptsEvaluated: conceptsResult.concepts.length,
           stage0Cost,
           stage1_5Cost,
           cached: conceptsResult.cached,
+          stale: conceptsResult.stale,
+          ageHours: conceptsResult.ageHours,
           generatedAt: new Date().toISOString(),
         };
       } catch (error: any) {
@@ -183,6 +215,7 @@ export const v2Stage1_5Cloud = functions
         return {
           success: true,
           matchedConcepts: [],
+          allConcepts: [],
           conceptsEvaluated: 0,
           stage0Cost: 0,
           stage1_5Cost: 0,

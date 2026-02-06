@@ -1,9 +1,20 @@
 // src/components/features/companies/OfferIdeasSection.tsx
 // Main orchestrator component for AI-generated blog ideas workflow
-// Now includes new Company Offer Analysis feature
+// V1/V2/V3 run independently with per-version Firestore persistence
 
-import React, { useState, useEffect } from 'react';
-import { Box, CircularProgress, Typography, Snackbar, Alert, Button, Divider } from '@mui/material';
+import React, { useState, useEffect, useRef } from 'react';
+import {
+  Box,
+  CircularProgress,
+  Typography,
+  Snackbar,
+  Alert,
+  Button,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+} from '@mui/material';
 import { AutoAwesome as AnalyzeIcon, Refresh as RefreshIcon } from '@mui/icons-material';
 import { Company } from '../../../types/crm';
 import {
@@ -16,13 +27,15 @@ import {
 import {
   analyzeCompanyWebsite,
   generateOfferIdeas,
+  generateOfferIdeasV3,
   formatCost,
-  CompanyAnalysis,
   BlogIdeaV2,
+  BlogIdeaV3,
   IdeaValidationResult,
   CompanyProfileV2,
   ContentGap,
   MatchedConceptSimple,
+  RawConceptSimple,
   // V2 staged functions for progressive UI
   v2Stage1Differentiators,
   v2Stage1_5ConceptMatching,
@@ -33,8 +46,7 @@ import {
 import { OfferIdeasReviewUI } from './OfferIdeasReviewUI';
 import { ApprovedIdeasDisplay } from './ApprovedIdeasDisplay';
 import { CompanyAnalysisResults } from './CompanyAnalysisResults';
-import { BlogIdeasDisplay, BlogIdeasDisplayDual } from './BlogIdeasDisplay';
-import { V2StageProgressDisplay } from './V2StageProgressDisplay';
+import { BlogIdeasDisplay, BlogIdeasDisplayTriple, VersionStatus, V2StageResultsForDisplay } from './BlogIdeasDisplay';
 import { doc, updateDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { db } from '../../../services/firebase/firestore';
 
@@ -43,29 +55,42 @@ interface OfferIdeasSectionProps {
   companyId: string;
 }
 
-type WorkflowState = 'empty' | 'generating' | 'reviewing' | 'approved' | 'analyzing_company' | 'generating_blog_ideas' | 'analysis_complete';
-
-type LoadingStep = 'analyzing' | 'generating' | null;
+type OverallState = 'empty' | 'analyzing' | 'running' | 'complete';
 
 export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
   company,
   companyId,
 }) => {
-  // Determine initial state based on company data
+  // Determine initial states from persisted data
   const hasApproved = hasApprovedIdeas(company);
   const hasAnalysis = !!company.offerAnalysis;
-  const initialState: WorkflowState = hasAnalysis ? 'analysis_complete' : hasApproved ? 'approved' : 'empty';
+  const hasAnyIdeas = hasAnalysis && (
+    (company.offerAnalysis?.ideas?.length > 0) ||
+    (company.offerAnalysis?.v2?.ideas?.length > 0) ||
+    (company.offerAnalysis?.v3?.ideas?.length > 0)
+  );
 
-  const [workflowState, setWorkflowState] = useState<WorkflowState>(initialState);
-  const [loadingStep, setLoadingStep] = useState<LoadingStep>(null);
+  const [overallState, setOverallState] = useState<OverallState>(
+    hasAnyIdeas ? 'complete' : hasApproved ? 'complete' : 'empty'
+  );
 
-  // New analysis state - store locally so we don't depend on Firestore refresh
+  // Per-version independent status
+  const [v1Status, setV1Status] = useState<VersionStatus>(
+    company.offerAnalysis?.ideas?.length > 0 ? 'complete' : 'idle'
+  );
+  const [v2Status, setV2Status] = useState<VersionStatus>(
+    company.offerAnalysis?.v2?.ideas?.length > 0 ? 'complete' : 'idle'
+  );
+  const [v3Status, setV3Status] = useState<VersionStatus>(
+    company.offerAnalysis?.v3?.ideas?.length > 0 ? 'complete' : 'idle'
+  );
+
+  // Analysis result state (local mirror of Firestore data)
   const [analysisResult, setAnalysisResult] = useState<{
     companyAnalysis: any;
     ideas: any[];
     promptUsed: string;
     costInfo?: any;
-    // V2 data
     v2?: {
       ideas: BlogIdeaV2[];
       validationResults?: IdeaValidationResult[];
@@ -74,17 +99,34 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
       matchedConcepts?: MatchedConceptSimple[];
       costInfo?: any;
     };
+    v3?: {
+      ideas: BlogIdeaV3[];
+      validationResults?: any[];
+      matchedConcepts?: any[];
+      trendConceptsUsed?: any[];
+      debug?: any;
+      costInfo?: any;
+      generatedAt?: string;
+      regenerationAttempts?: number;
+      rejectedCount?: number;
+    };
     dualVersionGeneration?: boolean;
+    tripleVersionGeneration?: boolean;
   } | null>(company.offerAnalysis || null);
 
-  // Chosen idea state - synced with company.customFields.chosen_idea
+  // Chosen idea state
   const [chosenIdea, setChosenIdea] = useState<string | null>(
     (company.customFields?.['chosen_idea'] as string) || null
   );
+  const [chosenIdeaVersion, setChosenIdeaVersion] = useState<'v1' | 'v2' | 'v3' | null>(
+    (company.customFields?.['chosen_idea_version'] as 'v1' | 'v2' | 'v3') || null
+  );
 
-  // Chosen idea version - tracks which version the chosen idea came from
-  const [chosenIdeaVersion, setChosenIdeaVersion] = useState<'v1' | 'v2' | null>(
-    (company.customFields?.['chosen_idea_version'] as 'v1' | 'v2') || null
+  const [isV3DebugOpen, setIsV3DebugOpen] = useState(false);
+
+  // V2 stage progress for progressive display
+  const [v2StageResults, setV2StageResults] = useState<V2StageResultsForDisplay>(
+    { currentStage: 'idle' }
   );
 
   // Legacy idea generation state
@@ -94,30 +136,15 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
   const [generalFeedback, setGeneralFeedback] = useState<string>('');
   const [costInfo, setCostInfo] = useState<any>(null);
 
+  // Track if pipelines are currently running (to prevent onSnapshot from overwriting)
+  const isRunningRef = useRef(false);
+
   // Snackbar state
   const [snackbar, setSnackbar] = useState<{
     open: boolean;
     message: string;
     severity: 'success' | 'error' | 'info';
-  }>({
-    open: false,
-    message: '',
-    severity: 'success',
-  });
-
-  // V2 staged progress state
-  const [v2StageStatus, setV2StageStatus] = useState<string | null>(null);
-
-  // V2 stage results for progressive display
-  const [v2StageResults, setV2StageResults] = useState<{
-    profile?: CompanyProfileV2;
-    matchedConcepts?: MatchedConceptSimple[];
-    conceptsEvaluated?: number;
-    contentGaps?: ContentGap[];
-    rawIdeas?: BlogIdeaV2[];
-    validatedIdeas?: IdeaValidationResult[];
-    currentStage: 'idle' | 'stage1' | 'stage1_5' | 'stage2' | 'stage3' | 'stage4' | 'complete';
-  }>({ currentStage: 'idle' });
+  }>({ open: false, message: '', severity: 'success' });
 
   // Load existing approved ideas if they exist
   useEffect(() => {
@@ -129,7 +156,7 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
     }
   }, [company]);
 
-  // Subscribe to real-time updates for offerAnalysis (for async updates from table actions)
+  // Subscribe to real-time updates for offerAnalysis
   useEffect(() => {
     const companyRef = doc(db, 'entities', companyId);
 
@@ -138,54 +165,301 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
         const data = docSnapshot.data();
         const offerAnalysis = data?.offerAnalysis;
 
-        // Sync chosenIdea from customFields (field key is chosen_idea)
+        // Always sync chosen idea
         const chosenIdeaValue = data?.customFields?.['chosen_idea'];
-        const chosenIdeaVersionValue = data?.customFields?.['chosen_idea_version'] as 'v1' | 'v2' | undefined;
+        const chosenIdeaVersionValue = data?.customFields?.['chosen_idea_version'] as 'v1' | 'v2' | 'v3' | undefined;
         setChosenIdea(chosenIdeaValue || null);
         setChosenIdeaVersion(chosenIdeaVersionValue || null);
 
-        if (offerAnalysis && offerAnalysis.ideas && offerAnalysis.ideas.length > 0) {
-          // Update local state with new analysis data (including V2 if available)
+        // Only update from Firestore when we're NOT actively running pipelines
+        // (prevents onSnapshot from overwriting in-progress local state)
+        if (!isRunningRef.current && offerAnalysis) {
+          // Update per-version statuses from persisted data
+          if (offerAnalysis.ideas?.length > 0) {
+            setV1Status('complete');
+          }
+          if (offerAnalysis.v2?.ideas?.length > 0) {
+            setV2Status('complete');
+          }
+          if (offerAnalysis.v3?.ideas?.length > 0) {
+            setV3Status('complete');
+          }
+
+          // Update local analysis result
           setAnalysisResult({
             companyAnalysis: offerAnalysis.companyAnalysis,
-            ideas: offerAnalysis.ideas,
+            ideas: offerAnalysis.ideas || [],
             promptUsed: offerAnalysis.promptUsed || '',
             costInfo: offerAnalysis.costInfo,
-            // Include V2 data if present
             v2: offerAnalysis.v2 ? {
               ideas: offerAnalysis.v2.ideas || [],
               validationResults: offerAnalysis.v2.validationResults,
               companyProfile: offerAnalysis.v2.companyProfile,
               contentGaps: offerAnalysis.v2.contentGaps,
+              matchedConcepts: offerAnalysis.v2.matchedConcepts,
               costInfo: offerAnalysis.v2.costInfo,
             } : undefined,
+            v3: offerAnalysis.v3 ? {
+              ideas: offerAnalysis.v3.ideas || [],
+              validationResults: offerAnalysis.v3.validationResults,
+              matchedConcepts: offerAnalysis.v3.matchedConcepts,
+              trendConceptsUsed: offerAnalysis.v3.trendConceptsUsed,
+              debug: offerAnalysis.v3.debug,
+              costInfo: offerAnalysis.v3.costInfo,
+              generatedAt: offerAnalysis.v3.generatedAt,
+              regenerationAttempts: offerAnalysis.v3.regenerationAttempts,
+              rejectedCount: offerAnalysis.v3.rejectedCount,
+            } : undefined,
             dualVersionGeneration: offerAnalysis.dualVersionGeneration,
+            tripleVersionGeneration: offerAnalysis.tripleVersionGeneration,
           });
 
-          // Update workflow state if we're not currently running analysis
-          if (workflowState !== 'analyzing_company' && workflowState !== 'generating_blog_ideas') {
-            setWorkflowState('analysis_complete');
+          // Set overall state
+          const anyIdeas = offerAnalysis.ideas?.length > 0 ||
+            offerAnalysis.v2?.ideas?.length > 0 ||
+            offerAnalysis.v3?.ideas?.length > 0;
+          if (anyIdeas) {
+            setOverallState('complete');
           }
-        } else if (offerAnalysis?.companyAnalysis && !offerAnalysis.ideas?.length) {
-          // Stage 1 complete but Stage 2 not yet - update company analysis
-          setAnalysisResult({
-            companyAnalysis: offerAnalysis.companyAnalysis,
-            ideas: [],
-            promptUsed: '',
-            costInfo: offerAnalysis.costInfo,
-          });
         }
       }
     });
 
     return () => unsubscribe();
-  }, [companyId, workflowState]);
+  }, [companyId]);
 
   const showSnackbar = (message: string, severity: 'success' | 'error' | 'info') => {
     setSnackbar({ open: true, message, severity });
   };
 
-  // NEW: Handle company offer analysis with staged V2 for progressive feedback
+  // ========================================
+  // Independent pipeline runners
+  // ========================================
+
+  const runV1Pipeline = async (
+    stage1CompanyAnalysis: any,
+    websiteUrl: string,
+    blogContent: string | undefined,
+  ) => {
+    setV1Status('generating');
+    try {
+      const v1Result = await generateOfferIdeas(
+        companyId,
+        company.name,
+        websiteUrl,
+        stage1CompanyAnalysis,
+        blogContent
+      );
+
+      // Update local state
+      setAnalysisResult(prev => ({
+        ...prev!,
+        ideas: v1Result.ideas,
+        promptUsed: v1Result.promptUsed,
+        dualVersionGeneration: true,
+      }));
+
+      // Save V1 results to Firestore immediately
+      const companyRef = doc(db, 'entities', companyId);
+      await updateDoc(companyRef, {
+        'offerAnalysis.ideas': v1Result.ideas,
+        'offerAnalysis.promptUsed': v1Result.promptUsed,
+        'offerAnalysis.dualVersionGeneration': true,
+        'offerAnalysis.costInfo.stage2CostV1': v1Result.costInfo.totalCost,
+        updatedAt: serverTimestamp(),
+      });
+
+      setV1Status('complete');
+      showSnackbar(`V1: ${v1Result.ideas.length} ideas ready`, 'success');
+    } catch (err: any) {
+      console.error('V1 pipeline failed:', err);
+      setV1Status('error');
+      showSnackbar(`V1 failed: ${err.message}`, 'error');
+    }
+  };
+
+  const runV2Pipeline = async (
+    stage1CompanyAnalysis: any,
+    websiteUrl: string,
+    apolloData: any,
+    blogAnalysisData: any,
+  ) => {
+    setV2Status('generating');
+    setV2StageResults({ currentStage: 'stage1' });
+
+    try {
+      // V2 Stage 1: Differentiators
+      const v2Stage1Result = await v2Stage1Differentiators(
+        companyId,
+        company.name,
+        websiteUrl,
+        apolloData,
+        blogAnalysisData,
+        stage1CompanyAnalysis.companyType
+      );
+      const v2Profile = v2Stage1Result.profile;
+      let v2TotalCost = v2Stage1Result.costInfo.totalCost;
+
+      setV2StageResults(prev => ({ ...prev, profile: v2Profile, currentStage: 'stage1_5' }));
+
+      // V2 Stage 1.5 + Stage 2 in parallel
+      const [v2Stage1_5Result, v2Stage2Result] = await Promise.all([
+        v2Stage1_5ConceptMatching(companyId, v2Profile).catch(err => {
+          console.warn('Stage 1.5 failed (AI concepts optional):', err);
+          return {
+            matchedConcepts: [] as MatchedConceptSimple[],
+            allConcepts: [] as RawConceptSimple[],
+            conceptsEvaluated: 0,
+            stage0Cost: 0,
+            stage1_5Cost: 0,
+            cached: false,
+            stale: undefined as boolean | undefined,
+            ageHours: undefined as number | undefined,
+          };
+        }),
+        v2Stage2ContentGaps(companyId, v2Profile, company.blogAnalysis?.contentSummary),
+      ]);
+
+      const v2MatchedConcepts = v2Stage1_5Result.matchedConcepts;
+      const v2AllConcepts = v2Stage1_5Result.allConcepts || [];
+      v2TotalCost += (v2Stage1_5Result.stage0Cost || 0) + (v2Stage1_5Result.stage1_5Cost || 0);
+      const v2Gaps = v2Stage2Result.gaps;
+      v2TotalCost += v2Stage2Result.costInfo.totalCost;
+
+      setV2StageResults(prev => ({
+        ...prev,
+        matchedConcepts: v2MatchedConcepts,
+        allConcepts: v2AllConcepts,
+        conceptsEvaluated: v2Stage1_5Result.conceptsEvaluated || 0,
+        conceptsCached: v2Stage1_5Result.cached,
+        conceptsStale: v2Stage1_5Result.stale,
+        conceptsAgeHours: v2Stage1_5Result.ageHours,
+        contentGaps: v2Gaps,
+        currentStage: 'stage3',
+      }));
+
+      // V2 Stage 3: Generate ideas
+      const v2Stage3Result = await v2Stage3GenerateIdeas(
+        companyId,
+        v2Profile,
+        v2Gaps,
+        v2MatchedConcepts.length > 0 ? v2MatchedConcepts : undefined,
+        v2AllConcepts.length > 0 ? v2AllConcepts : undefined
+      );
+      const v2RawIdeas = v2Stage3Result.ideas;
+      v2TotalCost += v2Stage3Result.costInfo.totalCost;
+
+      setV2StageResults(prev => ({ ...prev, rawIdeas: v2RawIdeas, currentStage: 'stage4' }));
+
+      // V2 Stage 4: Validate ideas
+      const v2Stage4Result = await v2Stage4ValidateIdeas(companyId, v2RawIdeas, v2Profile);
+      const v2ValidationResults = v2Stage4Result.validIdeas;
+      v2TotalCost += v2Stage4Result.costInfo.totalCost;
+
+      setV2StageResults(prev => ({ ...prev, validatedIdeas: v2ValidationResults, currentStage: 'complete' }));
+
+      const finalV2Ideas = v2ValidationResults.length > 0
+        ? v2ValidationResults.map(r => r.idea)
+        : v2RawIdeas;
+
+      // Update local state
+      const v2Data = {
+        ideas: finalV2Ideas,
+        validationResults: v2ValidationResults,
+        companyProfile: v2Profile,
+        contentGaps: v2Gaps,
+        matchedConcepts: v2MatchedConcepts,
+        costInfo: {
+          stage1Cost: v2Stage1Result.costInfo.totalCost,
+          stage1_5Cost: (v2Stage1_5Result.stage0Cost || 0) + (v2Stage1_5Result.stage1_5Cost || 0),
+          stage2Cost: v2Stage2Result.costInfo.totalCost,
+          stage3Cost: v2Stage3Result.costInfo.totalCost,
+          stage4Cost: v2Stage4Result.costInfo.totalCost,
+          totalCost: v2TotalCost,
+        },
+      };
+      setAnalysisResult(prev => ({ ...prev!, v2: v2Data }));
+
+      // Save V2 results to Firestore immediately
+      const companyRef = doc(db, 'entities', companyId);
+      await updateDoc(companyRef, {
+        'offerAnalysis.v2': v2Data,
+        'offerAnalysis.dualVersionGeneration': true,
+        'offerAnalysis.costInfo.stage2CostV2': v2TotalCost,
+        updatedAt: serverTimestamp(),
+      });
+
+      setV2Status('complete');
+      const conceptMsg = v2MatchedConcepts.length > 0 ? ` + ${v2MatchedConcepts.length} AI concepts` : '';
+      showSnackbar(`V2: ${finalV2Ideas.length} ideas ready${conceptMsg}`, 'success');
+    } catch (err: any) {
+      console.error('V2 pipeline failed:', err);
+      setV2Status('error');
+      showSnackbar(`V2 failed: ${err.message}`, 'error');
+    }
+  };
+
+  const runV3Pipeline = async (
+    stage1CompanyAnalysis: any,
+    websiteUrl: string,
+    apolloData: any,
+    blogAnalysisData: any,
+    specificRequirements: string | undefined,
+  ) => {
+    setV3Status('generating');
+    try {
+      const v3Result = await generateOfferIdeasV3(
+        companyId,
+        company.name,
+        websiteUrl,
+        apolloData,
+        blogAnalysisData,
+        stage1CompanyAnalysis.companyType,
+        specificRequirements
+      );
+
+      if (!v3Result) {
+        setV3Status('error');
+        showSnackbar('V3 returned no results', 'error');
+        return;
+      }
+
+      // Update local state
+      const v3Data = {
+        ideas: v3Result.ideas,
+        validationResults: v3Result.validationResults,
+        matchedConcepts: v3Result.matchedConcepts,
+        trendConceptsUsed: v3Result.trendConceptsUsed,
+        debug: v3Result.debug,
+        costInfo: v3Result.costInfo,
+        generatedAt: v3Result.generatedAt,
+        regenerationAttempts: v3Result.regenerationAttempts,
+        rejectedCount: v3Result.rejectedCount,
+      };
+      setAnalysisResult(prev => ({ ...prev!, v3: v3Data, tripleVersionGeneration: true }));
+
+      // Save V3 results to Firestore immediately
+      const companyRef = doc(db, 'entities', companyId);
+      await updateDoc(companyRef, {
+        'offerAnalysis.v3': v3Data,
+        'offerAnalysis.tripleVersionGeneration': true,
+        'offerAnalysis.costInfo.stage2CostV3': v3Result.costInfo?.totalCost || 0,
+        updatedAt: serverTimestamp(),
+      });
+
+      setV3Status('complete');
+      showSnackbar(`V3: ${v3Result.ideas.length} ideas ready`, 'success');
+    } catch (err: any) {
+      console.error('V3 pipeline failed:', err);
+      setV3Status('error');
+      showSnackbar(`V3 failed: ${err.message}`, 'error');
+    }
+  };
+
+  // ========================================
+  // Main analysis handler
+  // ========================================
+
   const handleStartAnalysis = async () => {
     const websiteBlogLink = company.customFields?.website_blog_link as string | undefined;
     const websiteUrl = company.website || websiteBlogLink || company.blogAnalysis?.blogUrl;
@@ -195,16 +469,13 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
       return;
     }
 
-    setWorkflowState('analyzing_company');
-    setLoadingStep('analyzing');
-    setV2StageStatus(null);
+    setOverallState('analyzing');
+    isRunningRef.current = true;
 
     try {
       const blogContent = company.blogAnalysis?.blogUrl || undefined;
 
-      // ========================================
-      // STEP 1: Analyze company website (for company type classification)
-      // ========================================
+      // STEP 1: Analyze company website (shared prerequisite)
       const stage1Result = await analyzeCompanyWebsite(
         companyId,
         company.name,
@@ -212,24 +483,31 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
         blogContent
       );
 
-      // Immediately show company analysis results
+      // Save company analysis immediately
+      const companyRef = doc(db, 'entities', companyId);
+      await updateDoc(companyRef, {
+        'offerAnalysis.companyAnalysis': stage1Result.companyAnalysis,
+        'offerAnalysis.costInfo': { stage1Cost: stage1Result.costInfo.totalCost, totalCost: stage1Result.costInfo.totalCost },
+        updatedAt: serverTimestamp(),
+      });
+
+      // Show company analysis results
       setAnalysisResult({
         companyAnalysis: stage1Result.companyAnalysis,
-        ideas: [], // No ideas yet
+        ideas: [],
         promptUsed: '',
         costInfo: { stage1Cost: stage1Result.costInfo.totalCost, totalCost: stage1Result.costInfo.totalCost },
       });
 
       showSnackbar(
-        `Company type detected: ${stage1Result.companyAnalysis.companyType}. Starting idea generation...`,
+        `Company type: ${stage1Result.companyAnalysis.companyType}. Starting V1, V2, V3...`,
         'info'
       );
 
-      // Switch to generating ideas state
-      setWorkflowState('generating_blog_ideas');
-      setLoadingStep('generating');
+      // Switch to running state — tabs will now be visible
+      setOverallState('running');
 
-      // Prepare Apollo data and blog analysis for V2
+      // Prepare shared data
       const apolloData = company.apolloEnrichment ? {
         industry: company.apolloEnrichment.industry,
         industries: company.apolloEnrichment.industries,
@@ -254,245 +532,49 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
         rating: company.blogAnalysis.blogNature?.rating,
       } : undefined;
 
-      // ========================================
-      // Start V1 immediately (runs in parallel with V2 stages)
-      // ========================================
-      const v1Promise = generateOfferIdeas(
-        companyId,
-        company.name,
-        websiteUrl,
-        stage1Result.companyAnalysis,
-        blogContent
-      );
+      const specificRequirements =
+        (company.customFields?.offer_idea_requirements as string | undefined) ||
+        (company.customFields?.specific_requirements as string | undefined) ||
+        undefined;
 
-      // ========================================
-      // V2 STAGED PIPELINE (sequential with progress updates)
-      // ========================================
-      let v2Profile: CompanyProfileV2 | undefined;
-      let v2Gaps: ContentGap[] = [];
-      let v2MatchedConcepts: MatchedConceptSimple[] = [];
-      let v2RawIdeas: BlogIdeaV2[] = [];
-      let v2ValidationResults: IdeaValidationResult[] = [];
-      let v2TotalCost = 0;
+      // Fire all 3 pipelines independently (not awaited together)
+      const v1Done = runV1Pipeline(stage1Result.companyAnalysis, websiteUrl, blogContent);
+      const v2Done = runV2Pipeline(stage1Result.companyAnalysis, websiteUrl, apolloData, blogAnalysisData);
+      const v3Done = runV3Pipeline(stage1Result.companyAnalysis, websiteUrl, apolloData, blogAnalysisData, specificRequirements);
 
-      // Initialize progressive display
-      setV2StageResults({ currentStage: 'stage1' });
+      // Wait for all to settle (success or error)
+      await Promise.allSettled([v1Done, v2Done, v3Done]);
 
-      // V2 Stage 1: Analyze differentiators
-      setV2StageStatus('V2: Analyzing company profile...');
-      const v2Stage1Result = await v2Stage1Differentiators(
-        companyId,
-        company.name,
-        websiteUrl,
-        apolloData,
-        blogAnalysisData,
-        stage1Result.companyAnalysis.companyType
-      );
-      v2Profile = v2Stage1Result.profile;
-      v2TotalCost += v2Stage1Result.costInfo.totalCost;
+      // All pipelines done
+      isRunningRef.current = false;
+      setOverallState('complete');
 
-      // Update progressive display with Stage 1 results
-      setV2StageResults(prev => ({
-        ...prev,
-        profile: v2Profile,
-        currentStage: 'stage1_5',
-      }));
-      showSnackbar(`V2: Found ${v2Profile.uniqueDifferentiators.length} differentiators`, 'info');
-
-      // V2 Stage 1.5: AI Concept Matching (runs in parallel with Stage 2 for speed)
-      setV2StageStatus('V2: Matching AI concepts & finding content gaps...');
-
-      // Start Stage 1.5 and Stage 2 in parallel
-      const [v2Stage1_5Result, v2Stage2Result] = await Promise.all([
-        v2Stage1_5ConceptMatching(companyId, v2Profile).catch(err => {
-          console.warn('Stage 1.5 failed (AI concepts optional):', err);
-          return {
-            matchedConcepts: [] as MatchedConceptSimple[],
-            conceptsEvaluated: 0,
-            stage0Cost: 0,
-            stage1_5Cost: 0,
-            cached: false,
-          };
-        }),
-        v2Stage2ContentGaps(companyId, v2Profile, company.blogAnalysis?.contentSummary),
-      ]);
-
-      // Process Stage 1.5 results
-      v2MatchedConcepts = v2Stage1_5Result.matchedConcepts;
-      v2TotalCost += (v2Stage1_5Result.stage0Cost || 0) + (v2Stage1_5Result.stage1_5Cost || 0);
-
-      if (v2MatchedConcepts.length > 0) {
-        showSnackbar(`V2: Matched ${v2MatchedConcepts.length} AI concepts (${v2Stage1_5Result.cached ? 'cached' : 'fresh'})`, 'info');
-      }
-
-      // Process Stage 2 results
-      v2Gaps = v2Stage2Result.gaps;
-      v2TotalCost += v2Stage2Result.costInfo.totalCost;
-
-      // Update progressive display with Stage 1.5 and Stage 2 results
-      setV2StageResults(prev => ({
-        ...prev,
-        matchedConcepts: v2MatchedConcepts,
-        conceptsEvaluated: v2Stage1_5Result.conceptsEvaluated || 0,
-        contentGaps: v2Gaps,
-        currentStage: 'stage3',
-      }));
-      showSnackbar(`V2: Found ${v2Gaps.length} content gaps`, 'info');
-
-      // V2 Stage 3: Generate ideas WITH matched concepts
-      setV2StageStatus('V2: Generating personalized ideas...');
-      const v2Stage3Result = await v2Stage3GenerateIdeas(
-        companyId,
-        v2Profile,
-        v2Gaps,
-        v2MatchedConcepts.length > 0 ? v2MatchedConcepts : undefined
-      );
-      v2RawIdeas = v2Stage3Result.ideas;
-      v2TotalCost += v2Stage3Result.costInfo.totalCost;
-
-      // Update progressive display with Stage 3 results
-      setV2StageResults(prev => ({
-        ...prev,
-        rawIdeas: v2RawIdeas,
-        currentStage: 'stage4',
-      }));
-
-      // Wait for V1 to complete
-      const v1Result = await v1Promise;
-
-      // Show intermediate results with V2 raw ideas (before validation)
-      const intermediateResult = {
-        companyAnalysis: stage1Result.companyAnalysis,
-        ideas: v1Result.ideas,
-        promptUsed: v1Result.promptUsed,
-        costInfo: {
-          stage1Cost: stage1Result.costInfo.totalCost,
-          stage2CostV1: v1Result.costInfo.totalCost,
-          stage2CostV2: v2TotalCost,
-          stage2Cost: v1Result.costInfo.totalCost + v2TotalCost,
-          totalCost: stage1Result.costInfo.totalCost + v1Result.costInfo.totalCost + v2TotalCost,
-        },
-        v2: {
-          ideas: v2RawIdeas, // Show raw ideas immediately
-          validationResults: undefined, // Not yet validated
-          companyProfile: v2Profile,
-          contentGaps: v2Gaps,
-          matchedConcepts: v2MatchedConcepts, // Include matched AI concepts
-          costInfo: { totalCost: v2TotalCost },
-        },
-        dualVersionGeneration: true,
-      };
-      setAnalysisResult(intermediateResult);
-      const conceptMsg = v2MatchedConcepts.length > 0 ? ` + ${v2MatchedConcepts.length} AI concepts` : '';
-      showSnackbar(`V1: ${v1Result.ideas.length} ideas, V2: ${v2RawIdeas.length} ideas${conceptMsg} (validating...)`, 'info');
-
-      // V2 Stage 4: Validate ideas (runs after ideas are visible)
-      setV2StageStatus('V2: Validating ideas...');
-      const v2Stage4Result = await v2Stage4ValidateIdeas(
-        companyId,
-        v2RawIdeas,
-        v2Profile
-      );
-      v2ValidationResults = v2Stage4Result.validIdeas;
-      v2TotalCost += v2Stage4Result.costInfo.totalCost;
-
-      // Update progressive display with Stage 4 results
-      setV2StageResults(prev => ({
-        ...prev,
-        validatedIdeas: v2ValidationResults,
-        currentStage: 'complete',
-      }));
-
-      // Use validated ideas if any passed, otherwise keep raw ideas
-      const finalV2Ideas = v2ValidationResults.length > 0
-        ? v2ValidationResults.map(r => r.idea)
-        : v2RawIdeas;
-
-      // Final result with validated V2 ideas
-      const totalCost = stage1Result.costInfo.totalCost + v1Result.costInfo.totalCost + v2TotalCost;
-      const completeResult = {
-        companyAnalysis: stage1Result.companyAnalysis,
-        ideas: v1Result.ideas,
-        promptUsed: v1Result.promptUsed,
-        costInfo: {
-          stage1Cost: stage1Result.costInfo.totalCost,
-          stage2CostV1: v1Result.costInfo.totalCost,
-          stage2CostV2: v2TotalCost,
-          stage2Cost: v1Result.costInfo.totalCost + v2TotalCost,
-          totalCost,
-        },
-        v2: {
-          ideas: finalV2Ideas,
-          validationResults: v2ValidationResults,
-          companyProfile: v2Profile,
-          contentGaps: v2Gaps,
-          matchedConcepts: v2MatchedConcepts, // Include matched AI concepts
-          costInfo: {
-            stage1Cost: v2Stage1Result.costInfo.totalCost,
-            stage1_5Cost: (v2Stage1_5Result.stage0Cost || 0) + (v2Stage1_5Result.stage1_5Cost || 0),
-            stage2Cost: v2Stage2Result.costInfo.totalCost,
-            stage3Cost: v2Stage3Result.costInfo.totalCost,
-            stage4Cost: v2Stage4Result.costInfo.totalCost,
-            totalCost: v2TotalCost,
-          },
-        },
-        dualVersionGeneration: true,
-      };
-
-      // Save combined V1+V2 result to Firestore
-      const companyRef = doc(db, 'entities', companyId);
-      await updateDoc(companyRef, {
-        offerAnalysis: completeResult,
-        updatedAt: serverTimestamp(),
-      });
-
-      setAnalysisResult(completeResult);
-      setV2StageStatus(null);
-
-      showSnackbar(
-        `Complete! V1: ${v1Result.ideas.length} ideas, V2: ${finalV2Ideas.length} validated ideas ($${totalCost.toFixed(4)})`,
-        'success'
-      );
-
-      setWorkflowState('analysis_complete');
-      setLoadingStep(null);
     } catch (error: any) {
-      console.error('Error analyzing company offer:', error);
+      console.error('Error in company analysis (Step 1):', error);
       showSnackbar(error.message || 'Failed to analyze company', 'error');
-      setV2StageStatus(null);
-
-      // If we have partial results, keep them
-      if (analysisResult?.companyAnalysis && (analysisResult.ideas?.length || analysisResult.v2?.ideas?.length)) {
-        setWorkflowState('analysis_complete');
-        showSnackbar('Partial results saved. Some stages may have failed.', 'error');
-      } else if (analysisResult?.companyAnalysis) {
-        setWorkflowState('analysis_complete');
-        showSnackbar('Company analysis saved, but idea generation failed. You can try again.', 'error');
-      } else {
-        setWorkflowState('empty');
-      }
-      setLoadingStep(null);
+      isRunningRef.current = false;
+      setOverallState('empty');
     }
   };
 
   // Handle regenerate analysis
   const handleRegenerateAnalysis = async () => {
-    // Clear existing analysis and restart
     try {
       const companyRef = doc(db, 'entities', companyId);
       await updateDoc(companyRef, {
         offerAnalysis: null,
-        // Clear pending approval flag since there's no analysis to approve
         pendingOfferApproval: false,
         pendingOfferApprovalAt: null,
         updatedAt: serverTimestamp(),
       });
 
-      // Clear local state
       setAnalysisResult(null);
       setChosenIdea(null);
+      setV1Status('idle');
+      setV2Status('idle');
+      setV3Status('idle');
       setV2StageResults({ currentStage: 'idle' });
-      setWorkflowState('empty');
+      setOverallState('empty');
       showSnackbar('Ready to run new analysis', 'info');
     } catch (error: any) {
       console.error('Error clearing analysis:', error);
@@ -502,7 +584,7 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
 
   // LEGACY: Handle old idea generation
   const handleGenerate = async (prompt: string) => {
-    setWorkflowState('generating');
+    setOverallState('running');
     setGenerationPrompt(prompt);
 
     try {
@@ -517,7 +599,6 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
         },
       });
 
-      // Transform to our GeneratedIdea format
       const generatedIdeas: GeneratedIdea[] = result.ideas.map((idea) => ({
         ...idea,
         approved: false,
@@ -529,48 +610,26 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
       setIdeas(generatedIdeas);
       setSessionId(result.sessionId);
       setCostInfo(result.costInfo);
-      setWorkflowState('reviewing');
 
-      const costMessage = result.costInfo
-        ? ` (${formatCost(result.costInfo)})`
-        : '';
-      showSnackbar(
-        `Successfully generated ${result.totalGenerated} ideas${costMessage}`,
-        'success'
-      );
+      const costMessage = result.costInfo ? ` (${formatCost(result.costInfo)})` : '';
+      showSnackbar(`Successfully generated ${result.totalGenerated} ideas${costMessage}`, 'success');
     } catch (error: any) {
       console.error('Error generating ideas:', error);
       showSnackbar(error.message || 'Failed to generate ideas', 'error');
-      setWorkflowState('empty');
+      setOverallState('empty');
     }
   };
 
   const handleApprove = (ideaId: string) => {
-    setIdeas((prev) =>
-      prev.map((idea) =>
-        idea.id === ideaId
-          ? { ...idea, approved: true, rejected: false }
-          : idea
-      )
-    );
+    setIdeas((prev) => prev.map((idea) => idea.id === ideaId ? { ...idea, approved: true, rejected: false } : idea));
   };
 
   const handleReject = (ideaId: string) => {
-    setIdeas((prev) =>
-      prev.map((idea) =>
-        idea.id === ideaId
-          ? { ...idea, approved: false, rejected: true }
-          : idea
-      )
-    );
+    setIdeas((prev) => prev.map((idea) => idea.id === ideaId ? { ...idea, approved: false, rejected: true } : idea));
   };
 
   const handleFeedbackChange = (ideaId: string, feedback: string) => {
-    setIdeas((prev) =>
-      prev.map((idea) =>
-        idea.id === ideaId ? { ...idea, feedback } : idea
-      )
-    );
+    setIdeas((prev) => prev.map((idea) => idea.id === ideaId ? { ...idea, feedback } : idea));
   };
 
   const handleGeneralFeedbackChange = (feedback: string) => {
@@ -579,20 +638,9 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
 
   const handleSave = async () => {
     try {
-      await saveApprovedIdeas(
-        companyId,
-        ideas,
-        generalFeedback,
-        generationPrompt,
-        sessionId
-      );
-
+      await saveApprovedIdeas(companyId, ideas, generalFeedback, generationPrompt, sessionId);
       const approvedCount = ideas.filter((i) => i.approved).length;
-      showSnackbar(
-        `Successfully saved ${approvedCount} approved idea${approvedCount !== 1 ? 's' : ''}`,
-        'success'
-      );
-      setWorkflowState('approved');
+      showSnackbar(`Successfully saved ${approvedCount} approved idea${approvedCount !== 1 ? 's' : ''}`, 'success');
     } catch (error: any) {
       console.error('Error saving ideas:', error);
       showSnackbar(error.message || 'Failed to save ideas', 'error');
@@ -600,12 +648,11 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
   };
 
   const handleRegenerate = () => {
-    // Reset to generation state
     setIdeas([]);
     setGeneralFeedback('');
     setSessionId('');
     setCostInfo(null);
-    setWorkflowState('empty');
+    setOverallState('empty');
     showSnackbar('Ready to generate new ideas', 'info');
   };
 
@@ -613,14 +660,13 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
     setSnackbar((prev) => ({ ...prev, open: false }));
   };
 
-  // Handle choosing an idea - save to company.customFields.chosen_idea with version tracking
-  const handleChooseIdea = async (ideaTitle: string, sourceVersion: 'v1' | 'v2' = 'v1') => {
+  // Handle choosing an idea
+  const handleChooseIdea = async (ideaTitle: string, sourceVersion: 'v1' | 'v2' | 'v3' = 'v1') => {
     try {
       const companyRef = doc(db, 'entities', companyId);
       await updateDoc(companyRef, {
         'customFields.chosen_idea': ideaTitle,
         'customFields.chosen_idea_version': sourceVersion,
-        // Clear pending approval flag (CEO has chosen an idea)
         pendingOfferApproval: false,
         pendingOfferApprovalAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -639,14 +685,13 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
   const handleClearChoice = async () => {
     try {
       const companyRef = doc(db, 'entities', companyId);
-      // Check if there are ideas to determine if we should set pending back to true
       const hasIdeas = (analysisResult?.ideas && analysisResult.ideas.length > 0) ||
-                       (analysisResult?.v2?.ideas && analysisResult.v2.ideas.length > 0);
+                       (analysisResult?.v2?.ideas && analysisResult.v2.ideas.length > 0) ||
+                       (analysisResult?.v3?.ideas && analysisResult.v3.ideas.length > 0);
 
       await updateDoc(companyRef, {
         'customFields.chosen_idea': null,
         'customFields.chosen_idea_version': null,
-        // Re-enable pending approval if there are ideas to choose from
         pendingOfferApproval: hasIdeas,
         pendingOfferApprovalAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
@@ -661,352 +706,207 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
     }
   };
 
-  // Render based on workflow state
+  // ========================================
+  // Render
+  // ========================================
+
   const renderContent = () => {
-    switch (workflowState) {
-      case 'empty':
-        return (
-          <Box>
-            {/* NEW ANALYSIS FEATURE - Primary Action */}
-            <Box
-              sx={{
-                background: 'rgba(255, 255, 255, 0.95)',
-                backdropFilter: 'blur(20px)',
-                borderRadius: 3,
-                p: 4,
-                mb: 3,
-                border: '1px solid #e2e8f0',
-                textAlign: 'center',
-              }}
-            >
-              <Typography
-                variant="h5"
-                sx={{
-                  fontWeight: 700,
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                  mb: 1,
-                }}
-              >
-                Company Offer Analysis
-              </Typography>
-              <Typography
-                variant="body2"
-                sx={{
-                  color: '#64748b',
-                  fontSize: '0.875rem',
-                  mb: 3,
-                  maxWidth: '600px',
-                  mx: 'auto',
-                }}
-              >
-                AI-powered analysis that identifies the company type, business model, and generates 5 tailored blog ideas with detailed insights.
-              </Typography>
-              <Button
-                variant="contained"
-                size="large"
-                startIcon={<AnalyzeIcon />}
-                onClick={handleStartAnalysis}
-                disabled={!company.website && !company.customFields?.website_blog_link && !company.blogAnalysis?.blogUrl}
-                sx={{
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  color: 'white',
-                  fontWeight: 600,
-                  textTransform: 'none',
-                  padding: '14px 32px',
-                  fontSize: '1rem',
-                  borderRadius: 2,
-                  '&:hover': {
-                    background: 'linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%)',
-                    transform: 'translateY(-2px)',
-                    boxShadow: '0 8px 16px rgba(102, 126, 234, 0.3)',
-                  },
-                  '&:disabled': {
-                    background: '#e2e8f0',
-                    color: '#94a3b8',
-                  },
-                  transition: 'all 0.2s ease',
-                }}
-              >
-                Start Analysis
-              </Button>
-              {!company.website && !company.customFields?.website_blog_link && !company.blogAnalysis?.blogUrl && (
-                <Typography
-                  variant="caption"
-                  sx={{
-                    display: 'block',
-                    color: '#ef4444',
-                    mt: 1,
-                    fontSize: '0.75rem',
-                  }}
-                >
-                  Company website or blog URL is required for analysis
-                </Typography>
-              )}
-            </Box>
-          </Box>
-        );
-
-      case 'analyzing_company':
-        return (
-          <Box
+    // Empty state — show Start Analysis button
+    if (overallState === 'empty') {
+      return (
+        <Box
+          sx={{
+            background: 'rgba(255, 255, 255, 0.95)',
+            backdropFilter: 'blur(20px)',
+            borderRadius: 3,
+            p: 4,
+            mb: 3,
+            border: '1px solid #e2e8f0',
+            textAlign: 'center',
+          }}
+        >
+          <Typography
+            variant="h5"
             sx={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 8,
-              background: 'rgba(255, 255, 255, 0.95)',
-              backdropFilter: 'blur(20px)',
-              borderRadius: 3,
-              border: '1px solid #e2e8f0',
+              fontWeight: 700,
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+              mb: 1,
             }}
           >
-            <CircularProgress
-              size={60}
-              thickness={4}
-              sx={{
-                color: '#667eea',
-                mb: 3,
-              }}
-            />
-            <Typography
-              variant="h6"
-              sx={{
-                fontWeight: 600,
-                color: '#1e293b',
-                mb: 1,
-              }}
-            >
-              Step 1/2: Analyzing Company Type...
-            </Typography>
-            <Typography
-              variant="body2"
-              sx={{
-                color: '#64748b',
-                textAlign: 'center',
-                maxWidth: '500px',
-              }}
-            >
-              Identifying {company.name}'s company type, business model, and AI capabilities. This may take 30-60 seconds.
-            </Typography>
-          </Box>
-        );
-
-      case 'generating_blog_ideas':
-        return (
-          <Box>
-            {/* Show company analysis results from Stage 1 */}
-            {analysisResult?.companyAnalysis && (
-              <>
-                <Box sx={{ mb: 3 }}>
-                  <Typography
-                    variant="h5"
-                    sx={{
-                      fontWeight: 700,
-                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                      WebkitBackgroundClip: 'text',
-                      WebkitTextFillColor: 'transparent',
-                      mb: 2,
-                    }}
-                  >
-                    Step 1 Complete: Company Analysis
-                  </Typography>
-                </Box>
-                <CompanyAnalysisResults analysis={analysisResult.companyAnalysis} />
-              </>
-            )}
-
-            {/* V2 Progressive Stage Display */}
-            <Box sx={{ mt: 3 }}>
-              <V2StageProgressDisplay
-                profile={v2StageResults.profile}
-                matchedConcepts={v2StageResults.matchedConcepts}
-                conceptsEvaluated={v2StageResults.conceptsEvaluated}
-                contentGaps={v2StageResults.contentGaps}
-                rawIdeas={v2StageResults.rawIdeas}
-                validatedIdeas={v2StageResults.validatedIdeas}
-                currentStage={v2StageResults.currentStage}
-              />
-            </Box>
-          </Box>
-        );
-
-      case 'analysis_complete':
-        return (
-          <Box>
-            {/* Header with Regenerate Button */}
-            <Box
-              sx={{
-                display: 'flex',
-                justifyContent: 'space-between',
-                alignItems: 'center',
-                mb: 4,
-              }}
-            >
-              <Typography
-                variant="h4"
-                sx={{
-                  fontWeight: 700,
-                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                  WebkitBackgroundClip: 'text',
-                  WebkitTextFillColor: 'transparent',
-                }}
-              >
-                Analysis Results
-              </Typography>
-              <Button
-                variant="outlined"
-                startIcon={<RefreshIcon />}
-                onClick={handleRegenerateAnalysis}
-                sx={{
-                  borderColor: '#667eea',
-                  color: '#667eea',
-                  fontWeight: 600,
-                  textTransform: 'none',
-                  '&:hover': {
-                    borderColor: '#5568d3',
-                    backgroundColor: 'rgba(102, 126, 234, 0.04)',
-                  },
-                }}
-              >
-                Run New Analysis
-              </Button>
-            </Box>
-
-            {/* Company Analysis Results */}
-            {analysisResult?.companyAnalysis && (
-              <CompanyAnalysisResults analysis={analysisResult.companyAnalysis} />
-            )}
-
-            {/* Blog Ideas Display - Dual version if available, otherwise single version */}
-            {analysisResult?.dualVersionGeneration && analysisResult?.v2?.ideas ? (
-              // Dual version display with V1/V2 tabs
-              <BlogIdeasDisplayDual
-                v1Ideas={analysisResult.ideas}
-                v2Ideas={analysisResult.v2.ideas}
-                v2ValidationResults={analysisResult.v2.validationResults}
-                matchedConcepts={analysisResult.v2.matchedConcepts}
-                chosenIdeaTitle={chosenIdea}
-                chosenIdeaVersion={chosenIdeaVersion}
-                onChooseIdea={handleChooseIdea}
-                onClearChoice={handleClearChoice}
-              />
-            ) : analysisResult?.ideas && analysisResult.ideas.length > 0 ? (
-              // Single version display (backward compatibility)
-              <BlogIdeasDisplay
-                ideas={analysisResult.ideas}
-                chosenIdeaTitle={chosenIdea}
-                onChooseIdea={(title) => handleChooseIdea(title, 'v1')}
-                onClearChoice={handleClearChoice}
-              />
-            ) : null}
-
-            {/* Cost Info */}
-            {analysisResult?.costInfo && (
-              <Box
-                sx={{
-                  mt: 4,
-                  p: 2,
-                  background: 'rgba(102, 126, 234, 0.08)',
-                  borderRadius: 2,
-                  textAlign: 'center',
-                }}
-              >
-                <Typography
-                  variant="caption"
-                  sx={{
-                    color: '#64748b',
-                    fontSize: '0.75rem',
-                  }}
-                >
-                  Analysis Cost: {formatCost(analysisResult.costInfo)}
-                </Typography>
-              </Box>
-            )}
-          </Box>
-        );
-
-      case 'generating':
-        return (
-          <Box
+            Company Offer Analysis
+          </Typography>
+          <Typography
+            variant="body2"
+            sx={{ color: '#64748b', fontSize: '0.875rem', mb: 3, maxWidth: '600px', mx: 'auto' }}
+          >
+            AI-powered analysis that identifies the company type, business model, and generates 5 tailored blog ideas with detailed insights.
+          </Typography>
+          <Button
+            variant="contained"
+            size="large"
+            startIcon={<AnalyzeIcon />}
+            onClick={handleStartAnalysis}
+            disabled={!company.website && !company.customFields?.website_blog_link && !company.blogAnalysis?.blogUrl}
             sx={{
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              padding: 8,
-              background: 'rgba(255, 255, 255, 0.95)',
-              backdropFilter: 'blur(20px)',
-              borderRadius: 3,
-              border: '1px solid #e2e8f0',
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              color: 'white',
+              fontWeight: 600,
+              textTransform: 'none',
+              padding: '14px 32px',
+              fontSize: '1rem',
+              borderRadius: 2,
+              '&:hover': {
+                background: 'linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%)',
+                transform: 'translateY(-2px)',
+                boxShadow: '0 8px 16px rgba(102, 126, 234, 0.3)',
+              },
+              '&:disabled': { background: '#e2e8f0', color: '#94a3b8' },
+              transition: 'all 0.2s ease',
             }}
           >
-            <CircularProgress
-              size={60}
-              thickness={4}
-              sx={{
-                color: '#667eea',
-                mb: 3,
-              }}
-            />
-            <Typography
-              variant="h6"
-              sx={{
-                fontWeight: 600,
-                color: '#1e293b',
-                mb: 1,
-              }}
-            >
-              Generating AI-Powered Blog Ideas...
+            Start Analysis
+          </Button>
+          {!company.website && !company.customFields?.website_blog_link && !company.blogAnalysis?.blogUrl && (
+            <Typography variant="caption" sx={{ display: 'block', color: '#ef4444', mt: 1, fontSize: '0.75rem' }}>
+              Company website or blog URL is required for analysis
             </Typography>
-            <Typography
-              variant="body2"
-              sx={{
-                color: '#64748b',
-                textAlign: 'center',
-              }}
-            >
-              This may take 30-60 seconds. We're analyzing {company.name}'s context
-              and generating personalized blog topic ideas.
-            </Typography>
-          </Box>
-        );
-
-      case 'reviewing':
-        return (
-          <OfferIdeasReviewUI
-            ideas={ideas}
-            onApprove={handleApprove}
-            onReject={handleReject}
-            onFeedbackChange={handleFeedbackChange}
-            onGeneralFeedbackChange={handleGeneralFeedbackChange}
-            onSave={handleSave}
-            onRegenerate={handleRegenerate}
-            generalFeedback={generalFeedback}
-            isSaving={false}
-          />
-        );
-
-      case 'approved':
-        return (
-          <ApprovedIdeasDisplay
-            ideas={getApprovedIdeas(company)}
-            lastGeneratedAt={company.offerIdeas?.lastGeneratedAt}
-            generalFeedback={company.offerIdeas?.generalFeedback}
-            onRegenerate={handleRegenerate}
-          />
-        );
-
-      default:
-        return null;
+          )}
+        </Box>
+      );
     }
+
+    // Analyzing state — Step 1 company analysis spinner
+    if (overallState === 'analyzing') {
+      return (
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 8,
+            background: 'rgba(255, 255, 255, 0.95)',
+            backdropFilter: 'blur(20px)',
+            borderRadius: 3,
+            border: '1px solid #e2e8f0',
+          }}
+        >
+          <CircularProgress size={60} thickness={4} sx={{ color: '#667eea', mb: 3 }} />
+          <Typography variant="h6" sx={{ fontWeight: 600, color: '#1e293b', mb: 1 }}>
+            Step 1: Analyzing Company Type...
+          </Typography>
+          <Typography variant="body2" sx={{ color: '#64748b', textAlign: 'center', maxWidth: '500px' }}>
+            Identifying {company.name}'s company type, business model, and AI capabilities. This may take 30-60 seconds.
+          </Typography>
+        </Box>
+      );
+    }
+
+    // Running or Complete — show company analysis + triple tabs
+    return (
+      <Box>
+        {/* Header with Regenerate Button */}
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 4 }}>
+          <Typography
+            variant="h4"
+            sx={{
+              fontWeight: 700,
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              WebkitBackgroundClip: 'text',
+              WebkitTextFillColor: 'transparent',
+            }}
+          >
+            Analysis Results
+          </Typography>
+          <Button
+            variant="outlined"
+            startIcon={<RefreshIcon />}
+            onClick={handleRegenerateAnalysis}
+            sx={{
+              borderColor: '#667eea',
+              color: '#667eea',
+              fontWeight: 600,
+              textTransform: 'none',
+              '&:hover': { borderColor: '#5568d3', backgroundColor: 'rgba(102, 126, 234, 0.04)' },
+            }}
+          >
+            Run New Analysis
+          </Button>
+        </Box>
+
+        {/* Company Analysis Results */}
+        {analysisResult?.companyAnalysis && (
+          <CompanyAnalysisResults analysis={analysisResult.companyAnalysis} />
+        )}
+
+        {/* Triple Version Tabs — shown during both running and complete states */}
+        <BlogIdeasDisplayTriple
+          v1Ideas={analysisResult?.ideas || []}
+          v1Status={v1Status}
+          v2Ideas={analysisResult?.v2?.ideas || []}
+          v2Status={v2Status}
+          v2ValidationResults={analysisResult?.v2?.validationResults}
+          v2MatchedConcepts={analysisResult?.v2?.matchedConcepts}
+          v2StageResults={v2StageResults}
+          v3Ideas={analysisResult?.v3?.ideas || []}
+          v3Status={v3Status}
+          v3Debug={analysisResult?.v3?.debug}
+          onOpenV3Debug={() => setIsV3DebugOpen(true)}
+          chosenIdeaTitle={chosenIdea}
+          chosenIdeaVersion={chosenIdeaVersion}
+          onChooseIdea={handleChooseIdea}
+          onClearChoice={handleClearChoice}
+        />
+
+        {/* Cost Info */}
+        {analysisResult?.costInfo && (
+          <Box
+            sx={{
+              mt: 4,
+              p: 2,
+              background: 'rgba(102, 126, 234, 0.08)',
+              borderRadius: 2,
+              textAlign: 'center',
+            }}
+          >
+            <Typography variant="caption" sx={{ color: '#64748b', fontSize: '0.75rem' }}>
+              Analysis Cost: {formatCost(analysisResult.costInfo)}
+            </Typography>
+          </Box>
+        )}
+      </Box>
+    );
   };
 
   return (
     <>
       {renderContent()}
+
+      {/* V3 Debug Dialog */}
+      <Dialog open={isV3DebugOpen} onClose={() => setIsV3DebugOpen(false)} maxWidth="lg" fullWidth>
+        <DialogTitle>V3 Stage Debug Trace</DialogTitle>
+        <DialogContent dividers>
+          <Typography variant="body2" sx={{ mb: 1.5, color: '#64748b' }}>
+            Full post-run V3 stage artifacts (concept sourcing, matching, generation attempts, and validation attempts).
+          </Typography>
+          <Box
+            component="pre"
+            sx={{
+              m: 0, p: 2,
+              backgroundColor: '#0f172a', color: '#e2e8f0',
+              borderRadius: 1.5, overflowX: 'auto',
+              fontSize: '12px', lineHeight: 1.45,
+            }}
+          >
+            {JSON.stringify(analysisResult?.v3?.debug || {}, null, 2)}
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <Button onClick={() => setIsV3DebugOpen(false)} sx={{ textTransform: 'none' }}>Close</Button>
+        </DialogActions>
+      </Dialog>
 
       {/* Snackbar for notifications */}
       <Snackbar
@@ -1015,11 +915,7 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
         onClose={handleCloseSnackbar}
         anchorOrigin={{ vertical: 'bottom', horizontal: 'center' }}
       >
-        <Alert
-          onClose={handleCloseSnackbar}
-          severity={snackbar.severity}
-          sx={{ width: '100%' }}
-        >
+        <Alert onClose={handleCloseSnackbar} severity={snackbar.severity} sx={{ width: '100%' }}>
           {snackbar.message}
         </Alert>
       </Snackbar>

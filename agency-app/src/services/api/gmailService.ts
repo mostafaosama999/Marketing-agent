@@ -269,6 +269,26 @@ export interface CreateGmailDraftResponse {
 }
 
 /**
+ * Follow-Up Gmail Draft - Interfaces
+ */
+export interface CreateFollowUpDraftRequest {
+  leadId: string;
+  to: string;
+  subject: string;
+  bodyHtml: string;
+  originalSubject: string;
+}
+
+export interface CreateFollowUpDraftResponse {
+  success: boolean;
+  draftId?: string;
+  draftUrl?: string;
+  threadFound?: boolean;
+  message: string;
+  error?: string;
+}
+
+/**
  * Create a Gmail draft for a lead
  * @param request Draft creation parameters
  * @returns Draft creation result with URL
@@ -299,5 +319,38 @@ export async function createGmailDraft(
     }
 
     throw new Error(`Failed to create Gmail draft: ${error.message || error}`);
+  }
+}
+
+/**
+ * Create a follow-up Gmail draft for a lead (threaded reply to original email)
+ * @param request Follow-up draft creation parameters
+ * @returns Draft creation result with URL and thread info
+ */
+export async function createFollowUpDraft(
+  request: CreateFollowUpDraftRequest
+): Promise<CreateFollowUpDraftResponse> {
+  const functions = getFunctions();
+  const createDraft = httpsCallable<CreateFollowUpDraftRequest, CreateFollowUpDraftResponse>(
+    functions,
+    "createFollowUpDraftCloud"
+  );
+
+  try {
+    const result = await createDraft(request);
+    return result.data;
+  } catch (error: any) {
+    console.error("Error creating follow-up draft:", error);
+
+    if (error.code === "unauthenticated") {
+      throw new Error("You must be logged in to create follow-up drafts");
+    }
+    if (error.message?.includes("insufficient permissions")) {
+      throw new Error(
+        "Gmail not connected or insufficient permissions. Please reconnect Gmail in Settings."
+      );
+    }
+
+    throw new Error(`Failed to create follow-up draft: ${error.message || error}`);
   }
 }

@@ -62,6 +62,7 @@ import {
   archiveLead,
   unarchiveLead,
   deleteCustomFieldFromAllLeads,
+  updateLeadFollowUpStatus,
 } from '../../../services/api/leads';
 import { ArchivedLeadsView } from './ArchivedLeadsView';
 import { BulkLeadAddDialog } from './BulkLeadAddDialog';
@@ -77,7 +78,7 @@ import {
 import { ReleaseNotesBanner } from './ReleaseNotesBanner';
 import { ReleaseNote, UserReleaseNoteState } from '../../../types/releaseNotes';
 import { getLatestReleaseNote, getUserReleaseState } from '../../../services/api/releaseNotesService';
-import { createGmailDraft, checkGmailConnection } from '../../../services/api/gmailService';
+import { createGmailDraft, createFollowUpDraft, checkGmailConnection } from '../../../services/api/gmailService';
 import { getSettings } from '../../../services/api/settings';
 import { getCompany } from '../../../services/api/companies';
 import { replaceTemplateVariables } from '../../../services/api/templateVariablesService';
@@ -182,6 +183,7 @@ function CRMBoard() {
 
   // Bulk Gmail draft creation state
   const [creatingDrafts, setCreatingDrafts] = useState(false);
+  const [creatingFollowUps, setCreatingFollowUps] = useState(false);
 
   // Bulk add leads dialog state
   const [showBulkAddDialog, setShowBulkAddDialog] = useState(false);
@@ -882,6 +884,17 @@ function CRMBoard() {
     }
   };
 
+  // Follow-up status update handler
+  const handleUpdateFollowUpStatus = async (leadId: string, status: 'not_sent' | 'sent') => {
+    try {
+      await updateLeadFollowUpStatus(leadId, status);
+    } catch (error) {
+      console.error('Error updating follow-up status:', error);
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      showAlert(`Failed to update follow-up status: ${errorMessage}`);
+    }
+  };
+
   // Bulk action handlers
   const handleBulkChangeStatus = async (newStatus: LeadStatus) => {
     if (!user || selectedLeadIds.length === 0) return;
@@ -1100,6 +1113,116 @@ function CRMBoard() {
       showAlert(`Failed to create drafts: ${error.message}`);
     } finally {
       setCreatingDrafts(false);
+    }
+  };
+
+  // Bulk create follow-up drafts handler
+  const handleBulkCreateFollowUps = async () => {
+    if (selectedLeadIds.length === 0) return;
+
+    const selectedLeads = leads.filter(lead => selectedLeadIds.includes(lead.id));
+
+    // Filter eligible leads: has email, not replied, follow-up not already sent
+    const eligibleLeads = selectedLeads.filter(lead =>
+      lead.email &&
+      lead.outreach?.email?.status !== 'replied' &&
+      lead.outreach?.email?.followUpStatus !== 'sent'
+    );
+
+    if (eligibleLeads.length === 0) {
+      showAlert('No eligible leads for follow-up. Leads must have an email, not be replied, and not already have a follow-up sent.');
+      return;
+    }
+
+    const skippedCount = selectedLeads.length - eligibleLeads.length;
+    const confirmMsg = skippedCount > 0
+      ? `Create follow-up drafts for ${eligibleLeads.length} lead(s)? (${skippedCount} skipped: already replied, no email, or follow-up already sent)`
+      : `Create follow-up drafts for ${eligibleLeads.length} lead(s)?`;
+
+    if (!window.confirm(confirmMsg)) return;
+
+    setCreatingFollowUps(true);
+
+    try {
+      // Check Gmail connection
+      const connectionStatus = await checkGmailConnection();
+      if (!connectionStatus.connected || !connectionStatus.hasComposePermission) {
+        showAlert(connectionStatus.message || 'Gmail not properly configured. Please reconnect Gmail in Settings.');
+        setCreatingFollowUps(false);
+        return;
+      }
+
+      // Get follow-up template from settings
+      const settings = await getSettings();
+      const { followUpTemplate, followUpSubject } = settings;
+
+      if (!followUpTemplate) {
+        showAlert('No follow-up template configured. Please set up the template in Settings > Follow-up Template.');
+        setCreatingFollowUps(false);
+        return;
+      }
+
+      let successCount = 0;
+      let failCount = 0;
+      const errors: string[] = [];
+
+      for (const lead of eligibleLeads) {
+        try {
+          let company = null;
+          if (lead.companyId) {
+            company = await getCompany(lead.companyId);
+          }
+
+          // Build follow-up subject
+          const originalSubject = lead.outreach?.email?.originalSubject || `Opportunity at ${lead.company}`;
+          let subject: string;
+          if (followUpSubject) {
+            const subjectHtml = replaceTemplateVariables(followUpSubject, lead, company);
+            subject = stripHtmlTags(subjectHtml);
+          } else {
+            subject = `Re: ${originalSubject}`;
+          }
+
+          const bodyHtml = replaceTemplateVariables(followUpTemplate, lead, company);
+
+          const result = await createFollowUpDraft({
+            leadId: lead.id,
+            to: lead.email,
+            subject,
+            bodyHtml,
+            originalSubject,
+          });
+
+          if (result.success) {
+            successCount++;
+          } else {
+            failCount++;
+            errors.push(`${lead.name}: ${result.error || 'Unknown error'}`);
+          }
+
+          // Small delay to avoid rate limiting
+          await new Promise(resolve => setTimeout(resolve, 500));
+        } catch (error: any) {
+          failCount++;
+          errors.push(`${lead.name}: ${error.message}`);
+        }
+      }
+
+      let message = `Created ${successCount} follow-up draft(s) successfully.`;
+      if (failCount > 0) {
+        message += ` ${failCount} failed.`;
+        if (errors.length > 0) {
+          console.error('Follow-up draft creation errors:', errors);
+        }
+      }
+
+      showAlert(message);
+      setSelectedLeadIds([]);
+    } catch (error: any) {
+      console.error('Bulk follow-up creation error:', error);
+      showAlert(`Failed to create follow-up drafts: ${error.message}`);
+    } finally {
+      setCreatingFollowUps(false);
     }
   };
 
@@ -1511,11 +1634,13 @@ function CRMBoard() {
                 onEditFields={handleBulkEditFields}
                 onExportCSV={handleBulkExportCSV}
                 onCreateDrafts={handleBulkCreateDrafts}
+                onCreateFollowUps={handleBulkCreateFollowUps}
                 onArchive={handleBulkArchive}
                 onDelete={handleBulkDelete}
                 onClear={handleClearSelection}
                 isDeleting={bulkDeleting}
                 isCreatingDrafts={creatingDrafts}
+                isCreatingFollowUps={creatingFollowUps}
               />
 
               {/* Table */}
@@ -1526,6 +1651,7 @@ function CRMBoard() {
                   onUpdateStatus={handleUpdateStatus}
                   onUpdateLinkedInStatus={handleUpdateLinkedInStatus}
                   onUpdateEmailStatus={handleUpdateEmailStatus}
+                  onUpdateFollowUpStatus={handleUpdateFollowUpStatus}
                   selectedLeadIds={selectedLeadIds}
                   onSelectLead={handleSelectLead}
                   onSelectAll={handleSelectAll}

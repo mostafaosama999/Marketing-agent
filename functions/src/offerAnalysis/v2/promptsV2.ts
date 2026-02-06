@@ -10,7 +10,7 @@
 
 import { CompanyProfile } from "./analyzeCompanyDifferentiators";
 import { ContentGap } from "./analyzeContentGaps";
-import { MatchedConcept } from "../../services/aiConcepts/types";
+import { AIConcept, MatchedConcept } from "../../services/aiConcepts/types";
 
 /**
  * V2 Blog Idea structure with additional fields for personalization tracking
@@ -68,30 +68,33 @@ export const BUZZWORD_BLACKLIST = [
 ];
 
 /**
- * Build the AI concept opportunities section for the prompt
- * Only included when matched concepts are provided
+ * Build the AI concept opportunities section for the prompt.
+ *
+ * 3-tier injection strategy — NEVER returns empty:
+ * - Tier 1: Matched concepts (best case, personalized)
+ * - Tier 2: No matches, but raw concepts available → inject as "trending opportunities"
+ * - Tier 3: Both failed → should not happen with never-expire cache, but returns empty as last resort
  */
 function buildAIConceptSection(
   companyName: string,
-  matchedConcepts?: MatchedConcept[]
+  matchedConcepts?: MatchedConcept[],
+  allConcepts?: AIConcept[]
 ): string {
-  if (!matchedConcepts || matchedConcepts.length === 0) {
-    return "";
-  }
-
-  const conceptsFormatted = matchedConcepts
-    .slice(0, 4) // Max 4 concepts to avoid overwhelming the prompt
-    .map(
-      (mc, i) =>
-        `${i + 1}. **${mc.concept.name}** (Fit Score: ${mc.fitScore}%)
+  // Tier 1: Matched concepts — personalized, highest quality
+  if (matchedConcepts && matchedConcepts.length > 0) {
+    const conceptsFormatted = matchedConcepts
+      .slice(0, 4)
+      .map(
+        (mc, i) =>
+          `${i + 1}. **${mc.concept.name}** (Fit Score: ${mc.fitScore}%)
    Why Hot: ${mc.concept.whyHot}
    Why It Fits ${companyName}: ${mc.fitReason}
    Product Integration: ${mc.productIntegration}
    Suggested Tutorial Angle: "${mc.tutorialAngle}"`
-    )
-    .join("\n\n");
+      )
+      .join("\n\n");
 
-  return `================================================================================
+    return `================================================================================
 AI CONCEPT OPPORTUNITIES (Matched to ${companyName})
 ================================================================================
 
@@ -109,6 +112,44 @@ INSTRUCTIONS FOR AI CONCEPT IDEAS:
 - For each AI concept idea, set "isConceptTutorial": true and "aiConcept": "[concept name]"
 
 `;
+  }
+
+  // Tier 2: No matched concepts, but raw concepts available from Stage 0
+  if (allConcepts && allConcepts.length > 0) {
+    const topConcepts = allConcepts.slice(0, 5);
+    const conceptsFormatted = topConcepts
+      .map(
+        (c, i) =>
+          `${i + 1}. **${c.name}** (${c.category}, ${c.hypeLevel})
+   ${c.description}
+   Why Hot Now: ${c.whyHot}
+   Common Use Cases: ${c.useCases.join(", ")}`
+      )
+      .join("\n\n");
+
+    return `================================================================================
+TRENDING AI CONCEPTS (Find creative connections to ${companyName})
+================================================================================
+
+These are currently trending AI concepts in the industry. No specific matches to
+${companyName} were identified, but YOU should find creative and practical ways to
+connect ${companyName}'s product with these trends.
+
+${conceptsFormatted}
+
+INSTRUCTIONS FOR TRENDING AI IDEAS:
+- For at least 2-3 of your 5 ideas, find creative ways to connect ${companyName}'s product with these trends
+- Think: "How could ${companyName}'s customers benefit from [trend]?"
+- Format: "How to [achieve outcome with ${companyName}] using [AI Concept]"
+- Be creative but PRACTICAL — the connection must feel natural, not forced
+- The remaining ideas can be regular personalized content
+- For each AI concept idea, set "isConceptTutorial": true and "aiConcept": "[concept name]"
+
+`;
+  }
+
+  // Tier 3: No concepts at all (should rarely happen with never-expire cache)
+  return "";
 }
 
 /**
@@ -126,7 +167,8 @@ INSTRUCTIONS FOR AI CONCEPT IDEAS:
 export function buildIdeaGenerationPromptV2(
   profile: CompanyProfile,
   gaps: ContentGap[],
-  matchedConcepts?: MatchedConcept[]
+  matchedConcepts?: MatchedConcept[],
+  allConcepts?: AIConcept[]
 ): string {
   // Format differentiators
   const differentiators = profile.uniqueDifferentiators
@@ -199,8 +241,9 @@ CRITICAL RULES
    empower, supercharge, turbocharge, streamline, holistic
 
 4. **TECHNOLOGY CONSTRAINTS**:
-   - Only mention technologies from their tech stack: ${techStack}
-   - EXCEPTION: If AI CONCEPT OPPORTUNITIES are listed below, you MAY use those concepts
+   - Prefer technologies from their tech stack: ${techStack}
+   - You MUST also incorporate trending AI concepts from the section below
+   - Create practical tutorials that combine the company's product with current AI trends
 
 5. **SPECIFICITY**:
    - NOT "How to use AI in your workflow"
@@ -210,7 +253,7 @@ CRITICAL RULES
    - Match their technical depth: ${profile.contentStyle.technicalDepth}
    - Write for: ${audienceDesc}
 
-${buildAIConceptSection(profile.companyName, matchedConcepts)}
+${buildAIConceptSection(profile.companyName, matchedConcepts, allConcepts)}
 ================================================================================
 GENERATE 5 IDEAS
 ================================================================================

@@ -66,6 +66,7 @@ export type ServiceType =
   | "linkedin-post-ideas-rag"
   | "linkedin-post-from-idea-rag"
   | "v2-blog-ideas"
+  | "v3-blog-ideas"
   | "dual-blog-ideas"
   | "v2-stage1-differentiators"
   | "v2-stage1.5-concept-matching"
@@ -127,6 +128,7 @@ const SERVICE_TO_CATEGORY: Record<string, string> = {
   "competitor-posts-extraction": "competitorAnalysis",
   "linkedin-post-from-trend": "contentGeneration",
   "linkedin-meme-image": "contentGeneration",
+  "v3-blog-ideas": "ideaGeneration",
 };
 
 /**

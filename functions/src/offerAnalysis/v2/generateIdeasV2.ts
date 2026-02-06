@@ -39,6 +39,7 @@ import {
 } from "../../utils/costTracker";
 import {
   getAIConcepts,
+  AIConcept,
   MatchedConcept,
 } from "../../services/aiConcepts";
 import { matchConceptsToCompany } from "./stages/stageMatchConcepts";
@@ -111,9 +112,10 @@ export async function generateIdeasFromContext(
   openai: OpenAI,
   profile: CompanyProfile,
   gaps: ContentGap[],
-  matchedConcepts?: MatchedConcept[]
+  matchedConcepts?: MatchedConcept[],
+  allConcepts?: AIConcept[]
 ): Promise<{ ideas: BlogIdeaV2[]; costInfo: CostInfo }> {
-  const prompt = buildIdeaGenerationPromptV2(profile, gaps, matchedConcepts);
+  const prompt = buildIdeaGenerationPromptV2(profile, gaps, matchedConcepts, allConcepts);
 
   console.log(`[V2 Stage 3] Generating ideas for: ${profile.companyName}`);
 
@@ -268,12 +270,13 @@ export async function generateIdeasV2(
       regenerationAttempts++;
       console.log(`[V2] Attempt ${regenerationAttempts}/${MAX_ATTEMPTS}`);
 
-      // Stage 3: Generate ideas WITH matched concepts (if any)
+      // Stage 3: Generate ideas WITH matched concepts (if any) + raw concepts as fallback
       const stage3Result = await generateIdeasFromContext(
         openai,
         profile,
         gaps,
-        matchedConcepts.length > 0 ? matchedConcepts : undefined
+        matchedConcepts.length > 0 ? matchedConcepts : undefined,
+        conceptsResult.concepts
       );
       stage3Cost += stage3Result.costInfo.totalCost;
 

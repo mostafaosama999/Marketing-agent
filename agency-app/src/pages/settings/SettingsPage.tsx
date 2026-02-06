@@ -45,6 +45,7 @@ import { SafeHtmlRenderer, getHtmlCharCount, isHtmlEmpty } from '../../utils/htm
 import { ReleaseNotesTab } from '../../components/settings/ReleaseNotesTab';
 import { FieldDefinitionsTab } from '../../components/settings/FieldDefinitionsTab';
 import { GmailIntegrationTab } from '../../components/settings/GmailIntegrationTab';
+import { FollowUpTemplateTab } from '../../components/settings/FollowUpTemplateTab';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -388,6 +389,7 @@ export const SettingsPage: React.FC = () => {
         <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 4 }}>
           <Tabs value={tabValue} onChange={handleTabChange}>
             <Tab label="Offer Template" />
+            <Tab label="Follow-Up Template" />
             <Tab label="AI Prompts" />
             <Tab label="Release Notes" />
             <Tab label="Field Definitions" />
@@ -651,8 +653,13 @@ export const SettingsPage: React.FC = () => {
             </Box>
           </TabPanel>
 
-          {/* AI Prompts Tab */}
+          {/* Follow-Up Template Tab */}
           <TabPanel value={tabValue} index={1}>
+            <FollowUpTemplateTab />
+          </TabPanel>
+
+          {/* AI Prompts Tab */}
+          <TabPanel value={tabValue} index={2}>
             <Box>
               <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
                 AI Prompts Library
@@ -747,17 +754,17 @@ export const SettingsPage: React.FC = () => {
           </TabPanel>
 
           {/* Release Notes Tab */}
-          <TabPanel value={tabValue} index={2}>
+          <TabPanel value={tabValue} index={3}>
             <ReleaseNotesTab />
           </TabPanel>
 
           {/* Field Definitions Tab */}
-          <TabPanel value={tabValue} index={3}>
+          <TabPanel value={tabValue} index={4}>
             <FieldDefinitionsTab />
           </TabPanel>
 
-          {/* Tab 4: Integrations */}
-          <TabPanel value={tabValue} index={4}>
+          {/* Integrations Tab */}
+          <TabPanel value={tabValue} index={5}>
             <GmailIntegrationTab />
           </TabPanel>
         </Box>

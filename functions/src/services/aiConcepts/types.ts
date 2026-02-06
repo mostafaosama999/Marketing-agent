@@ -72,6 +72,10 @@ export interface ConceptExtractionResult {
   rawSignalCount: number;
   extractionCost: number;
   cached: boolean;
+  /** How old the concepts are in hours (0 if fresh) */
+  ageHours?: number;
+  /** Whether concepts are from an expired/stale cache (still usable, just old) */
+  stale?: boolean;
 }
 
 /**

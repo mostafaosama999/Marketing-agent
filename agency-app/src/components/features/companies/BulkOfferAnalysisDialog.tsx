@@ -21,6 +21,7 @@ import {
   Chip,
   CircularProgress,
   IconButton,
+  Tooltip,
 } from '@mui/material';
 import {
   CheckCircle as SuccessIcon,
@@ -29,13 +30,17 @@ import {
   Block as SkippedIcon,
   Close as CloseIcon,
   AutoAwesome as AnalyzeIcon,
+  BugReport as DebugIcon,
 } from '@mui/icons-material';
 import { Company } from '../../../types/crm';
 import {
   analyzeCompanyWebsite,
   generateOfferIdeas,
+  generateOfferIdeasV3,
   CompanyAnalysis,
 } from '../../../services/firebase/cloudFunctions';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../../../services/firebase/firestore';
 
 interface BulkOfferAnalysisDialogProps {
   open: boolean;
@@ -54,6 +59,7 @@ interface CompanyProgress {
   cost?: number;
   ideasCount?: number;
   companyType?: string;
+  v3Debug?: any;
 }
 
 export const BulkOfferAnalysisDialog: React.FC<BulkOfferAnalysisDialogProps> = ({
@@ -67,6 +73,10 @@ export const BulkOfferAnalysisDialog: React.FC<BulkOfferAnalysisDialogProps> = (
   const [isComplete, setIsComplete] = useState(false);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [totalCost, setTotalCost] = useState(0);
+  const [v3DebugDialog, setV3DebugDialog] = useState<{
+    companyName: string;
+    debug: any;
+  } | null>(null);
   const cancelledRef = useRef(false);
 
   // Initialize progress map when dialog opens
@@ -105,7 +115,8 @@ export const BulkOfferAnalysisDialog: React.FC<BulkOfferAnalysisDialogProps> = (
     message?: string,
     cost?: number,
     ideasCount?: number,
-    companyType?: string
+    companyType?: string,
+    v3Debug?: any
   ) => {
     console.log(`[updateProgress] Called with: companyId=${companyId}, status=${status}, message=${message}`);
     setProgress((prev) => {
@@ -121,6 +132,7 @@ export const BulkOfferAnalysisDialog: React.FC<BulkOfferAnalysisDialogProps> = (
           ...(cost !== undefined && { cost }),
           ...(ideasCount !== undefined && { ideasCount }),
           ...(companyType !== undefined && { companyType }),
+          ...(v3Debug !== undefined && { v3Debug }),
         };
         console.log(`[updateProgress] Setting new entry:`, updatedEntry);
         newProgress.set(companyId, updatedEntry);
@@ -193,7 +205,7 @@ export const BulkOfferAnalysisDialog: React.FC<BulkOfferAnalysisDialogProps> = (
         if (cancelledRef.current) break;
 
         // ========================================
-        // STAGE 2: Generate blog ideas
+        // STAGE 2: Generate V1 ideas
         // ========================================
         const stage2Result = await generateOfferIdeas(
           company.id,
@@ -203,15 +215,55 @@ export const BulkOfferAnalysisDialog: React.FC<BulkOfferAnalysisDialogProps> = (
           company.blogAnalysis?.blogUrl || undefined
         );
 
-        const totalCostForCompany = stage1Cost + stage2Result.costInfo.totalCost;
+        // ========================================
+        // STAGE 3: Generate independent V3 ideas (best-effort)
+        // ========================================
+        let v3IdeasCount = 0;
+        let v3Cost = 0;
+        let v3Debug: any = undefined;
+        try {
+          const v3Result = await generateOfferIdeasV3(
+            company.id,
+            company.name,
+            websiteUrl,
+            undefined,
+            undefined,
+            companyAnalysis.companyType
+          );
+
+          v3IdeasCount = v3Result.ideas.length;
+          v3Cost = v3Result.costInfo.totalCost;
+          v3Debug = v3Result.debug;
+
+          await updateDoc(doc(db, 'entities', company.id), {
+            'offerAnalysis.v3': {
+              ideas: v3Result.ideas,
+              validationResults: v3Result.validationResults,
+              matchedConcepts: v3Result.matchedConcepts,
+              trendConceptsUsed: v3Result.trendConceptsUsed,
+              debug: v3Result.debug,
+              costInfo: v3Result.costInfo,
+              generatedAt: v3Result.generatedAt,
+              regenerationAttempts: v3Result.regenerationAttempts,
+              rejectedCount: v3Result.rejectedCount,
+            },
+            'offerAnalysis.tripleVersionGeneration': true,
+            updatedAt: serverTimestamp(),
+          });
+        } catch (v3Error) {
+          console.error(`[BulkAnalysis] V3 failed for ${company.name}:`, v3Error);
+        }
+
+        const totalCostForCompany = stage1Cost + stage2Result.costInfo.totalCost + v3Cost;
 
         updateProgress(
           company.id,
           'success',
           companyAnalysis.companyType,
           totalCostForCompany,
-          stage2Result.ideas.length,
-          companyAnalysis.companyType
+          stage2Result.ideas.length + v3IdeasCount,
+          companyAnalysis.companyType,
+          v3Debug
         );
 
         setTotalCost((prev) => prev + totalCostForCompany);
@@ -395,6 +447,9 @@ export const BulkOfferAnalysisDialog: React.FC<BulkOfferAnalysisDialogProps> = (
                 <TableCell sx={{ fontWeight: 700, bgcolor: '#fafafa', width: 80 }} align="center">
                   Ideas
                 </TableCell>
+                <TableCell sx={{ fontWeight: 700, bgcolor: '#fafafa', width: 80 }} align="center">
+                  Debug
+                </TableCell>
                 <TableCell sx={{ fontWeight: 700, bgcolor: '#fafafa', width: 80 }} align="right">
                   Cost
                 </TableCell>
@@ -455,6 +510,29 @@ export const BulkOfferAnalysisDialog: React.FC<BulkOfferAnalysisDialogProps> = (
                         />
                       )}
                     </TableCell>
+                    <TableCell align="center">
+                      {cp.v3Debug && (
+                        <Tooltip title="View V3 debug">
+                          <IconButton
+                            size="small"
+                            onClick={() =>
+                              setV3DebugDialog({
+                                companyName: cp.companyName,
+                                debug: cp.v3Debug,
+                              })
+                            }
+                            sx={{
+                              color: '#6366f1',
+                              '&:hover': {
+                                backgroundColor: 'rgba(99, 102, 241, 0.12)',
+                              },
+                            }}
+                          >
+                            <DebugIcon sx={{ fontSize: 16 }} />
+                          </IconButton>
+                        </Tooltip>
+                      )}
+                    </TableCell>
                     <TableCell align="right">
                       {cp.cost !== undefined && (
                         <Typography
@@ -498,6 +576,38 @@ export const BulkOfferAnalysisDialog: React.FC<BulkOfferAnalysisDialogProps> = (
             ${totalCost.toFixed(4)}
           </Typography>
         </Box>
+
+        {v3DebugDialog && (
+          <Dialog
+            open={Boolean(v3DebugDialog)}
+            onClose={() => setV3DebugDialog(null)}
+            maxWidth="md"
+            fullWidth
+          >
+            <DialogTitle>V3 Debug Trace - {v3DebugDialog.companyName}</DialogTitle>
+            <DialogContent dividers>
+              <Box
+                component="pre"
+                sx={{
+                  m: 0,
+                  p: 2,
+                  maxHeight: 480,
+                  overflow: 'auto',
+                  bgcolor: '#0f172a',
+                  color: '#e2e8f0',
+                  borderRadius: 1,
+                  fontSize: 12,
+                  lineHeight: 1.5,
+                }}
+              >
+                {JSON.stringify(v3DebugDialog.debug || {}, null, 2)}
+              </Box>
+            </DialogContent>
+            <DialogActions>
+              <Button onClick={() => setV3DebugDialog(null)}>Close</Button>
+            </DialogActions>
+          </Dialog>
+        )}
       </DialogContent>
 
       <DialogActions sx={{ p: 2, gap: 1 }}>

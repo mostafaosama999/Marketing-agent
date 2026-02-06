@@ -90,6 +90,7 @@ export const createGmailDraftCloud = functions.https.onCall(
         "outreach.email.draftCreatedAt": admin.firestore.FieldValue.serverTimestamp(),
         "outreach.email.draftId": result.draftId,
         "outreach.email.draftUrl": result.draftUrl,
+        "outreach.email.originalSubject": data.subject,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 

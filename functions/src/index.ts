@@ -110,6 +110,7 @@ export {getGmailAuthUrl} from "./gmail/generateAuthUrl";
 export {exchangeGmailOAuthCode} from "./gmail/exchangeOAuthCode";
 export {checkGmailConnectionStatus} from "./gmail/checkGmailConnection";
 export {createGmailDraftCloud} from "./gmail/createDraft";
+export {createFollowUpDraftCloud} from "./gmail/createFollowUpDraft";
 
 // Export competitor content tracking functions
 export {extractCompetitorPosts} from "./competitors/extractCompetitorPosts";
@@ -137,6 +138,7 @@ export {analyzeCompanyOffer} from "./offerAnalysis/analyzeCompanyOffer";
 export {analyzeCompanyWebsiteCloud} from "./offerAnalysis/analyzeCompanyWebsite";
 export {generateOfferIdeasCloud} from "./offerAnalysis/generateOfferIdeas";
 export {generateOfferIdeasV2Cloud} from "./offerAnalysis/v2/generateIdeasV2";
+export {generateOfferIdeasV3Cloud} from "./offerAnalysis/v3/generateIdeasV3";
 
 // Export V2 staged cloud functions (for progressive UI updates)
 export {v2Stage1Cloud} from "./offerAnalysis/v2/stages/stage1Differentiators";

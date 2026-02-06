@@ -121,7 +121,7 @@ export const getAIConceptsStatusCloud = functions
       }
 
       // Get cached concepts
-      const concepts = await getCachedConcepts(24);
+      const cached = await getCachedConcepts(24);
 
       return {
         cacheExists: true,
@@ -129,7 +129,7 @@ export const getAIConceptsStatusCloud = functions
         ageHours: Math.round(status.ageHours * 10) / 10,
         expiresInHours: Math.round(status.expiresInHours * 10) / 10,
         sources: status.sources,
-        concepts: concepts?.map((c) => ({
+        concepts: cached?.concepts.map((c) => ({
           name: c.name,
           category: c.category,
           hypeLevel: c.hypeLevel,

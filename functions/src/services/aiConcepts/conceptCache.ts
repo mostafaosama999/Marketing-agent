@@ -20,7 +20,7 @@ const DEFAULT_TTL_HOURS = 24;
  */
 export async function getCachedConcepts(
   maxAgeHours: number = DEFAULT_TTL_HOURS
-): Promise<AIConcept[] | null> {
+): Promise<{ concepts: AIConcept[]; ageHours: number; stale: boolean } | null> {
   try {
     const db = admin.firestore();
     const doc = await db.collection(COLLECTION_NAME).doc(CACHE_DOC_ID).get();
@@ -31,17 +31,7 @@ export async function getCachedConcepts(
     }
 
     const data = doc.data() as CachedConcepts;
-
-    // Check if expired
     const now = new Date();
-    const expiresAt = data.expiresAt instanceof admin.firestore.Timestamp
-      ? data.expiresAt.toDate()
-      : new Date(data.expiresAt);
-
-    if (expiresAt < now) {
-      console.log("[conceptCache] Cache expired");
-      return null;
-    }
 
     // Calculate age
     const extractedAt = data.extractedAt instanceof admin.firestore.Timestamp
@@ -49,14 +39,18 @@ export async function getCachedConcepts(
       : new Date(data.extractedAt);
     const ageHours = (now.getTime() - extractedAt.getTime()) / (1000 * 60 * 60);
 
-    if (ageHours > maxAgeHours) {
-      console.log(`[conceptCache] Cache too old (${ageHours.toFixed(1)}h > ${maxAgeHours}h)`);
-      return null;
-    }
+    // Check if expired/stale
+    const isStale = ageHours > maxAgeHours;
 
-    console.log(
-      `[conceptCache] Cache hit: ${data.concepts.length} concepts, age: ${ageHours.toFixed(1)}h`
-    );
+    if (isStale) {
+      console.log(
+        `[conceptCache] Cache stale (${ageHours.toFixed(1)}h > ${maxAgeHours}h), but still usable`
+      );
+    } else {
+      console.log(
+        `[conceptCache] Cache hit: ${data.concepts.length} concepts, age: ${ageHours.toFixed(1)}h`
+      );
+    }
 
     // Convert Firestore timestamps back to Date objects
     const concepts = data.concepts.map((c) => ({
@@ -66,7 +60,7 @@ export async function getCachedConcepts(
         : new Date(c.lastUpdated),
     }));
 
-    return concepts;
+    return { concepts, ageHours, stale: isStale };
   } catch (error) {
     console.error("[conceptCache] Error getting cached concepts:", error);
     return null;
@@ -120,12 +114,14 @@ export async function invalidateCache(): Promise<void> {
 }
 
 /**
- * Get concepts with automatic caching
+ * Get concepts with automatic caching (never-expire strategy)
  *
  * This is the main entry point - it handles:
- * 1. Checking cache
- * 2. Fetching and extracting if cache miss
- * 3. Saving to cache
+ * 1. Check cache — if fresh, return it
+ * 2. If stale or missing, try to fetch fresh concepts
+ * 3. If fresh fetch succeeds → update cache, return fresh
+ * 4. If fresh fetch fails → return stale cache (any age) with warning
+ * 5. Only fail if there is literally nothing cached (first run edge case)
  */
 export async function getAIConcepts(
   openai: OpenAI,
@@ -134,29 +130,63 @@ export async function getAIConcepts(
   // Try cache first
   const cached = await getCachedConcepts(maxAgeHours);
 
-  if (cached) {
+  // Fresh cache hit — return immediately
+  if (cached && !cached.stale) {
     return {
-      concepts: cached,
-      rawSignalCount: 0, // Unknown for cached
+      concepts: cached.concepts,
+      rawSignalCount: 0,
       extractionCost: 0,
       cached: true,
+      ageHours: cached.ageHours,
+      stale: false,
     };
   }
 
-  // Cache miss - fetch and extract
-  console.log("[conceptCache] Cache miss, fetching fresh concepts...");
-
-  const result = await fetchAndExtractConcepts(openai);
-
-  // Save to cache
-  await saveCachedConcepts(
-    result.concepts,
-    result.rawSignalCount,
-    ["hackernews", "arxiv", "rundown", "importai"],
-    maxAgeHours
+  // Cache miss or stale — try to fetch fresh concepts
+  console.log(
+    cached
+      ? "[conceptCache] Cache stale, attempting fresh fetch..."
+      : "[conceptCache] Cache miss, fetching fresh concepts..."
   );
 
-  return result;
+  try {
+    const result = await fetchAndExtractConcepts(openai);
+
+    // Save to cache
+    await saveCachedConcepts(
+      result.concepts,
+      result.rawSignalCount,
+      ["hackernews", "arxiv", "rundown", "importai"],
+      maxAgeHours
+    );
+
+    return { ...result, ageHours: 0, stale: false };
+  } catch (fetchError) {
+    // Fresh fetch failed — fall back to stale cache if available
+    if (cached) {
+      console.warn(
+        `[conceptCache] Fresh fetch failed, using stale cache ` +
+          `(${cached.ageHours.toFixed(1)}h old, ${cached.concepts.length} concepts):`,
+        fetchError
+      );
+      return {
+        concepts: cached.concepts,
+        rawSignalCount: 0,
+        extractionCost: 0,
+        cached: true,
+        ageHours: cached.ageHours,
+        stale: true,
+      };
+    }
+
+    // No cache at all — this is the first-run edge case
+    console.error(
+      "[conceptCache] Fresh fetch failed and no cache exists. " +
+        "This is expected on first run if signal sources are unavailable.",
+      fetchError
+    );
+    throw fetchError;
+  }
 }
 
 /**
@@ -178,7 +208,7 @@ export async function refreshConcepts(
     ttlHours
   );
 
-  return { ...result, cached: false };
+  return { ...result, cached: false, ageHours: 0, stale: false };
 }
 
 /**

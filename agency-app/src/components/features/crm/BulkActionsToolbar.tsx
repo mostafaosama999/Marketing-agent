@@ -17,6 +17,7 @@ import {
   ChangeCircle as ChangeCircleIcon,
   Archive as ArchiveIcon,
   Email as EmailIcon,
+  Reply as ReplyIcon,
 } from '@mui/icons-material';
 import { LeadStatus } from '../../../types/lead';
 import { usePipelineConfigContext } from '../../../contexts/PipelineConfigContext';
@@ -26,12 +27,14 @@ interface BulkActionsToolbarProps {
   onChangeStatus: (status: LeadStatus) => void;
   onEditFields: () => void;
   onExportCSV: () => void;
-  onCreateDrafts: () => void; // NEW
+  onCreateDrafts: () => void;
+  onCreateFollowUps: () => void;
   onArchive: () => void;
   onDelete: () => void;
   onClear: () => void;
   isDeleting?: boolean;
-  isCreatingDrafts?: boolean; // NEW
+  isCreatingDrafts?: boolean;
+  isCreatingFollowUps?: boolean;
 }
 
 export const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
@@ -40,11 +43,13 @@ export const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
   onEditFields,
   onExportCSV,
   onCreateDrafts,
+  onCreateFollowUps,
   onArchive,
   onDelete,
   onClear,
   isDeleting = false,
   isCreatingDrafts = false,
+  isCreatingFollowUps = false,
 }) => {
   const { stages } = usePipelineConfigContext();
   const [statusMenuAnchor, setStatusMenuAnchor] = useState<null | HTMLElement>(null);
@@ -173,6 +178,26 @@ export const BulkActionsToolbar: React.FC<BulkActionsToolbarProps> = ({
           }}
         >
           {isCreatingDrafts ? 'Creating Drafts...' : 'Create Gmail Drafts'}
+        </Button>
+
+        {/* Create Follow-Up Drafts */}
+        <Button
+          variant="outlined"
+          startIcon={isCreatingFollowUps ? <CircularProgress size={16} sx={{ color: 'white' }} /> : <ReplyIcon />}
+          onClick={onCreateFollowUps}
+          disabled={isDeleting || isCreatingFollowUps || isCreatingDrafts}
+          sx={{
+            color: 'white',
+            borderColor: 'white',
+            textTransform: 'none',
+            fontWeight: 600,
+            '&:hover': {
+              borderColor: 'white',
+              bgcolor: 'rgba(255, 255, 255, 0.1)',
+            },
+          }}
+        >
+          {isCreatingFollowUps ? 'Creating Follow-ups...' : 'Create Follow-up Drafts'}
         </Button>
 
         {/* Archive */}

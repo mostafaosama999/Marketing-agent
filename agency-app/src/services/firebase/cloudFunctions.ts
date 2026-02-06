@@ -677,6 +677,7 @@ export interface IdeaValidationScores {
   uniqueness: number;
   buzzwordDensity: number;
   audienceRelevance: number;
+  timeliness: number;
   overallScore: number;
 }
 
@@ -751,8 +752,13 @@ export interface V2IdeaGenerationResult {
   validationResults: IdeaValidationResult[];
   companyProfile: CompanyProfileV2;
   contentGaps: ContentGap[];
+  matchedConcepts?: MatchedConceptSimple[];
+  allConcepts?: RawConceptSimple[];
+  conceptsEvaluated?: number;
   costInfo: {
+    stage0Cost: number;
     stage1Cost: number;
+    stage1_5Cost: number;
     stage2Cost: number;
     stage3Cost: number;
     stage4Cost: number;
@@ -761,6 +767,131 @@ export interface V2IdeaGenerationResult {
   generatedAt: string;
   rejectedCount: number;
   regenerationAttempts: number;
+}
+
+/**
+ * V3 Blog Idea - trend-relevance fusion output
+ */
+export interface BlogIdeaV3 {
+  title: string;
+  whyOnlyTheyCanWriteThis: string;
+  specificEvidence: string;
+  targetGap: string;
+  audienceFit: string;
+  whatReaderLearns: string[];
+  keyStackTools: string[];
+  angleToAvoidDuplication: string;
+  differentiatorUsed?: string;
+  contentGapFilled?: string;
+  probability?: number;
+  aiConcept?: string;
+  isConceptTutorial?: boolean;
+  conceptFitScore?: number;
+  trendEvidence: string;
+  productTrendIntegration: string;
+  trendFreshnessScore: number;
+  sourceConceptType?: 'curated' | 'dynamic';
+}
+
+export interface V3MatchedConcept {
+  concept: {
+    id: string;
+    name: string;
+    description: string;
+    whyHot: string;
+    useCases: string[];
+    keywords: string[];
+    category: 'paradigm' | 'technique' | 'protocol' | 'architecture' | 'tool';
+    hypeLevel: 'emerging' | 'peak' | 'maturing' | 'declining';
+    lastUpdated: string;
+    sourceType: 'curated' | 'dynamic';
+    freshnessScore: number;
+    evidenceCount: number;
+    confidenceScore: number;
+  };
+  fitScore: number;
+  fitReason: string;
+  productIntegration: string;
+  tutorialAngle: string;
+  fromFallback: boolean;
+}
+
+export interface V3ValidationResult {
+  idea: BlogIdeaV3;
+  isValid: boolean;
+  scores: {
+    companyRelevance: number;
+    trendFreshness: number;
+    productTrendIntegration: number;
+    audienceRelevance: number;
+    developerActionability: number;
+    overallScore: number;
+  };
+  rejectionReason?: string;
+  improvementSuggestion?: string;
+}
+
+export interface V3IdeaGenerationResult {
+  success: boolean;
+  version: 'v3';
+  ideas: BlogIdeaV3[];
+  validationResults: V3ValidationResult[];
+  companyProfile: CompanyProfileV2;
+  contentGaps: ContentGap[];
+  matchedConcepts: V3MatchedConcept[];
+  trendConceptsUsed: V3MatchedConcept['concept'][];
+  debug: {
+    stage0: {
+      cached: boolean;
+      dynamicExtractionFailed: boolean;
+      curatedCount: number;
+      dynamicCount: number;
+      mergedCount: number;
+      selectedForMatching: number;
+    };
+    stage1: {
+      differentiatorsFound: number;
+      techStackCount: number;
+    };
+    stage1_5: {
+      rankedCandidates: number;
+      matchedCount: number;
+      fallbackUsed: boolean;
+      fallbackInjectedCount: number;
+      rejectedSample: string[];
+    };
+    stage2: {
+      gapsFound: number;
+      topGapTopics: string[];
+    };
+    stage3Attempts: Array<{
+      attempt: number;
+      generatedCount: number;
+      conceptTutorialCount: number;
+      cost: number;
+      rejectionSummaryUsed?: string;
+    }>;
+    stage4Attempts: Array<{
+      attempt: number;
+      validCount: number;
+      rejectedCount: number;
+      cost: number;
+      topRejectionReasons: string[];
+    }>;
+    degradedMode: boolean;
+  };
+  costInfo: {
+    stage0Cost: number;
+    stage1Cost: number;
+    stage1_5Cost: number;
+    stage2Cost: number;
+    stage3Cost: number;
+    stage4Cost: number;
+    totalCost: number;
+  };
+  generatedAt: string;
+  regenerationAttempts: number;
+  rejectedCount: number;
 }
 
 // Extended timeout for V2: 9 minutes (540000 ms) - 4-stage pipeline takes longer
@@ -821,6 +952,64 @@ export async function generateOfferIdeasV2(
     apolloData,
     blogAnalysis,
     companyType,
+  });
+
+  return result.data;
+}
+
+/**
+ * Generate offer ideas using independent V3 trend-relevance fusion pipeline
+ */
+export async function generateOfferIdeasV3(
+  companyId: string,
+  companyName: string,
+  website: string,
+  apolloData?: {
+    industry?: string | null;
+    industries?: string[];
+    employeeCount?: number | null;
+    employeeRange?: string | null;
+    foundedYear?: number | null;
+    totalFunding?: number | null;
+    totalFundingFormatted?: string | null;
+    latestFundingStage?: string | null;
+    technologies?: string[];
+    keywords?: string[];
+    description?: string | null;
+  },
+  blogAnalysis?: {
+    isTechnical?: boolean;
+    hasCodeExamples?: boolean;
+    hasDiagrams?: boolean;
+    isDeveloperB2BSaas?: boolean;
+    monthlyFrequency?: number;
+    contentSummary?: string;
+    rating?: 'low' | 'medium' | 'high';
+  },
+  companyType?: 'Generative AI' | 'AI tool' | 'Data science' | 'Service provider' | 'Content maker',
+  specificRequirements?: string
+): Promise<V3IdeaGenerationResult> {
+  const generateIdeasV3 = httpsCallable<
+    {
+      companyId: string;
+      companyName: string;
+      website: string;
+      apolloData?: typeof apolloData;
+      blogAnalysis?: typeof blogAnalysis;
+      companyType?: typeof companyType;
+      specificRequirements?: string;
+    },
+    V3IdeaGenerationResult
+  >(functions, 'generateOfferIdeasV3Cloud', { timeout: V2_TIMEOUT });
+
+  const result = await generateIdeasV3({
+    companyId,
+    companyName,
+    website,
+    apolloData,
+    blogAnalysis,
+    companyType,
+    specificRequirements,
   });
 
   return result.data;
@@ -965,13 +1154,25 @@ export interface MatchedConceptSimple {
   tutorialAngle: string;
 }
 
+export interface RawConceptSimple {
+  name: string;
+  description: string;
+  whyHot: string;
+  useCases: string[];
+  category: string;
+  hypeLevel: string;
+}
+
 export interface V2Stage1_5Response {
   success: boolean;
   matchedConcepts: MatchedConceptSimple[];
+  allConcepts: RawConceptSimple[];
   conceptsEvaluated: number;
   stage0Cost: number;
   stage1_5Cost: number;
   cached: boolean;
+  stale?: boolean;
+  ageHours?: number;
   generatedAt: string;
 }
 
@@ -1020,7 +1221,8 @@ export async function v2Stage3GenerateIdeas(
   companyId: string,
   profile: CompanyProfileV2,
   gaps: ContentGap[],
-  matchedConcepts?: MatchedConceptSimple[]
+  matchedConcepts?: MatchedConceptSimple[],
+  allConcepts?: RawConceptSimple[]
 ): Promise<V2Stage3Response> {
   const stage3 = httpsCallable<
     {
@@ -1028,6 +1230,7 @@ export async function v2Stage3GenerateIdeas(
       profile: CompanyProfileV2;
       gaps: ContentGap[];
       matchedConcepts?: MatchedConceptSimple[];
+      allConcepts?: RawConceptSimple[];
     },
     V2Stage3Response
   >(functions, 'v2Stage3Cloud', { timeout: V2_STAGE3_TIMEOUT });
@@ -1037,6 +1240,7 @@ export async function v2Stage3GenerateIdeas(
     profile,
     gaps,
     matchedConcepts,
+    allConcepts,
   });
 
   return result.data;

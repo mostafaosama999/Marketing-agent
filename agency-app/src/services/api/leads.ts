@@ -768,6 +768,25 @@ export async function updateLeadEmailStatus(
 }
 
 /**
+ * Update a lead's follow-up email status
+ */
+export async function updateLeadFollowUpStatus(
+  leadId: string,
+  status: 'not_sent' | 'sent'
+): Promise<void> {
+  try {
+    const leadRef = doc(db, LEADS_COLLECTION, leadId);
+    await updateDoc(leadRef, {
+      'outreach.email.followUpStatus': status,
+      updatedAt: serverTimestamp(),
+    });
+  } catch (error) {
+    console.error('Error updating lead follow-up status:', error);
+    throw error;
+  }
+}
+
+/**
  * Check if a lead's outreach status or date should trigger auto-update to "Contacted"
  * @param outreach - The outreach data from the lead
  * @returns true if conditions are met for auto-update

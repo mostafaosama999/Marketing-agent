@@ -91,7 +91,10 @@ import {
   analyzeWritingProgramDetails,
   analyzeCompanyWebsite,
   generateOfferIdeas,
+  generateOfferIdeasV3,
 } from '../../services/firebase/cloudFunctions';
+import { doc, updateDoc, serverTimestamp } from 'firebase/firestore';
+import { db } from '../../services/firebase/firestore';
 import { updateCompany } from '../../services/api/companies';
 import {
   getCompanyWebsite,
@@ -749,7 +752,7 @@ export const CompaniesPage: React.FC = () => {
           company.blogAnalysis?.blogUrl || undefined
         );
 
-        // Stage 2: Generate ideas
+        // Stage 2: Generate V1 ideas
         await generateOfferIdeas(
           company.id,
           company.name,
@@ -757,6 +760,36 @@ export const CompaniesPage: React.FC = () => {
           stage1Result.companyAnalysis,
           company.blogAnalysis?.blogUrl || undefined
         );
+
+        // Stage 3: Generate independent V3 ideas (best-effort)
+        try {
+          const v3Result = await generateOfferIdeasV3(
+            company.id,
+            company.name,
+            websiteUrl,
+            undefined,
+            undefined,
+            stage1Result.companyAnalysis.companyType
+          );
+
+          await updateDoc(doc(db, 'entities', company.id), {
+            'offerAnalysis.v3': {
+              ideas: v3Result.ideas,
+              validationResults: v3Result.validationResults,
+              matchedConcepts: v3Result.matchedConcepts,
+              trendConceptsUsed: v3Result.trendConceptsUsed,
+              debug: v3Result.debug,
+              costInfo: v3Result.costInfo,
+              generatedAt: v3Result.generatedAt,
+              regenerationAttempts: v3Result.regenerationAttempts,
+              rejectedCount: v3Result.rejectedCount,
+            },
+            'offerAnalysis.tripleVersionGeneration': true,
+            updatedAt: serverTimestamp(),
+          });
+        } catch (v3Error) {
+          console.error(`[BulkOffers] V3 failed for ${company.name}:`, v3Error);
+        }
 
         completed++;
       } catch (error) {

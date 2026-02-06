@@ -2,7 +2,7 @@
 // Displays blog ideas as compact cards with approval functionality
 // Now supports V1/V2 version comparison tabs
 
-import React, { useState } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   Box,
   Typography,
@@ -16,6 +16,7 @@ import {
   Tab,
   Badge,
   LinearProgress,
+  CircularProgress,
 } from '@mui/material';
 import {
   Lightbulb as IdeaIcon,
@@ -34,7 +35,13 @@ import {
   TrendingUp as ScoreIcon,
   Psychology as AIConceptIcon,
   Bolt as TutorialIcon,
+  Merge as V3Icon,
+  Error as ErrorIcon,
+  BugReport as DebugIcon,
 } from '@mui/icons-material';
+import { V2StageProgressDisplay } from './V2StageProgressDisplay';
+import { CompanyProfileV2, ContentGap, RawConceptSimple, BlogIdeaV3 as BlogIdeaV3Type } from '../../../services/firebase/cloudFunctions';
+import { MatchedConceptSimple } from './V2StageProgressDisplay';
 
 export interface BlogIdea {
   title: string;
@@ -1932,6 +1939,763 @@ export const BlogIdeasDisplayDual: React.FC<BlogIdeasDisplayDualProps> = ({
           })
         )}
       </Box>
+    </Box>
+  );
+};
+
+// ============================================================
+// Triple Version Display (V1/V2/V3) with independent tab states
+// ============================================================
+
+export type VersionStatus = 'idle' | 'generating' | 'complete' | 'error';
+
+export interface V2StageResultsForDisplay {
+  profile?: CompanyProfileV2;
+  matchedConcepts?: MatchedConceptSimple[];
+  allConcepts?: RawConceptSimple[];
+  conceptsEvaluated?: number;
+  conceptsCached?: boolean;
+  conceptsStale?: boolean;
+  conceptsAgeHours?: number;
+  contentGaps?: ContentGap[];
+  rawIdeas?: BlogIdeaV2[];
+  validatedIdeas?: IdeaValidationResult[];
+  currentStage: 'idle' | 'stage1' | 'stage1_5' | 'stage2' | 'stage3' | 'stage4' | 'complete';
+}
+
+export interface BlogIdeasDisplayTripleProps {
+  // V1
+  v1Ideas: BlogIdea[];
+  v1Status: VersionStatus;
+  // V2
+  v2Ideas: BlogIdeaV2[];
+  v2Status: VersionStatus;
+  v2ValidationResults?: IdeaValidationResult[];
+  v2MatchedConcepts?: MatchedConceptDisplay[];
+  v2StageResults?: V2StageResultsForDisplay;
+  // V3
+  v3Ideas: BlogIdeaV3Type[];
+  v3Status: VersionStatus;
+  v3Debug?: any;
+  onOpenV3Debug?: () => void;
+  // Common
+  chosenIdeaTitle?: string | null;
+  chosenIdeaVersion?: 'v1' | 'v2' | 'v3' | null;
+  onChooseIdea?: (title: string, version: 'v1' | 'v2' | 'v3') => void;
+  onClearChoice?: () => void;
+}
+
+const mapV3IdeaForDisplay = (idea: BlogIdeaV3Type): BlogIdea => ({
+  title: idea.title,
+  whyItFits: `${idea.whyOnlyTheyCanWriteThis} Trend signal: ${idea.trendEvidence}`,
+  whatReaderLearns: idea.whatReaderLearns,
+  keyStackTools: idea.keyStackTools,
+  angleToAvoidDuplication: idea.angleToAvoidDuplication,
+  platform: idea.aiConcept || undefined,
+  specificUse: idea.productTrendIntegration || undefined,
+  companyTool: idea.differentiatorUsed || undefined,
+});
+
+/**
+ * Tab loading/error/empty state renderer
+ */
+const TabStatusDisplay: React.FC<{
+  status: VersionStatus;
+  version: string;
+  color: string;
+}> = ({ status, version, color }) => {
+  if (status === 'generating') {
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          py: 6,
+        }}
+      >
+        <CircularProgress size={40} thickness={4} sx={{ color, mb: 2 }} />
+        <Typography sx={{ fontWeight: 600, color: '#1e293b', fontSize: '14px', mb: 0.5 }}>
+          {version} is generating...
+        </Typography>
+        <Typography sx={{ color: '#64748b', fontSize: '12px' }}>
+          Ideas will appear here when ready
+        </Typography>
+      </Box>
+    );
+  }
+
+  if (status === 'error') {
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          py: 6,
+        }}
+      >
+        <ErrorIcon sx={{ color: '#ef4444', fontSize: 40, mb: 1 }} />
+        <Typography sx={{ fontWeight: 600, color: '#ef4444', fontSize: '14px' }}>
+          {version} generation failed
+        </Typography>
+        <Typography sx={{ color: '#64748b', fontSize: '12px', mt: 0.5 }}>
+          Other versions may still succeed
+        </Typography>
+      </Box>
+    );
+  }
+
+  // idle
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        py: 6,
+      }}
+    >
+      <Typography sx={{ color: '#94a3b8', fontSize: '13px' }}>
+        {version} has not started yet
+      </Typography>
+    </Box>
+  );
+};
+
+export const BlogIdeasDisplayTriple: React.FC<BlogIdeasDisplayTripleProps> = ({
+  v1Ideas,
+  v1Status,
+  v2Ideas,
+  v2Status,
+  v2ValidationResults,
+  v2MatchedConcepts,
+  v2StageResults,
+  v3Ideas,
+  v3Status,
+  v3Debug,
+  onOpenV3Debug,
+  chosenIdeaTitle,
+  chosenIdeaVersion,
+  onChooseIdea,
+  onClearChoice,
+}) => {
+  const [activeTab, setActiveTab] = useState<'v1' | 'v2' | 'v3'>('v2');
+  const [expandedCards, setExpandedCards] = useState<Set<string>>(new Set());
+  const userSwitchedTab = useRef(false);
+
+  // Auto-switch to first completed tab if user hasn't manually switched
+  useEffect(() => {
+    if (userSwitchedTab.current) return;
+
+    // Priority: V2 > V1 > V3 for auto-switch
+    if (v2Status === 'complete' && v2Ideas.length > 0) {
+      setActiveTab('v2');
+    } else if (v1Status === 'complete' && v1Ideas.length > 0) {
+      setActiveTab('v1');
+    } else if (v3Status === 'complete' && v3Ideas.length > 0) {
+      setActiveTab('v3');
+    }
+  }, [v1Status, v2Status, v3Status, v1Ideas.length, v2Ideas.length, v3Ideas.length]);
+
+  const handleTabChange = (_: React.SyntheticEvent, newValue: 'v1' | 'v2' | 'v3') => {
+    userSwitchedTab.current = true;
+    setActiveTab(newValue);
+  };
+
+  const toggleExpand = (version: string, index: number) => {
+    const key = `${version}-${index}`;
+    setExpandedCards((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(key)) {
+        newSet.delete(key);
+      } else {
+        newSet.add(key);
+      }
+      return newSet;
+    });
+  };
+
+  const getValidationResult = (index: number): IdeaValidationResult | undefined => {
+    return v2ValidationResults?.[index];
+  };
+
+  const handleChoose = (title: string, version: 'v1' | 'v2' | 'v3') => {
+    if (onChooseIdea) {
+      onChooseIdea(title, version);
+    }
+  };
+
+  const isIdeaChosen = (title: string, version: 'v1' | 'v2' | 'v3'): boolean => {
+    return chosenIdeaTitle === title && chosenIdeaVersion === version;
+  };
+
+  const getTabBadge = (status: VersionStatus, count: number) => {
+    if (status === 'generating') {
+      return (
+        <CircularProgress size={14} thickness={5} sx={{ color: 'inherit' }} />
+      );
+    }
+    if (status === 'error') {
+      return <ErrorIcon sx={{ fontSize: 14, color: '#ef4444' }} />;
+    }
+    if (status === 'complete' && count > 0) {
+      return count;
+    }
+    return 0;
+  };
+
+  const versionDescriptions: Record<string, string> = {
+    v2: 'V2 ideas are generated using a 5-stage pipeline that analyzes company differentiators, matches trending AI concepts, content gaps, and validates each idea for personalization and uniqueness.',
+    v1: 'V1 ideas are generated using template-based prompts with trending AI concepts. These may be more generic across different companies.',
+    v3: 'V3 ideas combine curated + dynamic AI trend concepts with company-specific differentiators, using trend-relevance fusion scoring.',
+  };
+
+  const versionColors: Record<string, { primary: string; gradient: string; light: string }> = {
+    v2: { primary: '#8b5cf6', gradient: 'linear-gradient(135deg, #8b5cf6 0%, #6366f1 100%)', light: 'rgba(139, 92, 246, 0.08)' },
+    v1: { primary: '#667eea', gradient: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', light: 'rgba(102, 126, 234, 0.08)' },
+    v3: { primary: '#0f766e', gradient: 'linear-gradient(135deg, #0f766e 0%, #0d9488 100%)', light: 'rgba(15, 118, 110, 0.08)' },
+  };
+
+  const colors = versionColors[activeTab];
+
+  return (
+    <Box>
+      {/* Section Header */}
+      <Box
+        sx={{
+          display: 'flex',
+          justifyContent: 'space-between',
+          alignItems: 'center',
+          mb: 2,
+          mt: 4,
+        }}
+      >
+        <Typography
+          variant="h6"
+          sx={{
+            fontWeight: 700,
+            color: '#1e293b',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+          }}
+        >
+          <IdeaIcon sx={{ color: '#667eea' }} />
+          Blog Ideas
+        </Typography>
+
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          {/* V3 Debug Button */}
+          {activeTab === 'v3' && onOpenV3Debug && v3Debug && (
+            <Button
+              variant="outlined"
+              size="small"
+              startIcon={<DebugIcon />}
+              onClick={onOpenV3Debug}
+              sx={{
+                borderColor: '#0f766e',
+                color: '#0f766e',
+                textTransform: 'none',
+                fontWeight: 600,
+                fontSize: '12px',
+                '&:hover': {
+                  borderColor: '#115e59',
+                  backgroundColor: 'rgba(15, 118, 110, 0.06)',
+                },
+              }}
+            >
+              V3 Debug
+            </Button>
+          )}
+
+          {/* Clear Choice Button */}
+          {chosenIdeaTitle && onClearChoice && (
+            <Tooltip title="Clear selected idea">
+              <Button
+                variant="text"
+                size="small"
+                startIcon={<ClearAllIcon />}
+                onClick={onClearChoice}
+                sx={{
+                  color: '#64748b',
+                  textTransform: 'none',
+                  fontWeight: 500,
+                  '&:hover': {
+                    color: '#ef4444',
+                    backgroundColor: 'rgba(239, 68, 68, 0.08)',
+                  },
+                }}
+              >
+                Clear Choice
+              </Button>
+            </Tooltip>
+          )}
+        </Box>
+      </Box>
+
+      {/* Version Tabs */}
+      <Box sx={{ borderBottom: '1px solid #e2e8f0', mb: 2 }}>
+        <Tabs
+          value={activeTab}
+          onChange={handleTabChange}
+          sx={{
+            minHeight: 42,
+            '& .MuiTabs-indicator': {
+              height: 3,
+              borderRadius: '3px 3px 0 0',
+              background: colors.gradient,
+            },
+          }}
+        >
+          <Tab
+            value="v2"
+            icon={
+              <Badge
+                badgeContent={getTabBadge(v2Status, v2Ideas.length)}
+                color="secondary"
+                sx={{
+                  '& .MuiBadge-badge': {
+                    background: versionColors.v2.gradient,
+                    color: 'white',
+                    fontWeight: 700,
+                    fontSize: '10px',
+                  },
+                }}
+              >
+                <V2Icon sx={{ fontSize: '18px' }} />
+              </Badge>
+            }
+            label="V2 (Personalized)"
+            iconPosition="start"
+            sx={{
+              textTransform: 'none',
+              fontWeight: 600,
+              fontSize: '13px',
+              minHeight: 42,
+              color: activeTab === 'v2' ? '#8b5cf6' : '#64748b',
+              '&.Mui-selected': { color: '#8b5cf6' },
+            }}
+          />
+          <Tab
+            value="v1"
+            icon={
+              <Badge
+                badgeContent={getTabBadge(v1Status, v1Ideas.length)}
+                color="primary"
+                sx={{
+                  '& .MuiBadge-badge': {
+                    background: versionColors.v1.gradient,
+                    color: 'white',
+                    fontWeight: 700,
+                    fontSize: '10px',
+                  },
+                }}
+              >
+                <V1Icon sx={{ fontSize: '18px' }} />
+              </Badge>
+            }
+            label="V1 (Template)"
+            iconPosition="start"
+            sx={{
+              textTransform: 'none',
+              fontWeight: 600,
+              fontSize: '13px',
+              minHeight: 42,
+              color: activeTab === 'v1' ? '#667eea' : '#64748b',
+              '&.Mui-selected': { color: '#667eea' },
+            }}
+          />
+          <Tab
+            value="v3"
+            icon={
+              <Badge
+                badgeContent={getTabBadge(v3Status, v3Ideas.length)}
+                color="success"
+                sx={{
+                  '& .MuiBadge-badge': {
+                    background: versionColors.v3.gradient,
+                    color: 'white',
+                    fontWeight: 700,
+                    fontSize: '10px',
+                  },
+                }}
+              >
+                <V3Icon sx={{ fontSize: '18px' }} />
+              </Badge>
+            }
+            label="V3 (Trend Fusion)"
+            iconPosition="start"
+            sx={{
+              textTransform: 'none',
+              fontWeight: 600,
+              fontSize: '13px',
+              minHeight: 42,
+              color: activeTab === 'v3' ? '#0f766e' : '#64748b',
+              '&.Mui-selected': { color: '#0f766e' },
+            }}
+          />
+        </Tabs>
+      </Box>
+
+      {/* Version Description */}
+      <Box
+        sx={{
+          mb: 2,
+          p: 1.5,
+          background: colors.light,
+          borderRadius: 2,
+          border: `1px solid ${colors.primary}22`,
+        }}
+      >
+        <Typography
+          sx={{
+            fontSize: '12px',
+            color: colors.primary,
+            fontWeight: 500,
+          }}
+        >
+          {versionDescriptions[activeTab]}
+        </Typography>
+      </Box>
+
+      {/* ===== V2 TAB CONTENT ===== */}
+      {activeTab === 'v2' && (
+        <>
+          {v2Status === 'complete' && v2Ideas.length > 0 ? (
+            <>
+              {/* AI Concepts Summary */}
+              {v2MatchedConcepts && v2MatchedConcepts.length > 0 && (
+                <Box
+                  sx={{
+                    mb: 2,
+                    p: 1.5,
+                    background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.06) 0%, rgba(190, 24, 93, 0.06) 100%)',
+                    borderRadius: 2,
+                    border: '1px solid rgba(236, 72, 153, 0.15)',
+                  }}
+                >
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                    <AIConceptIcon sx={{ color: '#ec4899', fontSize: '18px' }} />
+                    <Typography
+                      sx={{ fontSize: '12px', fontWeight: 700, color: '#be185d', textTransform: 'uppercase', letterSpacing: '0.5px' }}
+                    >
+                      AI Concepts Matched ({v2MatchedConcepts.length})
+                    </Typography>
+                  </Box>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                    {v2MatchedConcepts.map((concept, idx) => (
+                      <Tooltip key={idx} title={concept.fitReason}>
+                        <Chip
+                          icon={<TutorialIcon sx={{ fontSize: '12px !important' }} />}
+                          label={`${concept.name} (${concept.fitScore}%)`}
+                          size="small"
+                          sx={{
+                            background: 'linear-gradient(135deg, rgba(236, 72, 153, 0.15) 0%, rgba(190, 24, 93, 0.15) 100%)',
+                            color: '#be185d',
+                            fontWeight: 600,
+                            fontSize: '10px',
+                            height: '24px',
+                            border: '1px solid rgba(236, 72, 153, 0.3)',
+                            '& .MuiChip-icon': { color: '#ec4899' },
+                          }}
+                        />
+                      </Tooltip>
+                    ))}
+                  </Box>
+                </Box>
+              )}
+
+              {/* V2 Idea Cards */}
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                {v2Ideas.map((idea, index) => (
+                  <V2IdeaCard
+                    key={index}
+                    idea={idea}
+                    index={index}
+                    isChosen={isIdeaChosen(idea.title, 'v2')}
+                    isExpanded={expandedCards.has(`v2-${index}`)}
+                    validationResult={getValidationResult(index)}
+                    onToggleExpand={() => toggleExpand('v2', index)}
+                    onChoose={() => handleChoose(idea.title, 'v2')}
+                    onUnchoose={() => onClearChoice?.()}
+                  />
+                ))}
+              </Box>
+            </>
+          ) : v2Status === 'generating' && v2StageResults ? (
+            /* V2 Progressive Stage Display */
+            <V2StageProgressDisplay
+              profile={v2StageResults.profile}
+              matchedConcepts={v2StageResults.matchedConcepts}
+              allConcepts={v2StageResults.allConcepts}
+              conceptsEvaluated={v2StageResults.conceptsEvaluated}
+              conceptsCached={v2StageResults.conceptsCached}
+              conceptsStale={v2StageResults.conceptsStale}
+              conceptsAgeHours={v2StageResults.conceptsAgeHours}
+              contentGaps={v2StageResults.contentGaps}
+              rawIdeas={v2StageResults.rawIdeas}
+              validatedIdeas={v2StageResults.validatedIdeas}
+              currentStage={v2StageResults.currentStage}
+            />
+          ) : (
+            <TabStatusDisplay status={v2Status} version="V2" color="#8b5cf6" />
+          )}
+        </>
+      )}
+
+      {/* ===== V1 TAB CONTENT ===== */}
+      {activeTab === 'v1' && (
+        <>
+          {v1Status === 'complete' && v1Ideas.length > 0 ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              {v1Ideas.map((idea, index) => {
+                const isChosen = isIdeaChosen(idea.title, 'v1');
+                const isExpanded = expandedCards.has(`v1-${index}`);
+
+                return (
+                  <Box
+                    key={index}
+                    sx={{
+                      background: isChosen ? 'rgba(16, 185, 129, 0.05)' : 'rgba(255, 255, 255, 0.95)',
+                      backdropFilter: 'blur(20px)',
+                      borderRadius: 2,
+                      border: isChosen ? '2px solid #10b981' : '1px solid #e2e8f0',
+                      boxShadow: isChosen ? '0 4px 20px rgba(16, 185, 129, 0.15)' : '0 2px 8px rgba(0, 0, 0, 0.04)',
+                      overflow: 'hidden',
+                      transition: 'all 0.2s ease',
+                      '&:hover': {
+                        boxShadow: isChosen ? '0 6px 24px rgba(16, 185, 129, 0.2)' : '0 4px 16px rgba(0, 0, 0, 0.08)',
+                      },
+                    }}
+                  >
+                    <Box sx={{ p: 2 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+                        <Box
+                          sx={{
+                            width: 28, height: 28, borderRadius: '6px',
+                            background: isChosen
+                              ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                              : 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            color: 'white', fontWeight: 700, fontSize: '13px', flexShrink: 0,
+                          }}
+                        >
+                          {index + 1}
+                        </Box>
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                            <Typography sx={{ fontWeight: 600, color: '#1e293b', fontSize: '14px', lineHeight: 1.4, flex: 1 }}>
+                              {idea.title}
+                            </Typography>
+                            {isChosen && (
+                              <Chip icon={<CheckIcon sx={{ fontSize: '14px !important' }} />} label="CHOSEN" size="small"
+                                sx={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', fontWeight: 700, fontSize: '10px', height: '22px', flexShrink: 0, '& .MuiChip-icon': { color: 'white' } }}
+                              />
+                            )}
+                          </Box>
+                          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
+                            {idea.platform && (
+                              <Chip icon={<PlatformIcon sx={{ fontSize: '12px !important' }} />} label={idea.platform} size="small"
+                                sx={{ background: 'linear-gradient(135deg, #667eea22 0%, #764ba222 100%)', color: '#667eea', fontWeight: 600, fontSize: '10px', height: '22px', border: '1px solid #667eea44' }}
+                              />
+                            )}
+                            {idea.keyStackTools.slice(0, 3).map((tool, i) => (
+                              <Chip key={i} label={tool} size="small" sx={{ bgcolor: '#f1f5f9', color: '#475569', fontWeight: 500, fontSize: '10px', height: '22px' }} />
+                            ))}
+                          </Box>
+                        </Box>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1.5, ml: 5 }}>
+                        <Button size="small" onClick={() => toggleExpand('v1', index)}
+                          startIcon={isExpanded ? <ExpandLessIcon sx={{ fontSize: '18px' }} /> : <ExpandMoreIcon sx={{ fontSize: '18px' }} />}
+                          sx={{ color: '#667eea', textTransform: 'none', fontWeight: 500, fontSize: '12px', px: 1, '&:hover': { backgroundColor: 'rgba(102, 126, 234, 0.08)' } }}
+                        >
+                          {isExpanded ? 'Hide Details' : 'Show Details'}
+                        </Button>
+                        <Button size="small" variant={isChosen ? 'outlined' : 'contained'}
+                          startIcon={isChosen ? <UnchooseIcon sx={{ fontSize: '16px' }} /> : <ChooseIcon sx={{ fontSize: '16px' }} />}
+                          onClick={() => { if (isChosen && onClearChoice) { onClearChoice(); } else { handleChoose(idea.title, 'v1'); } }}
+                          sx={isChosen
+                            ? { borderColor: '#ef4444', color: '#ef4444', textTransform: 'none', fontWeight: 600, fontSize: '12px', px: 2, '&:hover': { borderColor: '#dc2626', backgroundColor: 'rgba(239, 68, 68, 0.08)' } }
+                            : { background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', textTransform: 'none', fontWeight: 600, fontSize: '12px', px: 2, boxShadow: 'none', '&:hover': { background: 'linear-gradient(135deg, #059669 0%, #047857 100%)', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)' } }
+                          }
+                        >
+                          {isChosen ? 'Unchoose' : 'Choose This'}
+                        </Button>
+                      </Box>
+                    </Box>
+                    <Collapse in={isExpanded}>
+                      <Box sx={{ px: 2, pb: 2, pt: 0, borderTop: '1px solid', borderColor: isChosen ? '#10b98133' : '#e2e8f0', bgcolor: isChosen ? 'rgba(16, 185, 129, 0.02)' : '#fafafa' }}>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+                          <Box>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
+                              <CheckIcon sx={{ color: '#10b981', fontSize: '16px' }} />
+                              <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#1e293b', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Why It Fits</Typography>
+                            </Box>
+                            <Typography variant="body2" sx={{ color: '#475569', fontSize: '13px', lineHeight: 1.6, pl: 3 }}>{idea.whyItFits}</Typography>
+                          </Box>
+                          <Box>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
+                              <LearnIcon sx={{ color: '#667eea', fontSize: '16px' }} />
+                              <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#1e293b', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>What You'll Learn</Typography>
+                            </Box>
+                            <Box component="ul" sx={{ pl: 4.5, pr: 1, m: 0, '& li': { color: '#475569', fontSize: '12px', lineHeight: 1.7, mb: 0.25, '&::marker': { color: '#667eea' } } }}>
+                              {idea.whatReaderLearns.map((item, i) => (<li key={i}>{item}</li>))}
+                            </Box>
+                          </Box>
+                          <Box>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
+                              <AngleIcon sx={{ color: '#f59e0b', fontSize: '16px' }} />
+                              <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#1e293b', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Differentiation Angle</Typography>
+                            </Box>
+                            <Typography variant="body2" sx={{ color: '#475569', fontSize: '13px', lineHeight: 1.6, pl: 3 }}>{idea.angleToAvoidDuplication}</Typography>
+                          </Box>
+                        </Box>
+                      </Box>
+                    </Collapse>
+                  </Box>
+                );
+              })}
+            </Box>
+          ) : (
+            <TabStatusDisplay status={v1Status} version="V1" color="#667eea" />
+          )}
+        </>
+      )}
+
+      {/* ===== V3 TAB CONTENT ===== */}
+      {activeTab === 'v3' && (
+        <>
+          {v3Status === 'complete' && v3Ideas.length > 0 ? (
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+              {v3Ideas.map((v3Idea, index) => {
+                const idea = mapV3IdeaForDisplay(v3Idea);
+                const isChosen = isIdeaChosen(idea.title, 'v3');
+                const isExpanded = expandedCards.has(`v3-${index}`);
+
+                return (
+                  <Box
+                    key={index}
+                    sx={{
+                      background: isChosen ? 'rgba(16, 185, 129, 0.05)' : 'rgba(255, 255, 255, 0.95)',
+                      backdropFilter: 'blur(20px)',
+                      borderRadius: 2,
+                      border: isChosen ? '2px solid #10b981' : '1px solid #e2e8f0',
+                      boxShadow: isChosen ? '0 4px 20px rgba(16, 185, 129, 0.15)' : '0 2px 8px rgba(0, 0, 0, 0.04)',
+                      overflow: 'hidden',
+                      transition: 'all 0.2s ease',
+                      '&:hover': {
+                        boxShadow: isChosen ? '0 6px 24px rgba(16, 185, 129, 0.2)' : '0 4px 16px rgba(0, 0, 0, 0.08)',
+                      },
+                    }}
+                  >
+                    <Box sx={{ p: 2 }}>
+                      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1.5 }}>
+                        <Box
+                          sx={{
+                            width: 28, height: 28, borderRadius: '6px',
+                            background: isChosen
+                              ? 'linear-gradient(135deg, #10b981 0%, #059669 100%)'
+                              : 'linear-gradient(135deg, #0f766e 0%, #0d9488 100%)',
+                            display: 'flex', alignItems: 'center', justifyContent: 'center',
+                            color: 'white', fontWeight: 700, fontSize: '13px', flexShrink: 0,
+                          }}
+                        >
+                          {index + 1}
+                        </Box>
+                        <Box sx={{ flex: 1, minWidth: 0 }}>
+                          <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+                            <Typography sx={{ fontWeight: 600, color: '#1e293b', fontSize: '14px', lineHeight: 1.4, flex: 1 }}>
+                              {idea.title}
+                            </Typography>
+                            {v3Idea.aiConcept && (
+                              <Chip icon={<AIConceptIcon sx={{ fontSize: '12px !important' }} />} label={v3Idea.aiConcept} size="small"
+                                sx={{ background: 'linear-gradient(135deg, #0f766e22 0%, #0d948822 100%)', color: '#0f766e', fontWeight: 600, fontSize: '10px', height: '22px', border: '1px solid #0f766e44', '& .MuiChip-icon': { color: '#0f766e' } }}
+                              />
+                            )}
+                            {isChosen && (
+                              <Chip icon={<CheckIcon sx={{ fontSize: '14px !important' }} />} label="CHOSEN" size="small"
+                                sx={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', fontWeight: 700, fontSize: '10px', height: '22px', flexShrink: 0, '& .MuiChip-icon': { color: 'white' } }}
+                              />
+                            )}
+                          </Box>
+                          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
+                            {idea.keyStackTools.slice(0, 3).map((tool, i) => (
+                              <Chip key={i} label={tool} size="small" sx={{ bgcolor: '#f1f5f9', color: '#475569', fontWeight: 500, fontSize: '10px', height: '22px' }} />
+                            ))}
+                          </Box>
+                        </Box>
+                      </Box>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mt: 1.5, ml: 5 }}>
+                        <Button size="small" onClick={() => toggleExpand('v3', index)}
+                          startIcon={isExpanded ? <ExpandLessIcon sx={{ fontSize: '18px' }} /> : <ExpandMoreIcon sx={{ fontSize: '18px' }} />}
+                          sx={{ color: '#0f766e', textTransform: 'none', fontWeight: 500, fontSize: '12px', px: 1, '&:hover': { backgroundColor: 'rgba(15, 118, 110, 0.08)' } }}
+                        >
+                          {isExpanded ? 'Hide Details' : 'Show Details'}
+                        </Button>
+                        <Button size="small" variant={isChosen ? 'outlined' : 'contained'}
+                          startIcon={isChosen ? <UnchooseIcon sx={{ fontSize: '16px' }} /> : <ChooseIcon sx={{ fontSize: '16px' }} />}
+                          onClick={() => { if (isChosen && onClearChoice) { onClearChoice(); } else { handleChoose(idea.title, 'v3'); } }}
+                          sx={isChosen
+                            ? { borderColor: '#ef4444', color: '#ef4444', textTransform: 'none', fontWeight: 600, fontSize: '12px', px: 2, '&:hover': { borderColor: '#dc2626', backgroundColor: 'rgba(239, 68, 68, 0.08)' } }
+                            : { background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', color: 'white', textTransform: 'none', fontWeight: 600, fontSize: '12px', px: 2, boxShadow: 'none', '&:hover': { background: 'linear-gradient(135deg, #059669 0%, #047857 100%)', boxShadow: '0 4px 12px rgba(16, 185, 129, 0.3)' } }
+                          }
+                        >
+                          {isChosen ? 'Unchoose' : 'Choose This'}
+                        </Button>
+                      </Box>
+                    </Box>
+                    <Collapse in={isExpanded}>
+                      <Box sx={{ px: 2, pb: 2, pt: 0, borderTop: '1px solid', borderColor: isChosen ? '#10b98133' : '#e2e8f0', bgcolor: isChosen ? 'rgba(16, 185, 129, 0.02)' : '#fafafa' }}>
+                        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, pt: 2 }}>
+                          <Box>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
+                              <CheckIcon sx={{ color: '#10b981', fontSize: '16px' }} />
+                              <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#1e293b', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Why It Fits</Typography>
+                            </Box>
+                            <Typography variant="body2" sx={{ color: '#475569', fontSize: '13px', lineHeight: 1.6, pl: 3 }}>{idea.whyItFits}</Typography>
+                          </Box>
+                          {idea.specificUse && (
+                            <Box>
+                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
+                                <StarIcon sx={{ color: '#0f766e', fontSize: '16px' }} />
+                                <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#1e293b', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Product + Trend Integration</Typography>
+                              </Box>
+                              <Typography variant="body2" sx={{ color: '#475569', fontSize: '13px', lineHeight: 1.6, pl: 3 }}>{idea.specificUse}</Typography>
+                            </Box>
+                          )}
+                          <Box>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
+                              <LearnIcon sx={{ color: '#0f766e', fontSize: '16px' }} />
+                              <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#1e293b', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>What You'll Learn</Typography>
+                            </Box>
+                            <Box component="ul" sx={{ pl: 4.5, pr: 1, m: 0, '& li': { color: '#475569', fontSize: '12px', lineHeight: 1.7, mb: 0.25, '&::marker': { color: '#0f766e' } } }}>
+                              {idea.whatReaderLearns.map((item, i) => (<li key={i}>{item}</li>))}
+                            </Box>
+                          </Box>
+                          <Box>
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 0.5 }}>
+                              <AngleIcon sx={{ color: '#f59e0b', fontSize: '16px' }} />
+                              <Typography variant="subtitle2" sx={{ fontWeight: 700, color: '#1e293b', fontSize: '11px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Differentiation Angle</Typography>
+                            </Box>
+                            <Typography variant="body2" sx={{ color: '#475569', fontSize: '13px', lineHeight: 1.6, pl: 3 }}>{idea.angleToAvoidDuplication}</Typography>
+                          </Box>
+                        </Box>
+                      </Box>
+                    </Collapse>
+                  </Box>
+                );
+              })}
+            </Box>
+          ) : (
+            <TabStatusDisplay status={v3Status} version="V3" color="#0f766e" />
+          )}
+        </>
+      )}
     </Box>
   );
 };

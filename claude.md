@@ -324,6 +324,14 @@ Each version is a separate cloud function with complete isolation:
 
 ## Best Practices & Troubleshooting
 
+### Feature Independence (CRITICAL)
+- **New features/versions must NEVER block, break, or degrade existing ones**
+- When adding a new version (e.g. V3 alongside V1/V2), each must run and display independently
+- Each version should save results to Firestore independently (incremental writes, not one atomic save at the end)
+- UI must allow viewing completed results while other versions are still generating
+- Errors in one version must not prevent other versions from completing
+- Page refresh must restore all completed version results from Firestore
+
 ### Performance
 - Pagination for large lists, load timeline only in detail view
 - Denormalize companyName on lead

@@ -37,6 +37,10 @@ export interface AppSettings {
   // DALL-E Image Generation Configuration
   dalleImageStylePrompt?: string;
 
+  // Follow-Up Email Template
+  followUpTemplate?: string; // HTML body for follow-up emails
+  followUpSubject?: string; // Subject override (defaults to "Re: <original subject>")
+
   // Metadata
   updatedAt: Date;
   updatedBy: string; // User ID who last updated settings
@@ -56,6 +60,8 @@ export interface UpdateSettingsRequest {
   linkedInCondensedInsightsPrompt?: string;
   postIdeasPrompts?: AppSettings['postIdeasPrompts'];
   dalleImageStylePrompt?: string;
+  followUpTemplate?: string;
+  followUpSubject?: string;
 }
 
 /**

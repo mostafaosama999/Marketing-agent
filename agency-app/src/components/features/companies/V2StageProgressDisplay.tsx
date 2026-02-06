@@ -23,7 +23,7 @@ import {
   Verified as ValidateIcon,
   HourglassEmpty as PendingIcon,
 } from '@mui/icons-material';
-import { CompanyProfileV2, ContentGap, BlogIdeaV2, IdeaValidationResult } from '../../../services/firebase/cloudFunctions';
+import { CompanyProfileV2, ContentGap, BlogIdeaV2, IdeaValidationResult, RawConceptSimple } from '../../../services/firebase/cloudFunctions';
 
 export interface MatchedConceptSimple {
   name: string;
@@ -38,7 +38,11 @@ type StageStatus = 'pending' | 'running' | 'complete';
 interface V2StageProgressDisplayProps {
   profile?: CompanyProfileV2;
   matchedConcepts?: MatchedConceptSimple[];
+  allConcepts?: RawConceptSimple[];
   conceptsEvaluated?: number;
+  conceptsCached?: boolean;
+  conceptsStale?: boolean;
+  conceptsAgeHours?: number;
   contentGaps?: ContentGap[];
   rawIdeas?: BlogIdeaV2[];
   validatedIdeas?: IdeaValidationResult[];
@@ -198,7 +202,11 @@ const StageCard: React.FC<StageCardProps> = ({
 export const V2StageProgressDisplay: React.FC<V2StageProgressDisplayProps> = ({
   profile,
   matchedConcepts,
+  allConcepts,
   conceptsEvaluated,
+  conceptsCached,
+  conceptsStale,
+  conceptsAgeHours,
   contentGaps,
   rawIdeas,
   validatedIdeas,
@@ -364,66 +372,127 @@ export const V2StageProgressDisplay: React.FC<V2StageProgressDisplayProps> = ({
         status={getStageStatus('stage1_5')}
         colorScheme={{ primary: '#ec4899', light: '#ec489922', dark: '#be185d' }}
       >
-        {matchedConcepts && (
+        {(matchedConcepts || allConcepts) && (
           <Box sx={{ pt: 1.5 }}>
-            <Typography
-              sx={{
-                fontSize: '11px',
-                fontWeight: 700,
-                color: '#64748b',
-                textTransform: 'uppercase',
-                letterSpacing: '0.5px',
-                mb: 0.75,
-              }}
-            >
-              {matchedConcepts.length}/{conceptsEvaluated || '?'} Concepts Matched (fitScore {'>'}= 70%)
-            </Typography>
+            {/* Concept source status indicator */}
+            {conceptsCached !== undefined && (
+              <Chip
+                label={
+                  conceptsStale
+                    ? `Cached concepts (${Math.round(conceptsAgeHours || 0)}h old)`
+                    : conceptsCached
+                    ? 'Concepts from cache (fresh)'
+                    : 'Freshly extracted concepts'
+                }
+                size="small"
+                sx={{
+                  mb: 1,
+                  bgcolor: conceptsStale ? '#f59e0b15' : conceptsCached ? '#3b82f615' : '#10b98115',
+                  color: conceptsStale ? '#d97706' : conceptsCached ? '#1d4ed8' : '#059669',
+                  fontWeight: 600,
+                  fontSize: '9px',
+                  height: '20px',
+                }}
+              />
+            )}
 
-            {matchedConcepts.length > 0 ? (
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
-                {matchedConcepts.map((concept, i) => (
-                  <Box
-                    key={i}
-                    sx={{
-                      p: 1,
-                      borderRadius: 1,
-                      bgcolor: '#ec489908',
-                      border: '1px solid #ec489922',
-                    }}
-                  >
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+            {/* Concept tier indicator */}
+            {matchedConcepts && matchedConcepts.length > 0 ? (
+              <>
+                <Chip
+                  label={`${matchedConcepts.length} concepts matched to company`}
+                  size="small"
+                  sx={{
+                    mb: 1,
+                    ml: 0.5,
+                    bgcolor: '#10b98115',
+                    color: '#059669',
+                    fontWeight: 600,
+                    fontSize: '9px',
+                    height: '20px',
+                  }}
+                />
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1 }}>
+                  {matchedConcepts.map((concept, i) => (
+                    <Box
+                      key={i}
+                      sx={{
+                        p: 1,
+                        borderRadius: 1,
+                        bgcolor: '#ec489908',
+                        border: '1px solid #ec489922',
+                      }}
+                    >
+                      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 0.5 }}>
+                        <Chip
+                          label={concept.name}
+                          size="small"
+                          sx={{
+                            background: 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)',
+                            color: 'white',
+                            fontWeight: 700,
+                            fontSize: '10px',
+                            height: '20px',
+                          }}
+                        />
+                        <Chip
+                          label={`${concept.fitScore}% fit`}
+                          size="small"
+                          sx={{
+                            bgcolor: '#ec489915',
+                            color: '#be185d',
+                            fontWeight: 600,
+                            fontSize: '9px',
+                            height: '18px',
+                          }}
+                        />
+                      </Box>
+                      <Typography sx={{ fontSize: '11px', color: '#831843' }}>
+                        {concept.fitReason}
+                      </Typography>
+                    </Box>
+                  ))}
+                </Box>
+              </>
+            ) : allConcepts && allConcepts.length > 0 ? (
+              <>
+                <Chip
+                  label={`Using ${allConcepts.length} trending concepts (no specific matches)`}
+                  size="small"
+                  sx={{
+                    mb: 1,
+                    bgcolor: '#f59e0b15',
+                    color: '#d97706',
+                    fontWeight: 600,
+                    fontSize: '9px',
+                    height: '20px',
+                  }}
+                />
+                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                  {allConcepts.slice(0, 5).map((concept, i) => (
+                    <Tooltip key={i} title={`${concept.whyHot} | ${concept.description}`}>
                       <Chip
                         label={concept.name}
                         size="small"
                         sx={{
-                          background: 'linear-gradient(135deg, #ec4899 0%, #be185d 100%)',
-                          color: 'white',
-                          fontWeight: 700,
-                          fontSize: '10px',
-                          height: '20px',
-                        }}
-                      />
-                      <Chip
-                        label={`${concept.fitScore}% fit`}
-                        size="small"
-                        sx={{
-                          bgcolor: '#ec489915',
-                          color: '#be185d',
+                          bgcolor: '#f59e0b15',
+                          color: '#92400e',
                           fontWeight: 600,
-                          fontSize: '9px',
-                          height: '18px',
+                          fontSize: '10px',
+                          height: '22px',
+                          border: '1px solid #f59e0b33',
                         }}
                       />
-                    </Box>
-                    <Typography sx={{ fontSize: '11px', color: '#831843' }}>
-                      {concept.fitReason}
-                    </Typography>
-                  </Box>
-                ))}
-              </Box>
+                    </Tooltip>
+                  ))}
+                </Box>
+                <Typography sx={{ fontSize: '11px', color: '#92400e', mt: 0.75, fontStyle: 'italic' }}>
+                  These trending concepts will be injected into idea generation as inspiration.
+                </Typography>
+              </>
             ) : (
               <Typography sx={{ fontSize: '12px', color: '#64748b', fontStyle: 'italic' }}>
-                No AI concepts matched with sufficient fit score. Regular V2 ideas will be generated.
+                No AI concepts available. Ideas will be generated based on company context only.
               </Typography>
             )}
           </Box>

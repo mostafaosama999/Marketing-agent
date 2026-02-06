@@ -27,6 +27,7 @@ export interface ValidationScores {
   uniqueness: number; // 0-100: Would fail "competitor test"
   buzzwordDensity: number; // 0-100: Higher is WORSE
   audienceRelevance: number; // 0-100: Matches their content style
+  timeliness: number; // 0-100: References current AI/tech trends
   overallScore: number; // Weighted average
 }
 
@@ -131,6 +132,12 @@ Rate this idea 0-100 on each dimension:
    - 50-69: Partially matches
    - 0-49: Mismatch in tone, depth, or audience
 
+4. **TIMELINESS**: Does this reference current AI/tech trends?
+   - 90-100: References specific current AI trends (Agentic AI, MCP, agent frameworks, etc.)
+   - 70-89: References general current AI/ML developments
+   - 50-69: Somewhat related to current tech landscape
+   - 0-49: Could have been written years ago, no current trends
+
 ================================================================================
 OUTPUT FORMAT (JSON ONLY)
 ================================================================================
@@ -139,12 +146,13 @@ OUTPUT FORMAT (JSON ONLY)
   "personalization": <0-100>,
   "uniqueness": <0-100>,
   "audienceRelevance": <0-100>,
+  "timeliness": <0-100>,
   "verdict": "ACCEPT" | "REJECT",
   "rejectionReason": "If REJECT, explain why in 1 sentence",
   "improvementSuggestion": "If REJECT, suggest how to make it more specific"
 }
 
-BE STRICT. Accept threshold is 70+ on ALL dimensions.
+Accept if weighted overall score >= 70. Ideas referencing current AI trends should be rewarded.
 
 RESPOND WITH ONLY THE JSON OBJECT - no markdown, no code blocks, just valid JSON.`;
 }
@@ -184,6 +192,7 @@ async function validateSingleIdea(
           uniqueness: 0,
           buzzwordDensity: buzzwordScore,
           audienceRelevance: 0,
+          timeliness: 0,
           overallScore: 0,
         },
         rejectionReason: `Contains too many buzzwords (score: ${buzzwordScore}/100)`,
@@ -219,22 +228,20 @@ async function validateSingleIdea(
   const evaluation = JSON.parse(cleanJsonResponse(content));
   const tokens = extractTokenUsage(completion);
 
-  // Calculate overall score (weighted average, buzzword penalty)
+  // Calculate overall score (weighted average with timeliness, buzzword penalty)
+  const timeliness = evaluation.timeliness || 50; // Default 50 if LLM doesn't return it
   const baseScore =
-    (evaluation.personalization * 0.35 +
-      evaluation.uniqueness * 0.35 +
-      evaluation.audienceRelevance * 0.3);
+    (evaluation.personalization * 0.30 +
+      evaluation.uniqueness * 0.25 +
+      evaluation.audienceRelevance * 0.20 +
+      timeliness * 0.25);
 
   // Apply buzzword penalty (each 10 points of buzzword score reduces overall by 5)
   const buzzwordPenalty = Math.floor(buzzwordScore / 10) * 5;
   const overallScore = Math.max(0, baseScore - buzzwordPenalty);
 
-  const isValid =
-    evaluation.verdict === "ACCEPT" &&
-    evaluation.personalization >= 70 &&
-    evaluation.uniqueness >= 70 &&
-    evaluation.audienceRelevance >= 70 &&
-    overallScore >= 70;
+  // Accept if weighted overall score >= 70 (no longer requires ALL dimensions >= 70)
+  const isValid = overallScore >= 70;
 
   return {
     result: {
@@ -245,6 +252,7 @@ async function validateSingleIdea(
         uniqueness: evaluation.uniqueness,
         buzzwordDensity: buzzwordScore,
         audienceRelevance: evaluation.audienceRelevance,
+        timeliness,
         overallScore: Math.round(overallScore),
       },
       rejectionReason: isValid ? undefined : evaluation.rejectionReason,
@@ -295,6 +303,7 @@ export async function validateIdeas(
           uniqueness: 0,
           buzzwordDensity: 0,
           audienceRelevance: 0,
+          timeliness: 0,
           overallScore: 0,
         },
         rejectionReason: "Validation error occurred",

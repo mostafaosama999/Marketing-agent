@@ -27,8 +27,9 @@ export const DEFAULT_LEADS_TABLE_COLUMNS: TableColumnConfig[] = [
   { id: 'linkedin_profile_url', label: 'Profile URL', sortable: true, visible: true, type: 'default', order: 6, section: 'linkedin' },
   { id: 'linkedin_status', label: 'Status', sortable: true, visible: true, type: 'default', order: 7, section: 'linkedin' },
   { id: 'email_outreach_status', label: 'Email Outreach', sortable: true, visible: true, type: 'default', order: 8, section: 'email' },
-  { id: 'createdAt', label: 'Created', sortable: true, visible: true, type: 'default', order: 9, section: 'general' },
-  { id: 'actions', label: 'Actions', sortable: false, visible: true, type: 'default', order: 10, section: 'general' },
+  { id: 'follow_up_status', label: 'Follow-up', sortable: true, visible: true, type: 'default', order: 9, section: 'email' },
+  { id: 'createdAt', label: 'Created', sortable: true, visible: true, type: 'default', order: 10, section: 'general' },
+  { id: 'actions', label: 'Actions', sortable: false, visible: true, type: 'default', order: 11, section: 'general' },
 ];
 
 // Companies table columns
