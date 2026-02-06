@@ -1,5 +1,6 @@
 // src/pages/settings/SettingsPage.tsx
 import React, { useState, useEffect, useMemo } from 'react';
+import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -68,9 +69,20 @@ function TabPanel(props: TabPanelProps) {
   );
 }
 
+const TAB_SLUGS = [
+  'offer-template',
+  'follow-up-template',
+  'ai-prompts',
+  'release-notes',
+  'field-definitions',
+  'integrations',
+] as const;
+
 export const SettingsPage: React.FC = () => {
   const { user } = useAuth();
-  const [tabValue, setTabValue] = useState(0);
+  const { tab } = useParams<{ tab?: string }>();
+  const navigate = useNavigate();
+  const tabValue = Math.max(0, TAB_SLUGS.indexOf(tab as any));
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -175,8 +187,8 @@ export const SettingsPage: React.FC = () => {
     return customPrompt || defaultPrompt!;
   };
 
-  const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
-    setTabValue(newValue);
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
+    navigate(`/settings/${TAB_SLUGS[newValue]}`, { replace: true });
   };
 
   const handleSaveOfferTemplate = async () => {

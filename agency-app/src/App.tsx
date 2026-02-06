@@ -97,6 +97,7 @@ function AppContent() {
           <Route path="/auth/gmail/callback" element={<GmailCallback />} />
           <Route path="/monitoring" element={<ProjectMonitoring />} />
           <Route path="/settings" element={<SettingsPage />} />
+          <Route path="/settings/:tab" element={<SettingsPage />} />
         </Routes>
       </Box>
     </Box>

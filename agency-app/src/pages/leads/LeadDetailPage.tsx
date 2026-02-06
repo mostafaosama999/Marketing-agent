@@ -1854,7 +1854,7 @@ export const LeadDetailPage: React.FC = () => {
                   <Button
                     color="inherit"
                     size="small"
-                    onClick={() => navigate('/settings?tab=offer-template')}
+                    onClick={() => navigate('/settings/offer-template')}
                     sx={{ textTransform: 'none', fontWeight: 600 }}
                   >
                     Edit Template
