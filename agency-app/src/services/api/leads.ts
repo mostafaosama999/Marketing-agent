@@ -106,6 +106,11 @@ function convertToLead(id: string, data: any): Lead {
                 draftCreatedAt: safeToDate(data.outreach.email.draftCreatedAt),
                 draftId: data.outreach.email.draftId,
                 draftUrl: data.outreach.email.draftUrl,
+                originalSubject: data.outreach.email.originalSubject,
+                followUpStatus: data.outreach.email.followUpStatus,
+                followUpDraftCreatedAt: safeToDate(data.outreach.email.followUpDraftCreatedAt),
+                followUpDraftId: data.outreach.email.followUpDraftId,
+                followUpDraftUrl: data.outreach.email.followUpDraftUrl,
               }
             : undefined,
         }
