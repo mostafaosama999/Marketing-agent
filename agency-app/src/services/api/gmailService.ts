@@ -92,13 +92,13 @@ export async function checkGmailConnection(): Promise<{
  */
 export async function getGmailAuthUrl(): Promise<string> {
   const functions = getFunctions();
-  const getAuthUrl = httpsCallable<{}, {success: boolean; authUrl: string; message: string}>(
+  const getAuthUrl = httpsCallable<{origin: string}, {success: boolean; authUrl: string; message: string}>(
     functions,
     "getGmailAuthUrl"
   );
 
   try {
-    const result = await getAuthUrl({});
+    const result = await getAuthUrl({origin: window.location.origin});
     return result.data.authUrl;
   } catch (error) {
     console.error("Error getting Gmail auth URL:", error);
@@ -111,13 +111,13 @@ export async function getGmailAuthUrl(): Promise<string> {
  */
 export async function exchangeGmailOAuthCode(code: string): Promise<{success: boolean; message: string}> {
   const functions = getFunctions();
-  const exchangeCode = httpsCallable<{code: string}, {success: boolean; message: string}>(
+  const exchangeCode = httpsCallable<{code: string; origin: string}, {success: boolean; message: string}>(
     functions,
     "exchangeGmailOAuthCode"
   );
 
   try {
-    const result = await exchangeCode({code});
+    const result = await exchangeCode({code, origin: window.location.origin});
     return result.data;
   } catch (error) {
     console.error("Error exchanging OAuth code:", error);

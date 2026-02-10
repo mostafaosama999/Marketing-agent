@@ -9,6 +9,7 @@ import {exchangeCodeForTokens} from "./oauthService";
 
 interface ExchangeCodeRequest {
   code: string;
+  origin?: string;
 }
 
 interface ExchangeCodeResponse {
@@ -30,6 +31,7 @@ export const exchangeGmailOAuthCode = functions.https.onCall(
     }
 
     console.log(`OAuth code exchange requested by user: ${context.auth.uid}`);
+    console.log(`Origin: ${data?.origin || "not provided"}`);
 
     if (!data.code) {
       throw new HttpsError(
@@ -39,7 +41,7 @@ export const exchangeGmailOAuthCode = functions.https.onCall(
     }
 
     try {
-      const result = await exchangeCodeForTokens(data.code);
+      const result = await exchangeCodeForTokens(data.code, data.origin);
 
       console.log("✅ OAuth tokens successfully exchanged and stored");
 

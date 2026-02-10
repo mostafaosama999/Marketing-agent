@@ -8,7 +8,7 @@ import {HttpsError} from "firebase-functions/v1/auth";
 import {generateAuthUrl} from "./oauthService";
 
 export const getGmailAuthUrl = functions.https.onCall(
-  async (_data, context) => {
+  async (data: {origin?: string}, context) => {
     // Check authentication
     if (!context.auth) {
       throw new HttpsError(
@@ -18,9 +18,10 @@ export const getGmailAuthUrl = functions.https.onCall(
     }
 
     console.log(`Auth URL requested by user: ${context.auth.uid}`);
+    console.log(`Origin: ${data?.origin || "not provided"}`);
 
     try {
-      const authUrl = generateAuthUrl();
+      const authUrl = generateAuthUrl(data?.origin);
 
       return {
         success: true,

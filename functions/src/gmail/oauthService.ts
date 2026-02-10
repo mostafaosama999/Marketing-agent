@@ -13,15 +13,39 @@ const SCOPES = [
   "https://www.googleapis.com/auth/gmail.compose", // Allow draft creation
 ];
 
-// Support both localhost and production
-const REDIRECT_URI = process.env.GMAIL_REDIRECT_URI ||
-  functions.config().gmail?.redirect_uri ||
-  "http://localhost:3000/auth/gmail/callback";
+const OAUTH_CALLBACK_PATH = "/auth/gmail/callback";
+
+// Allowed origins for OAuth redirect
+const ALLOWED_ORIGINS = [
+  "http://localhost:3000",
+  "https://marketing-app-2v32k.ondigitalocean.app",
+];
+
+/**
+ * Get the redirect URI for a given origin, with allowlist validation
+ */
+export function getRedirectUri(origin?: string): string {
+  if (origin) {
+    // Strip trailing slash
+    const normalizedOrigin = origin.replace(/\/$/, "");
+    if (ALLOWED_ORIGINS.includes(normalizedOrigin)) {
+      return normalizedOrigin + OAUTH_CALLBACK_PATH;
+    }
+    console.warn(`Origin "${origin}" not in allowlist, falling back to default`);
+  }
+
+  // Fallback: check Firebase config, then default to localhost
+  const configUri = process.env.GMAIL_REDIRECT_URI ||
+    functions.config().gmail?.redirect_uri;
+  if (configUri) return configUri;
+
+  return "http://localhost:3000" + OAUTH_CALLBACK_PATH;
+}
 
 /**
  * Get OAuth2 client with credentials from Firebase config
  */
-export function getOAuth2Client() {
+export function getOAuth2Client(origin?: string) {
   const clientId = functions.config().gmail?.client_id;
   const clientSecret = functions.config().gmail?.client_secret;
 
@@ -32,10 +56,13 @@ export function getOAuth2Client() {
     );
   }
 
+  const redirectUri = getRedirectUri(origin);
+  console.log(`OAuth2 redirect URI: ${redirectUri}`);
+
   const oauth2Client = new google.auth.OAuth2(
     clientId,
     clientSecret,
-    REDIRECT_URI
+    redirectUri
   );
 
   return oauth2Client;
@@ -45,7 +72,7 @@ export function getOAuth2Client() {
  * Get OAuth2 client with refresh token set
  */
 export async function getAuthenticatedOAuth2Client() {
-  const oauth2Client = getOAuth2Client();
+  const oauth2Client = getOAuth2Client(undefined);
 
   // Try to get refresh token from Firebase config first
   let refreshToken = functions.config().gmail?.refresh_token;
@@ -76,8 +103,8 @@ export async function getAuthenticatedOAuth2Client() {
 /**
  * Generate OAuth authorization URL
  */
-export function generateAuthUrl(): string {
-  const oauth2Client = getOAuth2Client();
+export function generateAuthUrl(origin?: string): string {
+  const oauth2Client = getOAuth2Client(origin);
 
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: "offline",
@@ -91,11 +118,11 @@ export function generateAuthUrl(): string {
 /**
  * Exchange authorization code for tokens
  */
-export async function exchangeCodeForTokens(code: string) {
+export async function exchangeCodeForTokens(code: string, origin?: string) {
   console.log("🔍 [OAuth] Starting token exchange...");
   console.log("🔍 [OAuth] Code received:", code?.substring(0, 20) + "...");
 
-  const oauth2Client = getOAuth2Client();
+  const oauth2Client = getOAuth2Client(origin);
   console.log("🔍 [OAuth] OAuth2 client created");
 
   const {tokens} = await oauth2Client.getToken(code);
