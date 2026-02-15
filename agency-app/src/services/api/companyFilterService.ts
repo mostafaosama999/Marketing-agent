@@ -29,6 +29,7 @@ export function getCompanyFilterableFields(
     { name: 'industry', label: 'Industry', type: 'text', isCustomField: false },
     { name: 'description', label: 'Description', type: 'text', isCustomField: false },
     { name: 'ratingV2', label: 'Rating V2', type: 'number', isCustomField: false },
+    { name: 'labels', label: 'Labels', type: 'text', isCustomField: false },
     { name: 'status', label: 'Status', type: 'select', options: ['new_lead', 'qualified', 'contacted', 'follow_up', 'nurture', 'won', 'lost', 'previous_client', 'existing_client'], isCustomField: false },
     { name: 'createdAt', label: 'Created Date', type: 'date', isCustomField: false },
     { name: 'updatedAt', label: 'Updated Date', type: 'date', isCustomField: false },
@@ -272,10 +273,18 @@ export function evaluateCompanyRule(company: Company, rule: FilterRule): boolean
   // Select operators
   if (operator === 'is_one_of') {
     if (!Array.isArray(ruleValue)) return false;
+    // Handle array field values (e.g., labels) - check if ANY element is in ruleValue
+    if (Array.isArray(fieldValue)) {
+      return fieldValue.some(item => ruleValue.includes(item));
+    }
     return ruleValue.includes(fieldValue);
   }
   if (operator === 'is_none_of') {
     if (!Array.isArray(ruleValue)) return false;
+    // Handle array field values (e.g., labels) - check if NO element is in ruleValue
+    if (Array.isArray(fieldValue)) {
+      return !fieldValue.some(item => ruleValue.includes(item));
+    }
     return !ruleValue.includes(fieldValue);
   }
 

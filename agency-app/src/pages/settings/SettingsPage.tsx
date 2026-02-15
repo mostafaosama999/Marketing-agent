@@ -1,52 +1,25 @@
 // src/pages/settings/SettingsPage.tsx
-import React, { useState, useEffect, useMemo } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
   Box,
   Typography,
   Tabs,
   Tab,
-  TextField,
-  Button,
   Alert,
   Chip,
-  Paper,
   CircularProgress,
-  Divider,
-  IconButton,
 } from '@mui/material';
-import {
-  Save as SaveIcon,
-  ContentCopy as CopyIcon,
-  Person as PersonIcon,
-  Business as BusinessIcon,
-  Article as ArticleIcon,
-  Create as CreateIcon,
-  CalendarToday as CalendarIcon,
-  Tune as TuneIcon,
-  Email as EmailIcon,
-} from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
-import { getSettings, updateSettings, subscribeToSettings } from '../../services/api/settings';
-import { AppSettings, DEFAULT_TEMPLATE_VARIABLES, TemplateVariable } from '../../types/settings';
+import { getSettings, subscribeToSettings } from '../../services/api/settings';
+import { AppSettings } from '../../types/settings';
 import { AI_PROMPTS, PROMPT_CATEGORIES, PromptMetadata } from '../../data/prompts';
 import PromptCard from '../../components/settings/PromptCard';
-import { subscribeToLeads } from '../../services/api/leads';
-import { subscribeToCompanies } from '../../services/api/companies';
-import { Lead } from '../../types/lead';
-import { Company } from '../../types/crm';
-import {
-  buildTemplateVariables,
-  groupVariablesByCategory,
-  getCategoryLabel,
-  replaceTemplateVariables,
-} from '../../services/api/templateVariablesService';
-import TiptapRichTextEditor from '../../components/common/TiptapRichTextEditor';
-import { SafeHtmlRenderer, getHtmlCharCount, isHtmlEmpty } from '../../utils/htmlHelpers';
 import { ReleaseNotesTab } from '../../components/settings/ReleaseNotesTab';
 import { FieldDefinitionsTab } from '../../components/settings/FieldDefinitionsTab';
 import { GmailIntegrationTab } from '../../components/settings/GmailIntegrationTab';
 import { FollowUpTemplateTab } from '../../components/settings/FollowUpTemplateTab';
+import { OfferTemplateTab } from '../../components/settings/OfferTemplateTab';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -84,22 +57,14 @@ export const SettingsPage: React.FC = () => {
   const navigate = useNavigate();
   const tabValue = Math.max(0, TAB_SLUGS.indexOf(tab as any));
   const [loading, setLoading] = useState(true);
-  const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
 
   // Settings state
   const [settings, setSettings] = useState<AppSettings | null>(null);
-  const [offerTemplate, setOfferTemplate] = useState('');
-  const [offerHeadline, setOfferHeadline] = useState('');
 
   // Custom prompts state (loaded from localStorage)
   const [customPrompts, setCustomPrompts] = useState<Record<string, PromptMetadata>>({});
-
-  // Leads, companies, and dynamic template variables
-  const [leads, setLeads] = useState<Lead[]>([]);
-  const [companies, setCompanies] = useState<Company[]>([]);
-  const [templateVariables, setTemplateVariables] = useState<TemplateVariable[]>(DEFAULT_TEMPLATE_VARIABLES);
 
   // Load settings on mount and subscribe to changes
   useEffect(() => {
@@ -108,8 +73,6 @@ export const SettingsPage: React.FC = () => {
         setLoading(true);
         const data = await getSettings();
         setSettings(data);
-        setOfferTemplate(data.offerTemplate);
-        setOfferHeadline(data.offerHeadline || '');
       } catch (err) {
         console.error('Error loading settings:', err);
         setError('Failed to load settings');
@@ -120,41 +83,12 @@ export const SettingsPage: React.FC = () => {
 
     loadSettings();
 
-    // Subscribe to real-time updates
     const unsubscribe = subscribeToSettings((updatedSettings) => {
       setSettings(updatedSettings);
-      setOfferTemplate(updatedSettings.offerTemplate);
-      setOfferHeadline(updatedSettings.offerHeadline || '');
     });
 
     return () => unsubscribe();
   }, []);
-
-  // Subscribe to leads for dynamic template variables
-  useEffect(() => {
-    const unsubscribe = subscribeToLeads((leadsData) => {
-      setLeads(leadsData);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  // Subscribe to companies for dynamic template variables
-  useEffect(() => {
-    const unsubscribe = subscribeToCompanies((companiesData) => {
-      setCompanies(companiesData);
-    });
-
-    return () => unsubscribe();
-  }, []);
-
-  // Build template variables when leads or companies change
-  useEffect(() => {
-    if (leads.length > 0 || companies.length > 0) {
-      const variables = buildTemplateVariables(leads, companies);
-      setTemplateVariables(variables);
-    }
-  }, [leads, companies]);
 
   // Load custom prompts from localStorage on mount
   useEffect(() => {
@@ -191,151 +125,6 @@ export const SettingsPage: React.FC = () => {
     navigate(`/settings/${TAB_SLUGS[newValue]}`, { replace: true });
   };
 
-  const handleSaveOfferTemplate = async () => {
-    if (!user) return;
-
-    setSaving(true);
-    setError(null);
-    setSuccess(null);
-
-    try {
-      await updateSettings({ offerTemplate, offerHeadline }, user.uid);
-      setSuccess('Offer template saved successfully!');
-
-      // Clear success message after 3 seconds
-      setTimeout(() => setSuccess(null), 3000);
-    } catch (err: any) {
-      console.error('Error saving settings:', err);
-      setError(err.message || 'Failed to save settings');
-    } finally {
-      setSaving(false);
-    }
-  };
-
-  // Handle copy to clipboard with feedback
-  const handleInsertVariable = (variable: string) => {
-    setOfferTemplate((prev) => prev + variable);
-  };
-
-  const handleCopyVariable = (variable: string) => {
-    navigator.clipboard.writeText(variable);
-  };
-
-  // Helper function to get category styling (icon and color)
-  const getCategoryStyle = (category: string): { icon: React.ReactNode; color: string; bgColor: string; type: 'lead' | 'company' } => {
-    switch (category) {
-      case 'basic':
-        return {
-          icon: <PersonIcon sx={{ fontSize: 14 }} />,
-          color: '#667eea',
-          bgColor: 'rgba(102, 126, 234, 0.08)',
-          type: 'lead'
-        };
-      case 'outreach':
-        return {
-          icon: <EmailIcon sx={{ fontSize: 14 }} />,
-          color: '#667eea',
-          bgColor: 'rgba(102, 126, 234, 0.08)',
-          type: 'lead'
-        };
-      case 'dates':
-        return {
-          icon: <CalendarIcon sx={{ fontSize: 14 }} />,
-          color: '#667eea',
-          bgColor: 'rgba(102, 126, 234, 0.08)',
-          type: 'lead'
-        };
-      case 'custom':
-        return {
-          icon: <TuneIcon sx={{ fontSize: 14 }} />,
-          color: '#667eea',
-          bgColor: 'rgba(102, 126, 234, 0.08)',
-          type: 'lead'
-        };
-      case 'company':
-        return {
-          icon: <BusinessIcon sx={{ fontSize: 14 }} />,
-          color: '#059669',
-          bgColor: 'rgba(5, 150, 105, 0.08)',
-          type: 'company'
-        };
-      case 'blog_analysis':
-        return {
-          icon: <ArticleIcon sx={{ fontSize: 14 }} />,
-          color: '#059669',
-          bgColor: 'rgba(5, 150, 105, 0.08)',
-          type: 'company'
-        };
-      case 'writing_program':
-        return {
-          icon: <CreateIcon sx={{ fontSize: 14 }} />,
-          color: '#059669',
-          bgColor: 'rgba(5, 150, 105, 0.08)',
-          type: 'company'
-        };
-      default:
-        return {
-          icon: <TuneIcon sx={{ fontSize: 14 }} />,
-          color: '#64748b',
-          bgColor: 'rgba(100, 116, 139, 0.08)',
-          type: 'lead'
-        };
-    }
-  };
-
-  // Generate preview with sample data
-  const { headlinePreview, templatePreview } = useMemo(() => {
-    // Create sample lead data for preview (includes custom fields)
-    const sampleLead: Partial<Lead> = {
-      name: 'John Doe',
-      email: 'john.doe@example.com',
-      company: 'Acme Corporation',
-      phone: '+1 (555) 123-4567',
-      status: 'qualified',
-      createdAt: new Date('2025-01-15'),
-      updatedAt: new Date('2025-01-20'),
-      outreach: {
-        linkedIn: {
-          status: 'sent',
-          profileUrl: 'https://linkedin.com/in/johndoe',
-        },
-        email: {
-          status: 'opened',
-        },
-      },
-      customFields: {
-        lead_owner: 'Sarah Smith',
-        priority: 'High',
-        deal_value: '50000',
-      },
-    };
-
-    // Create sample company data for preview
-    const sampleCompany: Company | undefined = companies[0]; // Use first company if available
-
-    const headlineText = offerHeadline
-      ? replaceTemplateVariables(offerHeadline, sampleLead, sampleCompany)
-      : '';
-
-    const messageText = offerTemplate
-      ? replaceTemplateVariables(offerTemplate, sampleLead, sampleCompany)
-      : 'No template yet. Start typing above to see a preview.';
-
-    return {
-      headlinePreview: headlineText,
-      templatePreview: messageText,
-    };
-  }, [offerTemplate, offerHeadline, companies]);
-
-  const formatDate = (date: Date) => {
-    return new Date(date).toLocaleString('en-US', {
-      month: 'short',
-      day: 'numeric',
-      year: 'numeric',
-      hour: 'numeric',
-      minute: '2-digit',
-    });
-  };
 
   if (loading) {
     return (
@@ -425,244 +214,7 @@ export const SettingsPage: React.FC = () => {
 
           {/* Offer Template Tab */}
           <TabPanel value={tabValue} index={0}>
-            <Box>
-              <Typography variant="h6" sx={{ fontWeight: 600, mb: 1 }}>
-                Global Offer Template
-              </Typography>
-              <Typography variant="body2" sx={{ color: '#64748b', mb: 3 }}>
-                Create a message template with variables. This template will be used for all leads in outreach.
-              </Typography>
-
-              {/* Available Variables */}
-              <Paper sx={{ p: 3, mb: 3, bgcolor: '#f8fafc', border: '1px solid #e2e8f0' }}>
-                <Typography
-                  variant="subtitle2"
-                  sx={{ fontWeight: 600, mb: 2, color: '#64748b' }}
-                >
-                  Available Variables ({templateVariables.length})
-                </Typography>
-                <Typography variant="caption" sx={{ color: '#94a3b8', mb: 3, display: 'block' }}>
-                  Click a variable to insert it, or click the copy icon to copy it to clipboard
-                </Typography>
-
-                {/* Group variables by category */}
-                {Object.entries(groupVariablesByCategory(templateVariables)).map(([category, variables]) => {
-                  const categoryStyle = getCategoryStyle(category);
-                  return (
-                    <Box key={category} sx={{ mb: 3 }}>
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 1,
-                          mb: 1.5,
-                          p: 1,
-                          borderRadius: 1,
-                          bgcolor: categoryStyle.bgColor,
-                          border: `1px solid ${categoryStyle.color}30`,
-                        }}
-                      >
-                        <Box sx={{ color: categoryStyle.color, display: 'flex', alignItems: 'center' }}>
-                          {categoryStyle.icon}
-                        </Box>
-                        <Typography
-                          variant="caption"
-                          sx={{
-                            fontWeight: 700,
-                            color: categoryStyle.color,
-                            textTransform: 'uppercase',
-                            letterSpacing: '0.5px',
-                            fontSize: '13px',
-                          }}
-                        >
-                          {getCategoryLabel(category)}
-                        </Typography>
-                        <Chip
-                          label={categoryStyle.type === 'lead' ? 'LEAD' : 'COMPANY'}
-                          size="small"
-                          sx={{
-                            height: '18px',
-                            fontSize: '10px',
-                            fontWeight: 700,
-                            ml: 'auto',
-                            bgcolor: categoryStyle.color,
-                            color: 'white',
-                            '& .MuiChip-label': {
-                              px: 1,
-                            },
-                          }}
-                        />
-                      </Box>
-                      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
-                        {variables.map((variable) => (
-                          <Chip
-                            key={variable.key}
-                            label={
-                              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                                <code style={{ fontSize: '13px', fontWeight: 600 }}>
-                                  {variable.key}
-                                </code>
-                                <Typography variant="caption" sx={{ color: '#64748b' }}>
-                                  - {variable.description}
-                                </Typography>
-                              </Box>
-                            }
-                            onClick={() => handleInsertVariable(variable.key)}
-                            onDelete={() => handleCopyVariable(variable.key)}
-                            deleteIcon={<CopyIcon sx={{ fontSize: 16 }} />}
-                            sx={{
-                              bgcolor: 'white',
-                              border: `1px solid ${categoryStyle.color}20`,
-                              cursor: 'pointer',
-                              '&:hover': {
-                                bgcolor: categoryStyle.bgColor,
-                                borderColor: categoryStyle.color,
-                              },
-                              '& .MuiChip-deleteIcon': {
-                                color: categoryStyle.color,
-                                '&:hover': {
-                                  color: categoryStyle.color,
-                                  opacity: 0.8,
-                                },
-                              },
-                            }}
-                          />
-                        ))}
-                      </Box>
-                    </Box>
-                  );
-                })}
-              </Paper>
-
-              {/* Headline Field */}
-              <Box sx={{ mb: 3 }}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, color: '#1e293b' }}>
-                  Offer Headline
-                </Typography>
-                <TiptapRichTextEditor
-                  value={offerHeadline}
-                  onChange={setOfferHeadline}
-                  placeholder="Enter your offer headline... (e.g., New Blog Idea: {{company_chosen_idea}})"
-                  height={100}
-                />
-              </Box>
-
-              {/* Template Editor (Message Body) */}
-              <Box sx={{ mb: 2, position: 'relative' }}>
-                <Typography variant="subtitle2" sx={{ fontWeight: 600, mb: 1, color: '#1e293b' }}>
-                  Message Body
-                </Typography>
-                <TiptapRichTextEditor
-                  value={offerTemplate}
-                  onChange={setOfferTemplate}
-                  placeholder="Enter your offer message here... Use double curly braces for variables (e.g., {{name}}, {{company}}). You can format text with bold, italic, lists, etc."
-                  height={350}
-                />
-              </Box>
-
-              {/* Character Count */}
-              <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 3 }}>
-                <Typography variant="caption" sx={{ color: '#94a3b8' }}>
-                  {getHtmlCharCount(offerTemplate)} characters
-                </Typography>
-                {settings?.updatedAt && (
-                  <Typography variant="caption" sx={{ color: '#94a3b8' }}>
-                    Last updated: {formatDate(settings.updatedAt)}
-                  </Typography>
-                )}
-              </Box>
-
-              {/* Preview Section */}
-              <Divider sx={{ my: 3 }} />
-
-              <Typography variant="h6" sx={{ fontWeight: 600, mb: 2 }}>
-                Preview (with sample data)
-              </Typography>
-
-              <Paper
-                sx={{
-                  p: 3,
-                  bgcolor: '#f8fafc',
-                  border: '1px solid #e2e8f0',
-                  mb: 3,
-                  minHeight: 120,
-                }}
-              >
-                {/* Headline Preview */}
-                {headlinePreview && (
-                  <Box sx={{ mb: 2 }}>
-                    <Typography
-                      variant="subtitle2"
-                      sx={{
-                        fontWeight: 600,
-                        color: '#64748b',
-                        fontSize: '12px',
-                        mb: 0.5,
-                      }}
-                    >
-                      Headline:
-                    </Typography>
-                    <SafeHtmlRenderer
-                      html={headlinePreview}
-                      sx={{
-                        fontWeight: 600,
-                        color: '#1e293b',
-                        fontFamily: '"Inter", sans-serif',
-                      }}
-                    />
-                  </Box>
-                )}
-
-                {/* Message Preview */}
-                <Box>
-                  <Typography
-                    variant="subtitle2"
-                    sx={{
-                      fontWeight: 600,
-                      color: '#64748b',
-                      fontSize: '12px',
-                      mb: 0.5,
-                    }}
-                  >
-                    Message:
-                  </Typography>
-                  <SafeHtmlRenderer
-                    html={templatePreview}
-                    sx={{
-                      fontFamily: '"Inter", sans-serif',
-                      lineHeight: 1.6,
-                      color: '#1e293b',
-                      fontSize: '14px',
-                    }}
-                  />
-                </Box>
-              </Paper>
-
-              {/* Action Buttons */}
-              <Box sx={{ display: 'flex', gap: 2 }}>
-                <Button
-                  variant="contained"
-                  onClick={handleSaveOfferTemplate}
-                  disabled={saving || isHtmlEmpty(offerTemplate)}
-                  startIcon={saving ? <CircularProgress size={20} /> : <SaveIcon />}
-                  sx={{
-                    background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-                    textTransform: 'none',
-                    px: 4,
-                    fontWeight: 600,
-                    '&:hover': {
-                      background: 'linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%)',
-                    },
-                    '&:disabled': {
-                      background: '#e2e8f0',
-                      color: '#94a3b8',
-                    },
-                  }}
-                >
-                  {saving ? 'Saving...' : 'Save Template'}
-                </Button>
-              </Box>
-            </Box>
+            <OfferTemplateTab />
           </TabPanel>
 
           {/* Follow-Up Template Tab */}

@@ -111,6 +111,35 @@ export interface Company {
       costInfo?: any;
       [key: string]: any;
     };
+    blogAudit?: {
+      offerParagraph: string;
+      internalJustification: string;
+      companyBlogSnapshot: {
+        blogUrl: string;
+        postsPerMonth: number;
+        recentTopics: string[];
+        contentTypes: string[];
+        recentPosts: Array<{ title: string; date: string; url?: string }>;
+      };
+      competitorSnapshots: Array<{
+        companyName: string;
+        blogUrl: string;
+        postsPerMonth: number;
+        recentTopics: string[];
+        notableStrengths: string;
+      }>;
+      competitorsAnalyzed: number;
+      agentIterations: number;
+      toolCallsCount: number;
+      costInfo: {
+        totalCost: number;
+        totalTokens: number;
+        iterationCosts: number[];
+      };
+      generatedAt: string;
+      model: string;
+    };
+    blogAuditError?: string;
     analyzedAt: Date;
   };
 

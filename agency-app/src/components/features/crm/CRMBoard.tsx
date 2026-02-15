@@ -80,6 +80,8 @@ import { ReleaseNote, UserReleaseNoteState } from '../../../types/releaseNotes';
 import { getLatestReleaseNote, getUserReleaseState } from '../../../services/api/releaseNotesService';
 import { createGmailDraft, createFollowUpDraft, checkGmailConnection } from '../../../services/api/gmailService';
 import { getSettings } from '../../../services/api/settings';
+import { OfferTemplateVersion } from '../../../types/settings';
+import { resolveTemplateVersion } from '../../../services/api/templateVersionResolver';
 import { getCompany } from '../../../services/api/companies';
 import { replaceTemplateVariables } from '../../../services/api/templateVariablesService';
 import { stripHtmlTags } from '../../../utils/htmlHelpers';
@@ -1022,11 +1024,11 @@ function CRMBoard() {
         return;
       }
 
-      // Get offer template from settings
+      // Get offer template versions from settings
       const settings = await getSettings();
-      const { offerTemplate, offerHeadline } = settings;
+      const templateVersions = settings.offerTemplateVersions || [];
 
-      if (!offerTemplate) {
+      if (templateVersions.length === 0) {
         showAlert('No offer template configured. Please set up template in Settings.');
         setCreatingDrafts(false);
         return;
@@ -1054,6 +1056,7 @@ function CRMBoard() {
 
       let successCount = 0;
       let failCount = 0;
+      let defaultFallbackCount = 0;
       const errors: string[] = [];
 
       // Create drafts sequentially to avoid rate limits
@@ -1065,12 +1068,31 @@ function CRMBoard() {
             company = await getCompany(lead.companyId);
           }
 
+          // Resolve template version for this lead's company
+          const resolution = resolveTemplateVersion(templateVersions, company?.labels);
+          let version: OfferTemplateVersion;
+          if ('conflict' in resolution) {
+            // Multiple versions match - use default for bulk ops
+            version = templateVersions.find(v => v.isDefault) || templateVersions[0];
+            defaultFallbackCount++;
+          } else {
+            version = resolution.resolved.version;
+          }
+
           // Replace template variables and strip HTML tags from subject
-          const subjectHtml = offerHeadline
-            ? replaceTemplateVariables(offerHeadline, lead, company)
+          const subjectHtml = version.offerHeadline
+            ? replaceTemplateVariables(version.offerHeadline, lead, company)
             : `Opportunity at ${lead.company}`;
           const subject = stripHtmlTags(subjectHtml);
-          const bodyHtml = replaceTemplateVariables(offerTemplate, lead, company);
+          const bodyHtml = version.offerTemplate
+            ? replaceTemplateVariables(version.offerTemplate, lead, company)
+            : '';
+
+          if (!bodyHtml) {
+            failCount++;
+            errors.push(`${lead.name}: Template version "${version.name}" has no body`);
+            continue;
+          }
 
           // Create draft
           const result = await createGmailDraft({
@@ -1097,6 +1119,9 @@ function CRMBoard() {
 
       // Show results
       let message = `Created ${successCount} draft(s) successfully.`;
+      if (defaultFallbackCount > 0) {
+        message += ` ${defaultFallbackCount} used default template (multiple versions matched).`;
+      }
       if (failCount > 0) {
         message += ` ${failCount} failed.`;
         if (errors.length > 0) {

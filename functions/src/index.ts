@@ -152,3 +152,6 @@ export {refreshAIConceptsCloud, getAIConceptsStatusCloud} from "./offerAnalysis/
 
 // Export Slack notification for offer generation
 export {sendOfferSlackNotificationCloud} from "./notifications/sendOfferSlackNotification";
+
+// Export Blog Audit agentic pipeline
+export {generateBlogAuditCloud} from "./blogAudit/blogAuditFunction";

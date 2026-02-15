@@ -1290,6 +1290,92 @@ export async function v2Stage4ValidateIdeas(
   return result.data;
 }
 
+// ============================================================
+// Blog Audit (Agentic Competitive Analysis)
+// ============================================================
+
+export interface BlogAuditRequest {
+  companyId: string;
+  companyName: string;
+  website: string;
+  apolloData?: {
+    industry?: string;
+    industries?: string[];
+    technologies?: string[];
+    description?: string;
+    keywords?: string[];
+    employeeRange?: string;
+  };
+  blogAnalysis?: {
+    blogUrl?: string | null;
+    monthlyFrequency?: number;
+    contentSummary?: string;
+    blogNature?: {
+      isTechnical?: boolean;
+      rating?: string;
+      hasCodeExamples?: boolean;
+    };
+  };
+}
+
+export interface BlogAuditResult {
+  success: boolean;
+  offerParagraph: string;
+  internalJustification: string;
+  companyBlogSnapshot: {
+    blogUrl: string;
+    postsPerMonth: number;
+    recentTopics: string[];
+    contentTypes: string[];
+    recentPosts: Array<{ title: string; date: string; url?: string }>;
+  };
+  competitorSnapshots: Array<{
+    companyName: string;
+    blogUrl: string;
+    postsPerMonth: number;
+    recentTopics: string[];
+    notableStrengths: string;
+  }>;
+  competitorsAnalyzed: number;
+  agentIterations: number;
+  toolCallsCount: number;
+  costInfo: {
+    totalCost: number;
+    totalTokens: number;
+    iterationCosts: number[];
+  };
+  generatedAt: string;
+  model: string;
+}
+
+/**
+ * Generate Blog Audit using agentic ReAct pipeline
+ * Analyzes company blog vs competitors and produces offer paragraph
+ */
+export async function generateBlogAudit(
+  companyId: string,
+  companyName: string,
+  website: string,
+  apolloData?: BlogAuditRequest['apolloData'],
+  blogAnalysis?: BlogAuditRequest['blogAnalysis']
+): Promise<BlogAuditResult> {
+  const blogAudit = httpsCallable<BlogAuditRequest, BlogAuditResult>(
+    functions,
+    'generateBlogAuditCloud',
+    { timeout: V2_TIMEOUT }
+  );
+
+  const result = await blogAudit({
+    companyId,
+    companyName,
+    website,
+    apolloData,
+    blogAnalysis,
+  });
+
+  return result.data;
+}
+
 /**
  * Send Slack notification after all offer versions complete
  */

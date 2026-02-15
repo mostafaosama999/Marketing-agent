@@ -72,7 +72,8 @@ export type ServiceType =
   | "v2-stage1.5-concept-matching"
   | "v2-stage2-content-gaps"
   | "v2-stage3-generate-ideas"
-  | "v2-stage4-validate-ideas";
+  | "v2-stage4-validate-ideas"
+  | "blog-audit";
 
 export interface ApiCostRecord {
   userId: string;
@@ -129,6 +130,7 @@ const SERVICE_TO_CATEGORY: Record<string, string> = {
   "linkedin-post-from-trend": "contentGeneration",
   "linkedin-meme-image": "contentGeneration",
   "v3-blog-ideas": "ideaGeneration",
+  "blog-audit": "blogAudit",
 };
 
 /**

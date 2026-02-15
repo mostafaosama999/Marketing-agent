@@ -130,11 +130,15 @@ export function buildTemplateVariables(leads: Lead[], companies: Company[]): Tem
     }
   }
 
-  // Blog Analysis Data - EXCLUDED (AI-generated, not needed for template variables)
-  // These fields are used internally for analysis but not exposed as template variables
-
-  // Writing Program Analysis Data - EXCLUDED (AI-generated, not needed for template variables)
-  // These fields are used internally for analysis but not exposed as template variables
+  // Blog Audit offer paragraph (sent to prospects)
+  if (companies.some(c => c.offerAnalysis?.blogAudit?.offerParagraph)) {
+    variables.push({
+      key: '{{blog_audit}}',
+      description: 'Blog audit paragraph (sent to prospect)',
+      category: 'company',
+      example: 'Your blog publishes 2x/month on API tutorials, while Competitor posts weekly with...',
+    });
+  }
 
   return variables;
 }
@@ -246,9 +250,12 @@ export function replaceTemplateVariables(
       result = result.replace(/\{\{company_technologies\}\}/g, apollo.technologies?.join(', ') || '');
     }
 
-    // Blog analysis - EXCLUDED (AI-generated, not exposed as template variables)
-
-    // Writing program analysis - EXCLUDED (AI-generated, not exposed as template variables)
+    // Blog audit offer paragraph
+    if (company.offerAnalysis?.blogAudit?.offerParagraph) {
+      result = result.replace(/\{\{blog_audit\}\}/g, company.offerAnalysis.blogAudit.offerParagraph);
+    } else {
+      result = result.replace(/\{\{blog_audit\}\}/g, '');
+    }
   }
 
   return result;

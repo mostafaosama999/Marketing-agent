@@ -14,6 +14,8 @@ import {
   DialogTitle,
   DialogContent,
   DialogActions,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import { AutoAwesome as AnalyzeIcon, Refresh as RefreshIcon } from '@mui/icons-material';
 import { Company } from '../../../types/crm';
@@ -43,11 +45,14 @@ import {
   v2Stage3GenerateIdeas,
   v2Stage4ValidateIdeas,
   sendOfferSlackNotification,
+  generateBlogAudit,
 } from '../../../services/firebase/cloudFunctions';
 import { OfferIdeasReviewUI } from './OfferIdeasReviewUI';
 import { ApprovedIdeasDisplay } from './ApprovedIdeasDisplay';
 import { CompanyAnalysisResults } from './CompanyAnalysisResults';
 import { BlogIdeasDisplay, BlogIdeasDisplayTriple, VersionStatus, V2StageResultsForDisplay } from './BlogIdeasDisplay';
+import { BlogAuditDisplay } from './BlogAuditDisplay';
+import { GenerateOffersDialog } from './GenerateOffersDialog';
 import { doc, updateDoc, serverTimestamp, onSnapshot } from 'firebase/firestore';
 import { db } from '../../../services/firebase/firestore';
 
@@ -68,7 +73,8 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
   const hasAnyIdeas = hasAnalysis && (
     ((company.offerAnalysis?.ideas?.length ?? 0) > 0) ||
     ((company.offerAnalysis?.v2?.ideas?.length ?? 0) > 0) ||
-    ((company.offerAnalysis?.v3?.ideas?.length ?? 0) > 0)
+    ((company.offerAnalysis?.v3?.ideas?.length ?? 0) > 0) ||
+    !!company.offerAnalysis?.blogAudit?.offerParagraph
   );
 
   const [overallState, setOverallState] = useState<OverallState>(
@@ -124,6 +130,24 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
   );
 
   const [isV3DebugOpen, setIsV3DebugOpen] = useState(false);
+
+  // Blog Audit state
+  type AuditStatus = 'idle' | 'generating' | 'complete' | 'error';
+  const [blogAuditStatus, setBlogAuditStatus] = useState<AuditStatus>(
+    company.offerAnalysis?.blogAudit?.offerParagraph ? 'complete' : 'idle'
+  );
+  const [blogAuditData, setBlogAuditData] = useState<any>(
+    company.offerAnalysis?.blogAudit || null
+  );
+  const [blogAuditError, setBlogAuditError] = useState<string | undefined>(
+    company.offerAnalysis?.blogAuditError || undefined
+  );
+
+  // Pre-generation dialog state
+  const [showGenerateDialog, setShowGenerateDialog] = useState(false);
+
+  // Top-level offer tab (Content Ideas vs Blog Audit)
+  const [offerTab, setOfferTab] = useState(0);
 
   // V2 stage progress for progressive display
   const [v2StageResults, setV2StageResults] = useState<V2StageResultsForDisplay>(
@@ -197,6 +221,20 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
             return prev;
           });
 
+          // Update blog audit status
+          setBlogAuditStatus(prev => {
+            if (prev === 'generating') return prev;
+            if (offerAnalysis.blogAudit?.offerParagraph) return 'complete';
+            if (offerAnalysis.blogAuditError) return 'error';
+            return prev;
+          });
+          if (offerAnalysis.blogAudit) {
+            setBlogAuditData(offerAnalysis.blogAudit);
+          }
+          if (offerAnalysis.blogAuditError) {
+            setBlogAuditError(offerAnalysis.blogAuditError);
+          }
+
           // Update local analysis result
           setAnalysisResult({
             companyAnalysis: offerAnalysis.companyAnalysis,
@@ -229,7 +267,8 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
           // Set overall state
           const anyIdeas = offerAnalysis.ideas?.length > 0 ||
             offerAnalysis.v2?.ideas?.length > 0 ||
-            offerAnalysis.v3?.ideas?.length > 0;
+            offerAnalysis.v3?.ideas?.length > 0 ||
+            offerAnalysis.blogAudit?.offerParagraph;
           if (anyIdeas) {
             setOverallState('complete');
           }
@@ -492,11 +531,55 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
     }
   };
 
+  const runBlogAuditPipeline = async (websiteUrl: string): Promise<{ cost: number }> => {
+    setBlogAuditStatus('generating');
+    try {
+      const apolloDataForAudit = company.apolloEnrichment ? {
+        industry: company.apolloEnrichment.industry || undefined,
+        industries: company.apolloEnrichment.industries,
+        technologies: company.apolloEnrichment.technologies,
+        description: company.apolloEnrichment.description || undefined,
+        keywords: company.apolloEnrichment.keywords,
+        employeeRange: company.apolloEnrichment.employeeRange || undefined,
+      } : undefined;
+
+      const blogAnalysisForAudit = company.blogAnalysis ? {
+        blogUrl: company.blogAnalysis.blogUrl,
+        monthlyFrequency: company.blogAnalysis.monthlyFrequency,
+        contentSummary: company.blogAnalysis.contentSummary,
+        blogNature: company.blogAnalysis.blogNature ? {
+          isTechnical: company.blogAnalysis.blogNature.isTechnical,
+          rating: company.blogAnalysis.blogNature.rating,
+          hasCodeExamples: company.blogAnalysis.blogNature.hasCodeExamples,
+        } : undefined,
+      } : undefined;
+
+      const result = await generateBlogAudit(
+        companyId,
+        company.name,
+        websiteUrl,
+        apolloDataForAudit,
+        blogAnalysisForAudit
+      );
+
+      setBlogAuditData(result);
+      setBlogAuditStatus('complete');
+      showSnackbar(`Blog Audit: ${result.competitorsAnalyzed} competitors analyzed`, 'success');
+      return { cost: result.costInfo?.totalCost || 0 };
+    } catch (err: any) {
+      console.error('Blog Audit pipeline failed:', err);
+      setBlogAuditStatus('error');
+      setBlogAuditError(err.message || 'Blog audit failed');
+      showSnackbar(`Blog Audit failed: ${err.message}`, 'error');
+      return { cost: 0 };
+    }
+  };
+
   // ========================================
   // Main analysis handler
   // ========================================
 
-  const handleStartAnalysis = async () => {
+  const handleStartAnalysis = async (options: { contentIdeas: boolean; blogAudit: boolean }) => {
     const websiteBlogLink = company.customFields?.website_blog_link as string | undefined;
     const websiteUrl = company.website || websiteBlogLink || company.blogAnalysis?.blogUrl;
 
@@ -535,17 +618,25 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
         costInfo: { stage1Cost: stage1Result.costInfo.totalCost, totalCost: stage1Result.costInfo.totalCost },
       });
 
+      const pipelineNames = [];
+      if (options.contentIdeas) pipelineNames.push('V1, V2, V3');
+      if (options.blogAudit) pipelineNames.push('Blog Audit');
       showSnackbar(
-        `Company type: ${stage1Result.companyAnalysis.companyType}. Starting V1, V2, V3...`,
+        `Company type: ${stage1Result.companyAnalysis.companyType}. Starting ${pipelineNames.join(' + ')}...`,
         'info'
       );
 
       // Switch to running state — tabs will now be visible
       setOverallState('running');
-      // Set all versions to generating upfront (before async pipeline calls)
-      setV1Status('generating');
-      setV2Status('generating');
-      setV3Status('generating');
+      // Set versions to generating upfront (only for selected pipelines)
+      if (options.contentIdeas) {
+        setV1Status('generating');
+        setV2Status('generating');
+        setV3Status('generating');
+      }
+      if (options.blogAudit) {
+        setBlogAuditStatus('generating');
+      }
 
       // Prepare shared data
       const apolloData = company.apolloEnrichment ? {
@@ -577,22 +668,43 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
         (company.customFields?.specific_requirements as string | undefined) ||
         undefined;
 
-      // Fire all 3 pipelines independently — each returns { count, cost }
-      const [v1Settled, v2Settled, v3Settled] = await Promise.allSettled([
-        runV1Pipeline(stage1Result.companyAnalysis, websiteUrl, blogContent),
-        runV2Pipeline(stage1Result.companyAnalysis, websiteUrl, apolloData, blogAnalysisData),
-        runV3Pipeline(stage1Result.companyAnalysis, websiteUrl, apolloData, blogAnalysisData, specificRequirements),
-      ]);
+      // Fire selected pipelines independently
+      const pipelines: Promise<any>[] = [];
+      if (options.contentIdeas) {
+        pipelines.push(
+          runV1Pipeline(stage1Result.companyAnalysis, websiteUrl, blogContent),
+          runV2Pipeline(stage1Result.companyAnalysis, websiteUrl, apolloData, blogAnalysisData),
+          runV3Pipeline(stage1Result.companyAnalysis, websiteUrl, apolloData, blogAnalysisData, specificRequirements),
+        );
+      }
+      if (options.blogAudit) {
+        pipelines.push(runBlogAuditPipeline(websiteUrl));
+      }
+
+      const settled = await Promise.allSettled(pipelines);
 
       // All pipelines done
       isRunningRef.current = false;
       setOverallState('complete');
 
       // Extract counts/costs from settled results
-      const v1 = v1Settled.status === 'fulfilled' ? v1Settled.value : { count: 0, cost: 0 };
-      const v2 = v2Settled.status === 'fulfilled' ? v2Settled.value : { count: 0, cost: 0 };
-      const v3 = v3Settled.status === 'fulfilled' ? v3Settled.value : { count: 0, cost: 0 };
-      const totalCost = stage1Result.costInfo.totalCost + v1.cost + v2.cost + v3.cost;
+      let v1 = { count: 0, cost: 0 };
+      let v2 = { count: 0, cost: 0 };
+      let v3 = { count: 0, cost: 0 };
+      let auditCostResult = { cost: 0 };
+
+      if (options.contentIdeas) {
+        v1 = settled[0]?.status === 'fulfilled' ? settled[0].value : { count: 0, cost: 0 };
+        v2 = settled[1]?.status === 'fulfilled' ? settled[1].value : { count: 0, cost: 0 };
+        v3 = settled[2]?.status === 'fulfilled' ? settled[2].value : { count: 0, cost: 0 };
+        if (options.blogAudit) {
+          auditCostResult = settled[3]?.status === 'fulfilled' ? settled[3].value : { cost: 0 };
+        }
+      } else if (options.blogAudit) {
+        auditCostResult = settled[0]?.status === 'fulfilled' ? settled[0].value : { cost: 0 };
+      }
+
+      const totalCost = stage1Result.costInfo.totalCost + v1.cost + v2.cost + v3.cost + auditCostResult.cost;
 
       // Set pending approval flag now that ALL versions are done
       const totalIdeas = v1.count + v2.count + v3.count;
@@ -636,7 +748,11 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
       setV1Status('idle');
       setV2Status('idle');
       setV3Status('idle');
+      setBlogAuditStatus('idle');
+      setBlogAuditData(null);
+      setBlogAuditError(undefined);
       setV2StageResults({ currentStage: 'idle' });
+      setOfferTab(0);
       setOverallState('empty');
       showSnackbar('Ready to run new analysis', 'info');
     } catch (error: any) {
@@ -810,7 +926,7 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
             variant="contained"
             size="large"
             startIcon={<AnalyzeIcon />}
-            onClick={handleStartAnalysis}
+            onClick={() => setShowGenerateDialog(true)}
             disabled={!company.website && !company.customFields?.website_blog_link && !company.blogAnalysis?.blogUrl}
             sx={{
               background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -904,34 +1020,73 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
           <CompanyAnalysisResults analysis={analysisResult.companyAnalysis} />
         )}
 
-        {/* Triple Version Tabs — shown during both running and complete states */}
-        <BlogIdeasDisplayTriple
-          v1Ideas={analysisResult?.ideas || []}
-          v1Status={v1Status}
-          v2Ideas={analysisResult?.v2?.ideas || []}
-          v2Status={v2Status}
-          v2ValidationResults={analysisResult?.v2?.validationResults}
-          v2MatchedConcepts={analysisResult?.v2?.matchedConcepts}
-          v2StageResults={v2StageResults}
-          v3Ideas={analysisResult?.v3?.ideas || []}
-          v3Status={v3Status}
-          v3Debug={analysisResult?.v3?.debug}
-          onOpenV3Debug={() => setIsV3DebugOpen(true)}
-          totalCost={
-            (analysisResult?.costInfo?.stage1Cost || 0) +
-            (analysisResult?.costInfo?.stage2CostV1 || 0) +
-            (analysisResult?.v2?.costInfo?.totalCost || 0) +
-            (analysisResult?.v3?.costInfo?.totalCost || 0)
-          }
-          stage1Cost={analysisResult?.costInfo?.stage1Cost}
-          v1Cost={analysisResult?.costInfo?.stage2CostV1}
-          v2Cost={analysisResult?.v2?.costInfo?.totalCost}
-          v3Cost={analysisResult?.v3?.costInfo?.totalCost}
-          chosenIdeaTitle={chosenIdea}
-          chosenIdeaVersion={chosenIdeaVersion}
-          onChooseIdea={handleChooseIdea}
-          onClearChoice={handleClearChoice}
-        />
+        {/* Offer Sub-Tabs: Content Ideas / Blog Audit */}
+        <Box sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}>
+          <Tabs
+            value={offerTab}
+            onChange={(_e, v) => setOfferTab(v)}
+            sx={{
+              '& .MuiTab-root': { textTransform: 'none', fontWeight: 600 },
+              '& .Mui-selected': { color: '#667eea' },
+              '& .MuiTabs-indicator': { backgroundColor: '#667eea' },
+            }}
+          >
+            <Tab label="Content Ideas" />
+            <Tab
+              label={
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                  Blog Audit
+                  {blogAuditStatus === 'generating' && (
+                    <CircularProgress size={14} sx={{ color: '#667eea' }} />
+                  )}
+                  {blogAuditStatus === 'complete' && (
+                    <Box sx={{ width: 8, height: 8, borderRadius: '50%', bgcolor: '#16a34a' }} />
+                  )}
+                </Box>
+              }
+            />
+          </Tabs>
+        </Box>
+
+        {/* Content Ideas Tab */}
+        {offerTab === 0 && (
+          <BlogIdeasDisplayTriple
+            v1Ideas={analysisResult?.ideas || []}
+            v1Status={v1Status}
+            v2Ideas={analysisResult?.v2?.ideas || []}
+            v2Status={v2Status}
+            v2ValidationResults={analysisResult?.v2?.validationResults}
+            v2MatchedConcepts={analysisResult?.v2?.matchedConcepts}
+            v2StageResults={v2StageResults}
+            v3Ideas={analysisResult?.v3?.ideas || []}
+            v3Status={v3Status}
+            v3Debug={analysisResult?.v3?.debug}
+            onOpenV3Debug={() => setIsV3DebugOpen(true)}
+            totalCost={
+              (analysisResult?.costInfo?.stage1Cost || 0) +
+              (analysisResult?.costInfo?.stage2CostV1 || 0) +
+              (analysisResult?.v2?.costInfo?.totalCost || 0) +
+              (analysisResult?.v3?.costInfo?.totalCost || 0)
+            }
+            stage1Cost={analysisResult?.costInfo?.stage1Cost}
+            v1Cost={analysisResult?.costInfo?.stage2CostV1}
+            v2Cost={analysisResult?.v2?.costInfo?.totalCost}
+            v3Cost={analysisResult?.v3?.costInfo?.totalCost}
+            chosenIdeaTitle={chosenIdea}
+            chosenIdeaVersion={chosenIdeaVersion}
+            onChooseIdea={handleChooseIdea}
+            onClearChoice={handleClearChoice}
+          />
+        )}
+
+        {/* Blog Audit Tab */}
+        {offerTab === 1 && (
+          <BlogAuditDisplay
+            data={blogAuditData}
+            status={blogAuditStatus}
+            error={blogAuditError}
+          />
+        )}
       </Box>
     );
   };
@@ -939,6 +1094,14 @@ export const OfferIdeasSection: React.FC<OfferIdeasSectionProps> = ({
   return (
     <>
       {renderContent()}
+
+      {/* Generate Offers Dialog */}
+      <GenerateOffersDialog
+        open={showGenerateDialog}
+        onClose={() => setShowGenerateDialog(false)}
+        onGenerate={handleStartAnalysis}
+        companyName={company.name}
+      />
 
       {/* V3 Debug Dialog */}
       <Dialog open={isV3DebugOpen} onClose={() => setIsV3DebugOpen(false)} maxWidth="lg" fullWidth>

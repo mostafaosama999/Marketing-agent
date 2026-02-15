@@ -57,6 +57,9 @@ import { getLeadNameForApollo, validateNameForApollo, splitFullName } from '../.
 import { NameConfirmationDialog } from '../../components/features/crm/NameConfirmationDialog';
 import { Company } from '../../types/crm';
 import { getSettings } from '../../services/api/settings';
+import { OfferTemplateVersion } from '../../types/settings';
+import { resolveTemplateVersion } from '../../services/api/templateVersionResolver';
+import { TemplateVersionPickerDialog } from '../../components/features/crm/TemplateVersionPickerDialog';
 import { replaceTemplateVariables } from '../../services/api/templateVariablesService';
 import { SafeHtmlRenderer, copyHtmlToClipboard, stripHtmlTags } from '../../utils/htmlHelpers';
 import { FieldDefinition } from '../../types/fieldDefinitions';
@@ -138,14 +141,17 @@ export const LeadDetailPage: React.FC = () => {
   const [emailStatus, setEmailStatus] = useState<'not_sent' | 'sent' | 'opened' | 'replied' | 'bounced' | 'refused' | 'no_response'>('not_sent');
 
   // Offer template state (fetched from global settings)
-  const [offerTemplate, setOfferTemplate] = useState<string>('');
-  const [offerHeadline, setOfferHeadline] = useState<string>('');
+  const [templateVersions, setTemplateVersions] = useState<OfferTemplateVersion[]>([]);
   const [followUpTemplate, setFollowUpTemplate] = useState<string>('');
   const [followUpSubject, setFollowUpSubject] = useState<string>('');
 
   // Copy state for offer preview
   const [headlineCopied, setHeadlineCopied] = useState(false);
   const [messageCopied, setMessageCopied] = useState(false);
+
+  // Template version picker state
+  const [versionPickerOpen, setVersionPickerOpen] = useState(false);
+  const [versionPickerAction, setVersionPickerAction] = useState<'headline' | 'message' | 'draft' | null>(null);
 
   // Gmail draft creation state
   const [creatingDraft, setCreatingDraft] = useState(false);
@@ -260,8 +266,7 @@ export const LeadDetailPage: React.FC = () => {
     const loadTemplate = async () => {
       try {
         const settings = await getSettings();
-        setOfferTemplate(settings.offerTemplate);
-        setOfferHeadline(settings.offerHeadline || '');
+        setTemplateVersions(settings.offerTemplateVersions || []);
         setFollowUpTemplate(settings.followUpTemplate || '');
         setFollowUpSubject(settings.followUpSubject || '');
       } catch (error) {
@@ -783,65 +788,87 @@ export const LeadDetailPage: React.FC = () => {
     });
   };
 
+  // Resolve which template version to use for the current company
+  const getResolvedVersion = (): OfferTemplateVersion | null => {
+    const result = resolveTemplateVersion(templateVersions, company?.labels);
+    if ('conflict' in result) return null; // Needs picker
+    return result.resolved.version;
+  };
+
+  const buildLeadData = () => ({
+    name: formData.name,
+    email: formData.email,
+    phone: formData.phone,
+    company: formData.company,
+    companyName: formData.company,
+    status: formData.status,
+    customFields: formData.customFields,
+    createdAt: lead?.createdAt,
+    updatedAt: lead?.updatedAt,
+    outreach: lead?.outreach,
+  });
+
+  // Handle version picker selection
+  const handleVersionPickerSelect = async (version: OfferTemplateVersion) => {
+    setVersionPickerOpen(false);
+    const action = versionPickerAction;
+    setVersionPickerAction(null);
+    if (action === 'headline') await doCopyHeadline(version);
+    else if (action === 'message') await doCopyMessage(version);
+    else if (action === 'draft') await doCreateGmailDraft(version);
+  };
+
   // Copy handlers for offer preview
   const handleCopyHeadline = async () => {
-    const leadData = {
-      name: formData.name,
-      email: formData.email,
-      phone: formData.phone,
-      company: formData.company,
-      companyName: formData.company,
-      status: formData.status,
-      customFields: formData.customFields,
-      createdAt: lead?.createdAt,
-      updatedAt: lead?.updatedAt,
-      outreach: lead?.outreach,
-    };
+    const version = getResolvedVersion();
+    if (!version) {
+      setVersionPickerAction('headline');
+      setVersionPickerOpen(true);
+      return;
+    }
+    await doCopyHeadline(version);
+  };
 
-    const headlineHtml = offerHeadline
-      ? replaceTemplateVariables(offerHeadline, leadData, company)
+  const doCopyHeadline = async (version: OfferTemplateVersion) => {
+    const leadData = buildLeadData();
+    const headlineHtml = version.offerHeadline
+      ? replaceTemplateVariables(version.offerHeadline, leadData, company)
       : '';
 
     if (headlineHtml) {
       try {
-        // Copy HTML with formatting preserved (bold, italic, etc.)
         await copyHtmlToClipboard(headlineHtml);
         setHeadlineCopied(true);
         setTimeout(() => setHeadlineCopied(false), 2000);
       } catch (err) {
         console.error('Failed to copy headline:', err);
-        alert('Failed to copy headline. Please try again.');
       }
     }
   };
 
   const handleCopyMessage = async () => {
-    const leadData = {
-      name: formData.name,
-      email: formData.email,
-      phone: formData.phone,
-      company: formData.company,
-      companyName: formData.company,
-      status: formData.status,
-      customFields: formData.customFields,
-      createdAt: lead?.createdAt,
-      updatedAt: lead?.updatedAt,
-      outreach: lead?.outreach,
-    };
+    const version = getResolvedVersion();
+    if (!version) {
+      setVersionPickerAction('message');
+      setVersionPickerOpen(true);
+      return;
+    }
+    await doCopyMessage(version);
+  };
 
-    const messageHtml = offerTemplate
-      ? replaceTemplateVariables(offerTemplate, leadData, company)
+  const doCopyMessage = async (version: OfferTemplateVersion) => {
+    const leadData = buildLeadData();
+    const messageHtml = version.offerTemplate
+      ? replaceTemplateVariables(version.offerTemplate, leadData, company)
       : '';
 
     if (messageHtml) {
       try {
-        // Copy HTML with formatting preserved (bold, italic, lists, etc.)
         await copyHtmlToClipboard(messageHtml);
         setMessageCopied(true);
         setTimeout(() => setMessageCopied(false), 2000);
       } catch (err) {
         console.error('Failed to copy message:', err);
-        alert('Failed to copy message. Please try again.');
       }
     }
   };
@@ -856,10 +883,21 @@ export const LeadDetailPage: React.FC = () => {
       return;
     }
 
+    const version = getResolvedVersion();
+    if (!version) {
+      setVersionPickerAction('draft');
+      setVersionPickerOpen(true);
+      return;
+    }
+    await doCreateGmailDraft(version);
+  };
+
+  const doCreateGmailDraft = async (version: OfferTemplateVersion) => {
+    if (!lead || !formData.email) return;
+
     setCreatingDraft(true);
 
     try {
-      // Check Gmail connection and permissions
       const connectionStatus = await checkGmailConnection();
       if (!connectionStatus.connected || !connectionStatus.hasComposePermission) {
         setSnackbar({
@@ -871,27 +909,13 @@ export const LeadDetailPage: React.FC = () => {
         return;
       }
 
-      // Build lead data
-      const leadData = {
-        name: formData.name,
-        email: formData.email,
-        phone: formData.phone,
-        company: formData.company,
-        companyName: formData.company,
-        status: formData.status,
-        customFields: formData.customFields,
-        createdAt: lead?.createdAt,
-        updatedAt: lead?.updatedAt,
-        outreach: lead?.outreach,
-      };
-
-      // Replace template variables and strip HTML tags from subject
-      const subjectHtml = offerHeadline
-        ? replaceTemplateVariables(offerHeadline, leadData, company)
+      const leadData = buildLeadData();
+      const subjectHtml = version.offerHeadline
+        ? replaceTemplateVariables(version.offerHeadline, leadData, company)
         : `Opportunity at ${formData.company}`;
       const subject = stripHtmlTags(subjectHtml);
-      const bodyHtml = offerTemplate
-        ? replaceTemplateVariables(offerTemplate, leadData, company)
+      const bodyHtml = version.offerTemplate
+        ? replaceTemplateVariables(version.offerTemplate, leadData, company)
         : '';
 
       if (!bodyHtml) {
@@ -904,7 +928,6 @@ export const LeadDetailPage: React.FC = () => {
         return;
       }
 
-      // Create draft
       const result = await createGmailDraft({
         leadId: lead.id,
         to: formData.email,
@@ -1032,29 +1055,19 @@ export const LeadDetailPage: React.FC = () => {
     }
   };
 
-  // Render offer preview with variables replaced
+  // Render offer preview with variables replaced (uses resolved version)
   const renderPreview = () => {
-    const leadData = {
-      name: formData.name,
-      email: formData.email,
-      phone: formData.phone,
-      company: formData.company,
-      companyName: formData.company,
-      status: formData.status,
-      customFields: formData.customFields,
-      createdAt: lead?.createdAt,
-      updatedAt: lead?.updatedAt,
-      outreach: lead?.outreach,
-    };
+    const leadData = buildLeadData();
+    const version = getResolvedVersion() || templateVersions[0];
 
     // Generate headline preview
-    const headlineText = offerHeadline
-      ? replaceTemplateVariables(offerHeadline, leadData, company)
+    const headlineText = version?.offerHeadline
+      ? replaceTemplateVariables(version.offerHeadline, leadData, company)
       : null;
 
     // Generate message preview
-    const messageText = offerTemplate
-      ? replaceTemplateVariables(offerTemplate, leadData, company)
+    const messageText = version?.offerTemplate
+      ? replaceTemplateVariables(version.offerTemplate, leadData, company)
       : null;
 
     if (!headlineText && !messageText) {
@@ -2023,6 +2036,20 @@ export const LeadDetailPage: React.FC = () => {
           {snackbar.message}
         </Alert>
       </Snackbar>
+
+      {/* Template Version Picker Dialog */}
+      <TemplateVersionPickerDialog
+        open={versionPickerOpen}
+        onClose={() => { setVersionPickerOpen(false); setVersionPickerAction(null); }}
+        onSelect={handleVersionPickerSelect}
+        matchingVersions={(() => {
+          const result = resolveTemplateVersion(templateVersions, company?.labels);
+          return 'conflict' in result ? result.conflict.matchingVersions : [];
+        })()}
+        companyName={formData.company || 'Unknown'}
+        companyLabels={company?.labels || []}
+        defaultVersion={templateVersions.find(v => v.isDefault)}
+      />
     </Box>
   );
 };

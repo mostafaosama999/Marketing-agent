@@ -45,6 +45,9 @@ import { useAuth } from '../../../contexts/AuthContext';
 import { copyHtmlToClipboard } from '../../../utils/htmlHelpers';
 import { replaceTemplateVariables } from '../../../services/api/templateVariablesService';
 import { getSettings } from '../../../services/api/settings';
+import { OfferTemplateVersion } from '../../../types/settings';
+import { resolveTemplateVersion } from '../../../services/api/templateVersionResolver';
+import { TemplateVersionPickerDialog } from './TemplateVersionPickerDialog';
 import { getLeadNameForApollo, validateNameForApollo } from '../../../utils/nameUtils';
 import { Company } from '../../../types/crm';
 import { getCompany } from '../../../services/api/companies';
@@ -206,9 +209,18 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
 
   // Copy message state
   const [copiedLeadIds, setCopiedLeadIds] = useState<Set<string>>(new Set());
-  const [offerHeadline, setOfferHeadline] = useState<string>('');
-  const [offerTemplate, setOfferTemplate] = useState<string>('');
+  const [templateVersions, setTemplateVersions] = useState<OfferTemplateVersion[]>([]);
   const [companies, setCompanies] = useState<Map<string, Company>>(new Map());
+
+  // Template version picker dialog state
+  const [versionPickerOpen, setVersionPickerOpen] = useState(false);
+  const [versionPickerData, setVersionPickerData] = useState<{
+    matchingVersions: OfferTemplateVersion[];
+    companyName: string;
+    companyLabels: string[];
+    lead: Lead;
+    company: Company | null;
+  } | null>(null);
 
   // Rating user display names (first letter only)
   const [ratingUserNames, setRatingUserNames] = useState<Map<string, string>>(new Map());
@@ -258,13 +270,12 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
     fetchFieldDefinitions();
   }, []);
 
-  // Fetch settings on mount
+  // Fetch settings (template versions) on mount
   useEffect(() => {
     const fetchAppSettings = async () => {
       try {
         const settings = await getSettings();
-        setOfferHeadline(settings.offerHeadline || '');
-        setOfferTemplate(settings.offerTemplate || '');
+        setTemplateVersions(settings.offerTemplateVersions || []);
       } catch (error) {
         console.error('Error fetching settings:', error);
       }
@@ -620,63 +631,87 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
     handleDatePickerClose();
   };
 
-  // Copy full message handler (headline + body)
+  // Copy with a specific template version
+  const copyWithVersion = async (version: OfferTemplateVersion, lead: Lead, companyData: Company | null) => {
+    const leadData = {
+      name: lead.name,
+      email: lead.email,
+      phone: lead.phone,
+      company: lead.company || lead.companyName,
+      companyName: lead.company || lead.companyName,
+      status: lead.status,
+      customFields: lead.customFields,
+      createdAt: lead.createdAt,
+      updatedAt: lead.updatedAt,
+      outreach: lead.outreach,
+    };
+
+    const headlineHtml = version.offerHeadline
+      ? replaceTemplateVariables(version.offerHeadline, leadData, companyData)
+      : '';
+    const bodyHtml = version.offerTemplate
+      ? replaceTemplateVariables(version.offerTemplate, leadData, companyData)
+      : '';
+
+    const mergedHtml = headlineHtml && bodyHtml
+      ? `${headlineHtml}<p></p>${bodyHtml}`
+      : headlineHtml || bodyHtml;
+
+    if (!mergedHtml) {
+      showSnackbar('No offer template configured. Please go to Settings to create one.', 'warning');
+      return;
+    }
+
+    await copyHtmlToClipboard(mergedHtml);
+
+    setCopiedLeadIds(prev => new Set(prev).add(lead.id));
+    showSnackbar(`Offer message copied! (${version.name})`, 'success');
+
+    setTimeout(() => {
+      setCopiedLeadIds(prev => {
+        const newSet = new Set(prev);
+        newSet.delete(lead.id);
+        return newSet;
+      });
+    }, 2000);
+  };
+
+  // Copy full message handler (headline + body) - version-aware
   const handleCopyFullMessage = async (lead: Lead) => {
     try {
-      // Fetch company data if lead has companyId
       let companyData: Company | null = null;
       if (lead.companyId) {
         companyData = await getCompany(lead.companyId);
       }
 
-      // Build lead data object for template replacement
-      const leadData = {
-        name: lead.name,
-        email: lead.email,
-        phone: lead.phone,
-        company: lead.company || lead.companyName,
-        companyName: lead.company || lead.companyName,
-        status: lead.status,
-        customFields: lead.customFields,
-        createdAt: lead.createdAt,
-        updatedAt: lead.updatedAt,
-        outreach: lead.outreach,
-      };
+      const result = resolveTemplateVersion(templateVersions, companyData?.labels);
 
-      // Replace template variables in headline and body with company data
-      const headlineHtml = offerHeadline
-        ? replaceTemplateVariables(offerHeadline, leadData, companyData)
-        : '';
-      const bodyHtml = offerTemplate
-        ? replaceTemplateVariables(offerTemplate, leadData, companyData)
-        : '';
-
-      // Merge headline and body with blank line between them
-      // Format: headline + <p></p> (blank line) + body
-      const mergedHtml = headlineHtml && bodyHtml
-        ? `${headlineHtml}<p></p>${bodyHtml}`
-        : headlineHtml || bodyHtml;
-
-      if (!mergedHtml) {
-        showSnackbar('No offer template configured. Please go to Settings to create one.', 'warning');
+      if ('conflict' in result) {
+        // Multiple versions match - show picker
+        setVersionPickerData({
+          matchingVersions: result.conflict.matchingVersions,
+          companyName: lead.company || lead.companyName || 'Unknown',
+          companyLabels: result.conflict.companyLabels,
+          lead,
+          company: companyData,
+        });
+        setVersionPickerOpen(true);
         return;
       }
 
-      // Copy HTML with formatting preserved
-      await copyHtmlToClipboard(mergedHtml);
+      await copyWithVersion(result.resolved.version, lead, companyData);
+    } catch (error) {
+      console.error('Failed to copy message:', error);
+      showSnackbar('Failed to copy message. Please try again.', 'error');
+    }
+  };
 
-      // Show success feedback
-      setCopiedLeadIds(prev => new Set(prev).add(lead.id));
-      showSnackbar('Offer message copied to clipboard!', 'success');
-
-      // Reset after 2 seconds
-      setTimeout(() => {
-        setCopiedLeadIds(prev => {
-          const newSet = new Set(prev);
-          newSet.delete(lead.id);
-          return newSet;
-        });
-      }, 2000);
+  // Handle version picker selection
+  const handleVersionPickerSelect = async (version: OfferTemplateVersion) => {
+    setVersionPickerOpen(false);
+    if (!versionPickerData) return;
+    try {
+      await copyWithVersion(version, versionPickerData.lead, versionPickerData.company);
     } catch (error) {
       console.error('Failed to copy message:', error);
       showSnackbar('Failed to copy message. Please try again.', 'error');
@@ -2226,6 +2261,17 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
           {snackbarMessage}
         </Alert>
       </Snackbar>
+
+      {/* Template Version Picker Dialog */}
+      <TemplateVersionPickerDialog
+        open={versionPickerOpen}
+        onClose={() => setVersionPickerOpen(false)}
+        onSelect={handleVersionPickerSelect}
+        matchingVersions={versionPickerData?.matchingVersions || []}
+        companyName={versionPickerData?.companyName || ''}
+        companyLabels={versionPickerData?.companyLabels || []}
+        defaultVersion={templateVersions.find(v => v.isDefault)}
+      />
     </Box>
   );
 };

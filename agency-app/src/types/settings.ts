@@ -2,12 +2,30 @@
 // Application-wide settings and configuration
 
 /**
+ * A single offer template version.
+ * V1 is always the default fallback.
+ */
+export interface OfferTemplateVersion {
+  id: string;              // "v1", "v2", etc.
+  name: string;            // Display name ("Default", "Agency Outreach")
+  offerTemplate: string;   // HTML body
+  offerHeadline: string;   // HTML headline
+  labels: string[];        // Company labels this version targets (empty for V1 = default)
+  isDefault: boolean;      // true only for V1
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+/**
  * Main settings interface for the application
  */
 export interface AppSettings {
   // Offer Template Configuration
   offerTemplate: string;
   offerHeadline?: string;
+
+  // Offer Template Versioning
+  offerTemplateVersions?: OfferTemplateVersion[];
 
   // AI Prompts Configuration (Future)
   aiPrompts?: {
@@ -53,6 +71,7 @@ export interface AppSettings {
 export interface UpdateSettingsRequest {
   offerTemplate?: string;
   offerHeadline?: string;
+  offerTemplateVersions?: OfferTemplateVersion[];
   aiPrompts?: AppSettings['aiPrompts'];
   aiTrendsPrompt?: string;
   aiTrendsDefaultEmailCount?: number;
