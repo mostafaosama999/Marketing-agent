@@ -25,6 +25,7 @@ async function scrapeWritingProgramPage(url: string): Promise<{
   content: string;
   headings: string[];
   lists: string[];
+  links: string[];
   pageTitle: string;
 }> {
   try {
@@ -36,6 +37,36 @@ async function scrapeWritingProgramPage(url: string): Promise<{
     });
 
     const $ = cheerio.load(response.data);
+
+    // Extract links before removing elements (nav/footer may have program links)
+    const links: string[] = [];
+    const seenLinks = new Set<string>();
+    $("a[href]").each((_, element) => {
+      const href = $(element).attr("href");
+      const text = $(element).text().trim().toLowerCase();
+      if (href && (
+        text.includes("write") || text.includes("contribut") ||
+        text.includes("program") || text.includes("apply") ||
+        text.includes("submit") || text.includes("author") ||
+        text.includes("community") || text.includes("creator") ||
+        href.includes("write") || href.includes("contribut") ||
+        href.includes("program") || href.includes("apply") ||
+        href.includes("author") || href.includes("creator")
+      )) {
+        // Resolve relative URLs
+        let fullUrl = href;
+        try {
+          fullUrl = new URL(href, url).toString();
+        } catch {
+          // skip invalid URLs
+          return;
+        }
+        if (!seenLinks.has(fullUrl)) {
+          seenLinks.add(fullUrl);
+          links.push(`${$(element).text().trim()} -> ${fullUrl}`);
+        }
+      }
+    });
 
     // Remove unwanted elements
     $("script, style, nav, header, footer").remove();
@@ -81,6 +112,7 @@ async function scrapeWritingProgramPage(url: string): Promise<{
       content,
       headings: headings.slice(0, 30),
       lists: lists.slice(0, 10),
+      links: links.slice(0, 20),
       pageTitle,
     };
   } catch (error) {
@@ -98,6 +130,7 @@ async function analyzeWithAI(
     content: string;
     headings: string[];
     lists: string[];
+    links: string[];
     pageTitle: string;
   }
 ): Promise<{
@@ -116,6 +149,9 @@ ${pageData.headings.join("\n")}
 
 Lists/Requirements found:
 ${pageData.lists.join("\n\n")}
+
+Relevant links found on the page:
+${pageData.links.length > 0 ? pageData.links.join("\n") : "(none)"}
 
 Page content:
 ${pageData.content}
@@ -161,9 +197,11 @@ Based on this information, extract the following details about the writing progr
    - Extract the original date string exactly as found on the page
    - Note where you found it (e.g., "article header", "meta tag", "hero section")
 10. **Overall Details**: A comprehensive summary of the entire program
+11. **Actual Program URL**: CRITICAL - Check if the current page is the actual writing program/contributor page, or if it's a blog/community/landing page that LINKS to a separate program page. Look at the "Relevant links" section above. If you find a more specific program application/submission URL (e.g., a "write for us", "contributor program", "apply" page), return that URL. If this page IS the actual program page, return null.
 
 Return your response as a JSON object with this structure:
 {
+  "actualProgramUrl": "https://example.com/write-for-us" | null,
   "isOpen": true | false | null,
   "openDates": {
     "openFrom": "date or period",
@@ -323,8 +361,10 @@ export const analyzeWritingProgramDetailsCloud = functions
       }
 
       // 4. Build result with new nested payment structure
+      // Use the actual program URL extracted by AI if available
+      const resolvedProgramUrl = analysis.actualProgramUrl || programUrl;
       const result: WritingProgramAnalysisResult = {
-        programUrl,
+        programUrl: resolvedProgramUrl,
         hasProgram: true, // If we got here, program exists
         isOpen: analysis.isOpen !== undefined ? analysis.isOpen : null,
         openDates: analysis.openDates || null,
