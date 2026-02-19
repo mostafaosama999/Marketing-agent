@@ -464,6 +464,27 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
                             height: '20px',
                           }}
                         />
+                      ) : company.writingProgramAnalysis?.hasProgram === false && company.writingProgramAnalysis?.lastSearchedAt ? (
+                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.3 }}>
+                          <Chip
+                            icon={<CancelIcon sx={{ fontSize: '14px' }} />}
+                            label="Not Found"
+                            size="small"
+                            sx={{
+                              bgcolor: '#fef3c7',
+                              color: '#d97706',
+                              fontSize: '10px',
+                              height: '20px',
+                            }}
+                          />
+                          <Typography variant="caption" sx={{ fontSize: '9px', color: '#94a3b8', ml: 0.5 }}>
+                            {(() => {
+                              const d = company.writingProgramAnalysis.lastSearchedAt;
+                              const date = d instanceof Date ? d : (d as any)?.toDate ? (d as any).toDate() : new Date(d);
+                              return `Searched ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                            })()}
+                          </Typography>
+                        </Box>
                       ) : company.writingProgramAnalysis?.hasProgram === false ? (
                         <Chip
                           icon={<CancelIcon sx={{ fontSize: '14px' }} />}

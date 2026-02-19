@@ -66,6 +66,11 @@ function convertToCompany(id: string, data: any): Company {
       lastAnalyzedAt: data.writingProgramAnalysis.lastAnalyzedAt?.toDate
         ? data.writingProgramAnalysis.lastAnalyzedAt.toDate()
         : new Date(data.writingProgramAnalysis.lastAnalyzedAt),
+      lastSearchedAt: data.writingProgramAnalysis.lastSearchedAt?.toDate
+        ? data.writingProgramAnalysis.lastSearchedAt.toDate()
+        : data.writingProgramAnalysis.lastSearchedAt
+          ? new Date(data.writingProgramAnalysis.lastSearchedAt)
+          : undefined,
     } : undefined,
     blogAnalysis: data.blogAnalysis ? {
       ...data.blogAnalysis,

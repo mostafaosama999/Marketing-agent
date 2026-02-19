@@ -267,6 +267,30 @@ export const BulkWritingProgramDialog: React.FC<BulkWritingProgramDialogProps> =
     const companiesToAnalyze = Array.from(progress.values()).filter(p => p.selectedUrl);
 
     if (companiesToAnalyze.length === 0) {
+      // Still save "searched but not found" markers for skipped companies
+      const skippedCompanies = Array.from(progress.values()).filter(
+        p => p.foundUrls.length === 0 && !p.selectedUrl
+      );
+      for (const skipped of skippedCompanies) {
+        try {
+          const company = companies.find(c => c.id === skipped.companyId);
+          if (company && !company.writingProgramAnalysis?.hasProgram) {
+            await updateCompany(skipped.companyId, {
+              writingProgramAnalysis: {
+                hasProgram: false,
+                programUrl: null,
+                isOpen: null,
+                openDates: null,
+                payment: { amount: null, method: null, details: null, sourceSnippet: null, historical: null },
+                lastAnalyzedAt: new Date(),
+                lastSearchedAt: new Date(),
+              },
+            });
+          }
+        } catch (error) {
+          console.error(`Error saving search marker for company ${skipped.companyId}:`, error);
+        }
+      }
       setPhase('complete');
       return;
     }
@@ -387,6 +411,32 @@ export const BulkWritingProgramDialog: React.FC<BulkWritingProgramDialogProps> =
 
     setTotalCost(totalCost);
     setAnalyzingProgress(100);
+
+    // Save "searched but not found" marker for skipped companies (no URLs found)
+    const skippedCompanies = Array.from(progress.values()).filter(
+      p => p.foundUrls.length === 0 && !p.selectedUrl
+    );
+    for (const skipped of skippedCompanies) {
+      try {
+        // Only save if company doesn't already have a successful analysis
+        const company = companies.find(c => c.id === skipped.companyId);
+        if (company && !company.writingProgramAnalysis?.hasProgram) {
+          await updateCompany(skipped.companyId, {
+            writingProgramAnalysis: {
+              hasProgram: false,
+              programUrl: null,
+              isOpen: null,
+              openDates: null,
+              payment: { amount: null, method: null, details: null, sourceSnippet: null, historical: null },
+              lastAnalyzedAt: new Date(),
+              lastSearchedAt: new Date(),
+            },
+          });
+        }
+      } catch (error) {
+        console.error(`Error saving search marker for company ${skipped.companyId}:`, error);
+      }
+    }
 
     // Move to complete phase
     setTimeout(() => {

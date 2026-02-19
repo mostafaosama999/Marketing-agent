@@ -169,6 +169,7 @@ export interface Company {
     publishedDateSource?: string | null;   // Where the date was found (e.g., "article header", "meta tag")
     programDetails?: string;
     lastAnalyzedAt: Date;
+    lastSearchedAt?: Date;  // When we last searched for a program (even if not found)
     aiReasoning?: string;
     costInfo?: {
       totalCost: number;
