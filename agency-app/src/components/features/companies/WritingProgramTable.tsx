@@ -31,7 +31,7 @@ interface WritingProgramTableProps {
   onCompanyClick: (company: Company) => void;
   selectedCompanyIds?: string[];
   onSelectCompany?: (companyId: string) => void;
-  onSelectAll?: (selected: boolean) => void;
+  onSelectAll?: (selected: boolean, pageCompanyIds: string[]) => void;
   onAnalyzeSingle?: (company: Company) => void;
   visibleColumns: TableColumnConfig[];
 }
@@ -197,7 +197,7 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
   // Handle select all for current page
   const handleSelectAllClick = () => {
     if (onSelectAll) {
-      onSelectAll(!allSelected);
+      onSelectAll(!allSelected, paginatedCompanies.map(c => c.id));
     }
   };
 

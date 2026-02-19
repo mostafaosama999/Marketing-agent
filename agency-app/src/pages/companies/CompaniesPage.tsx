@@ -922,11 +922,14 @@ export const CompaniesPage: React.FC = () => {
     });
   };
 
-  const handleSelectAllWritingPrograms = (selected: boolean) => {
+  const handleSelectAllWritingPrograms = (selected: boolean, pageCompanyIds: string[]) => {
     if (selected) {
-      setSelectedWritingProgramIds(filteredCompanies.map(c => c.id));
+      setSelectedWritingProgramIds(prev => {
+        const combined = new Set([...prev, ...pageCompanyIds]);
+        return Array.from(combined);
+      });
     } else {
-      setSelectedWritingProgramIds([]);
+      setSelectedWritingProgramIds(prev => prev.filter(id => !pageCompanyIds.includes(id)));
     }
   };
 
