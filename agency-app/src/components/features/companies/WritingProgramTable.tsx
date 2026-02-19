@@ -656,6 +656,12 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
           bgcolor: '#fafafa',
           borderRadius: '0 0 8px 8px',
           boxShadow: '0 4px 12px rgba(0,0,0,0.15)',
+          '.MuiTablePagination-toolbar': {
+            pr: 20, // Prevent FAB from overlapping next-page button
+          },
+          '.MuiTablePagination-actions': {
+            mr: 4,
+          },
         }}
       />
     </Box>
