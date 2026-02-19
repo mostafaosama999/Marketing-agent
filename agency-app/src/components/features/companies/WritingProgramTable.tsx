@@ -97,28 +97,6 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
     );
   };
 
-  // Filter companies that have writing program analysis or relevant custom fields
-  const companiesWithProgramData = useMemo(() => {
-    return companies.filter(company => {
-      // Has writing program analysis
-      if (company.writingProgramAnalysis) {
-        return true;
-      }
-
-      // Has custom fields with relevant keywords
-      if (company.customFields) {
-        const hasRelevantFields = Object.keys(company.customFields).some(fieldName =>
-          /community|writing|program/i.test(fieldName)
-        );
-        if (hasRelevantFields) {
-          return true;
-        }
-      }
-
-      return false;
-    });
-  }, [companies]);
-
   // Get visible custom field columns
   const visibleCustomFields = useMemo(() => {
     return displayColumns
@@ -135,7 +113,7 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
 
   // Sort companies
   const sortedCompanies = useMemo(() => {
-    return [...companiesWithProgramData].sort((a, b) => {
+    return [...companies].sort((a, b) => {
       let aValue: any;
       let bValue: any;
 
@@ -181,8 +159,8 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
 
       // Date comparison
       if (orderBy === 'createdAt') {
-        const aDate = aValue instanceof Date ? aValue.getTime() : (aValue?.seconds ? aValue.seconds * 1000 : new Date(aValue).getTime());
-        const bDate = bValue instanceof Date ? bValue.getTime() : (bValue?.seconds ? bValue.seconds * 1000 : new Date(bValue).getTime());
+        const aDate = aValue instanceof Date ? aValue.getTime() : (aValue?.seconds ? aValue.seconds * 1000 : new Date(String(aValue)).getTime());
+        const bDate = bValue instanceof Date ? bValue.getTime() : (bValue?.seconds ? bValue.seconds * 1000 : new Date(String(bValue)).getTime());
         if (!isNaN(aDate) && !isNaN(bDate) && aDate !== bDate) {
           return order === 'asc' ? aDate - bDate : bDate - aDate;
         }
@@ -203,7 +181,7 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
 
       return 0;
     });
-  }, [companiesWithProgramData, orderBy, order]);
+  }, [companies, orderBy, order]);
 
   // Paginate companies
   const paginatedCompanies = useMemo(() => {
@@ -385,7 +363,7 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
                   sx={{ py: 4 }}
                 >
                   <Typography color="text.secondary">
-                    No companies with writing program data found
+                    No companies found
                   </Typography>
                 </TableCell>
               </TableRow>
