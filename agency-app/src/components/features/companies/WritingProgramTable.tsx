@@ -47,8 +47,8 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
   onAnalyzeSingle,
   visibleColumns,
 }) => {
-  const [orderBy, setOrderBy] = useState<string>('name');
-  const [order, setOrder] = useState<SortDirection>('asc');
+  const [orderBy, setOrderBy] = useState<string>('createdAt');
+  const [order, setOrder] = useState<SortDirection>('desc');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
 
@@ -140,6 +140,10 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
       let bValue: any;
 
       switch (orderBy) {
+        case 'createdAt':
+          aValue = a.createdAt;
+          bValue = b.createdAt;
+          break;
         case 'name':
           aValue = a.name;
           bValue = b.name;
@@ -174,6 +178,13 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
       if (aValue == null && bValue == null) return 0;
       if (aValue == null) return 1;
       if (bValue == null) return -1;
+
+      // Date comparison
+      if (orderBy === 'createdAt') {
+        const aDate = aValue instanceof Date ? aValue.getTime() : new Date(aValue).getTime();
+        const bDate = bValue instanceof Date ? bValue.getTime() : new Date(bValue).getTime();
+        return order === 'asc' ? aDate - bDate : bDate - aDate;
+      }
 
       // String comparison
       if (typeof aValue === 'string' && typeof bValue === 'string') {
@@ -246,6 +257,17 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
                       },
                     }}
                   />
+                </TableCell>
+              )}
+              {isColumnVisible('createdAt') && (
+                <TableCell sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
+                  <TableSortLabel
+                    active={orderBy === 'createdAt'}
+                    direction={orderBy === 'createdAt' ? order : 'asc'}
+                    onClick={() => handleRequestSort('createdAt')}
+                  >
+                    Created
+                  </TableSortLabel>
                 </TableCell>
               )}
               {isColumnVisible('company') && (
@@ -385,6 +407,30 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
                           '&.Mui-checked': {
                             color: '#667eea',
                           },
+                        }}
+                      />
+                    </TableCell>
+                  )}
+
+                  {/* Created Date */}
+                  {isColumnVisible('createdAt') && (
+                    <TableCell>
+                      <Chip
+                        label={
+                          company.createdAt
+                            ? (company.createdAt instanceof Date
+                                ? company.createdAt
+                                : new Date(company.createdAt)
+                              ).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
+                            : '-'
+                        }
+                        size="small"
+                        sx={{
+                          fontSize: '10px',
+                          height: '22px',
+                          bgcolor: '#e8eaf6',
+                          color: '#3949ab',
+                          fontWeight: 500,
                         }}
                       />
                     </TableCell>
