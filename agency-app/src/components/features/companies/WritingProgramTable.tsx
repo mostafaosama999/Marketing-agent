@@ -181,9 +181,13 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
 
       // Date comparison
       if (orderBy === 'createdAt') {
-        const aDate = aValue instanceof Date ? aValue.getTime() : new Date(aValue).getTime();
-        const bDate = bValue instanceof Date ? bValue.getTime() : new Date(bValue).getTime();
-        return order === 'asc' ? aDate - bDate : bDate - aDate;
+        const aDate = aValue instanceof Date ? aValue.getTime() : (aValue?.seconds ? aValue.seconds * 1000 : new Date(aValue).getTime());
+        const bDate = bValue instanceof Date ? bValue.getTime() : (bValue?.seconds ? bValue.seconds * 1000 : new Date(bValue).getTime());
+        if (!isNaN(aDate) && !isNaN(bDate) && aDate !== bDate) {
+          return order === 'asc' ? aDate - bDate : bDate - aDate;
+        }
+        // Tie-break by name
+        return a.name.toLowerCase().localeCompare(b.name.toLowerCase());
       }
 
       // String comparison
@@ -420,7 +424,9 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
                           company.createdAt
                             ? (company.createdAt instanceof Date
                                 ? company.createdAt
-                                : new Date(company.createdAt)
+                                : (company.createdAt as any)?.toDate
+                                  ? (company.createdAt as any).toDate()
+                                  : new Date(company.createdAt)
                               ).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                             : '-'
                         }
