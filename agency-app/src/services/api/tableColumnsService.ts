@@ -265,30 +265,20 @@ export async function buildCompaniesTableColumns(companies: Company[]): Promise<
 }
 
 /**
- * Build writing program table columns (default + custom fields from companies)
- * Only includes custom fields that contain "community", "writing", or "program" in their name
- * These are likely related to writing programs and should be shown in the writing program view
+ * Build writing program table columns (default + all custom fields from companies)
+ * Includes all custom fields so users can toggle visibility of any field
  */
 export async function buildWritingProgramTableColumns(companies: Company[]): Promise<TableColumnConfig[]> {
   try {
     // Start with default writing program columns
     const columns: TableColumnConfig[] = [...DEFAULT_WRITING_PROGRAM_TABLE_COLUMNS];
 
-    // Extract custom field names that are related to writing programs
+    // Extract all unique custom field names from companies
     const customFieldNames = new Set<string>();
     companies.forEach(company => {
       if (company.customFields) {
         Object.keys(company.customFields).forEach(fieldName => {
-          // Only include fields that likely relate to writing programs
-          const lowerFieldName = fieldName.toLowerCase();
-          if (
-            lowerFieldName.includes('community') ||
-            lowerFieldName.includes('writing') ||
-            lowerFieldName.includes('program') ||
-            lowerFieldName.includes('contributor')
-          ) {
-            customFieldNames.add(fieldName);
-          }
+          customFieldNames.add(fieldName);
         });
       }
     });
@@ -297,7 +287,12 @@ export async function buildWritingProgramTableColumns(companies: Company[]): Pro
     const fieldDefinitions = await getFieldDefinitions('company');
     const fieldDefMap = new Map(fieldDefinitions.map(def => [def.name, def]));
 
-    // Create column configs for each writing-program-related custom field
+    // Also include field names from field definitions (even if no companies have data yet)
+    fieldDefinitions.forEach(def => {
+      customFieldNames.add(def.name);
+    });
+
+    // Create column configs for each custom field
     const customFieldColumns: TableColumnConfig[] = Array.from(customFieldNames)
       .sort()
       .map((fieldName, index) => {
@@ -328,7 +323,8 @@ export async function buildWritingProgramTableColumns(companies: Company[]): Pro
           id: `custom_${fieldName}`,
           label: label,
           sortable: true,
-          visible: true, // Show all writing program custom fields by default
+          // Show community/writing/program fields by default, hide others
+          visible: /community|writing|program|contributor/i.test(fieldName),
           type: 'custom' as const,
           order: totalIndex,
           section: section,
