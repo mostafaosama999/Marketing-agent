@@ -2,6 +2,7 @@
 import { getFunctions, httpsCallable } from 'firebase/functions';
 import { Company } from '../../types/crm';
 import { getCompanyWebsite } from './websiteFieldMappingService';
+import { resolveOrDiscoverWebsite } from './websiteDiscoveryService';
 
 export interface FindProgramResult {
   companyId: string;
@@ -92,50 +93,8 @@ export async function bulkFindWritingPrograms(
 
   const results = new Map<string, FindProgramResult>();
 
-  // Prepare companies with websites (either from website field or extracted from programUrl)
-  const companiesWithWebsites: Array<Company & { effectiveWebsite: string }> = [];
-
-  companies.forEach(company => {
-    console.log(`[bulkWritingProgramService] Processing ${company.name}...`);
-    let effectiveWebsite = getCompanyWebsite(company);
-    console.log(`[bulkWritingProgramService]   - website (using field mapping):`, effectiveWebsite);
-
-    // If no website, try to extract domain from existing writing program URL
-    if (!effectiveWebsite && (company as any).writingProgramAnalysis?.programUrl) {
-      const programUrl = (company as any).writingProgramAnalysis.programUrl;
-      console.log(`[bulkWritingProgramService]   - trying to extract domain from programUrl:`, programUrl);
-      const extractedDomain = extractDomainFromUrl(programUrl);
-      console.log(`[bulkWritingProgramService]   - extracted domain:`, extractedDomain);
-      if (extractedDomain) {
-        effectiveWebsite = extractedDomain;
-      }
-    }
-
-    if (effectiveWebsite) {
-      console.log(`[bulkWritingProgramService]   ✓ ${company.name} has effective website:`, effectiveWebsite);
-      companiesWithWebsites.push({ ...company, effectiveWebsite });
-    } else {
-      console.log(`[bulkWritingProgramService]   ✗ ${company.name} has NO website - marking as error`);
-      // Mark companies without any website source as errors
-      results.set(company.id, {
-        companyId: company.id,
-        companyName: company.name,
-        website: '',
-        success: false,
-        urls: [],
-        error: 'No website found. Please add a website to this company.',
-      });
-      if (onProgress) {
-        onProgress(company.id, 'finding', 'error', 'No website found. Please add a website to this company.');
-      }
-    }
-  });
-
-  console.log('[bulkWritingProgramService] Companies with websites:', companiesWithWebsites.length);
-  console.log('[bulkWritingProgramService] Companies without websites:', companies.length - companiesWithWebsites.length);
-
-  // Process companies in batches
-  const batches = chunkArray(companiesWithWebsites, BATCH_SIZE);
+  // Process companies in batches - website resolution happens per-company (supports async discovery)
+  const batches = chunkArray(companies, BATCH_SIZE);
   console.log('[bulkWritingProgramService] Total batches to process:', batches.length);
 
   for (const batch of batches) {
@@ -152,37 +111,67 @@ export async function bulkFindWritingPrograms(
 
     // Process batch in parallel with retry logic
     const batchPromises = batch.map(async (company) => {
+      // Step 1: Resolve website (sync first, then async discovery)
+      let effectiveWebsite = getCompanyWebsite(company);
+
+      // If no website, try to extract domain from existing writing program URL
+      if (!effectiveWebsite && (company as any).writingProgramAnalysis?.programUrl) {
+        const programUrl = (company as any).writingProgramAnalysis.programUrl;
+        const extractedDomain = extractDomainFromUrl(programUrl);
+        if (extractedDomain) {
+          effectiveWebsite = extractedDomain;
+        }
+      }
+
+      // If still no website, try auto-discovery via SerpAPI
+      if (!effectiveWebsite) {
+        if (onProgress) {
+          onProgress(company.id, 'finding', 'pending', 'Discovering website...');
+        }
+        try {
+          effectiveWebsite = await resolveOrDiscoverWebsite(company) ?? undefined;
+        } catch {
+          // Discovery failed, will be handled below
+        }
+      }
+
+      if (!effectiveWebsite) {
+        results.set(company.id, {
+          companyId: company.id,
+          companyName: company.name,
+          website: '',
+          success: false,
+          urls: [],
+          error: 'No website found (discovery failed)',
+        });
+        if (onProgress) {
+          onProgress(company.id, 'finding', 'error', 'No website found (discovery failed)');
+        }
+        return;
+      }
+
+      // Step 2: Find writing program
       let lastError: any = null;
 
       for (let attempt = 0; attempt <= RETRY_ATTEMPTS; attempt++) {
         try {
-          console.log(`[bulkWritingProgramService] ========== CALLING CLOUD FUNCTION for ${company.name} (attempt ${attempt + 1}) ==========`);
-          console.log(`[bulkWritingProgramService] Calling findProgramCloud with website:`, company.effectiveWebsite);
-
           const response = await findProgramCloud({
-            website: company.effectiveWebsite,
+            website: effectiveWebsite,
             useAiFallback: true,
           });
 
-          console.log(`[bulkWritingProgramService] ========== CLOUD FUNCTION RESPONSE for ${company.name} ==========`);
-          console.log(`[bulkWritingProgramService] Response:`, response);
-
           const data: any = response.data;
-          console.log(`[bulkWritingProgramService] Response data:`, data);
-          console.log(`[bulkWritingProgramService]   - validUrls count:`, data.validUrls?.length || 0);
-          console.log(`[bulkWritingProgramService]   - aiSuggestions count:`, data.aiSuggestions?.length || 0);
 
           const result: FindProgramResult = {
             companyId: company.id,
             companyName: company.name,
-            website: company.effectiveWebsite || '',
+            website: effectiveWebsite || '',
             success: true,
             urls: data.validUrls || [],
             aiSuggestions: data.aiSuggestions || [],
           };
 
           results.set(company.id, result);
-          console.log(`[bulkWritingProgramService] ✓ Successfully stored result for ${company.name}`);
 
           if (onProgress) {
             const urlCount = (data.validUrls?.length || 0) + (data.aiSuggestions?.length || 0);
@@ -197,10 +186,7 @@ export async function bulkFindWritingPrograms(
           return; // Success, break retry loop
         } catch (error) {
           lastError = error;
-          console.error(`[bulkWritingProgramService] ✗✗✗ ATTEMPT ${attempt + 1} FAILED for ${company.name} ✗✗✗`);
-          console.error(`[bulkWritingProgramService] Error:`, error);
-          console.error(`[bulkWritingProgramService] Error message:`, (error as any)?.message);
-          console.error(`[bulkWritingProgramService] Error code:`, (error as any)?.code);
+          console.error(`[bulkWritingProgramService] Attempt ${attempt + 1} failed for ${company.name}:`, (error as any)?.message);
 
           if (attempt < RETRY_ATTEMPTS) {
             await delay(RETRY_DELAY * (attempt + 1)); // Exponential backoff
@@ -213,7 +199,7 @@ export async function bulkFindWritingPrograms(
       results.set(company.id, {
         companyId: company.id,
         companyName: company.name,
-        website: company.effectiveWebsite || '',
+        website: effectiveWebsite || '',
         success: false,
         urls: [],
         error: errorMessage,
@@ -252,7 +238,8 @@ export async function bulkFindWritingPrograms(
  */
 export async function bulkAnalyzeWritingPrograms(
   selections: Map<string, { companyId: string; companyName: string; programUrl: string }>,
-  onProgress?: ProgressCallback
+  onProgress?: ProgressCallback,
+  onCompanyResult?: (companyId: string, result: AnalyzeProgramResult) => Promise<void>
 ): Promise<Map<string, AnalyzeProgramResult>> {
   const functions = getFunctions();
   const analyzeProgram = httpsCallable(functions, 'analyzeWritingProgramDetailsCloud');
@@ -293,6 +280,15 @@ export async function bulkAnalyzeWritingPrograms(
           };
 
           results.set(selection.companyId, result);
+
+          // Save to Firestore immediately via callback
+          if (onCompanyResult) {
+            try {
+              await onCompanyResult(selection.companyId, result);
+            } catch (err) {
+              console.error(`Failed to persist result for ${selection.companyName}:`, err);
+            }
+          }
 
           if (onProgress) {
             const paymentInfo = data.payment?.amount || 'Unknown payment';

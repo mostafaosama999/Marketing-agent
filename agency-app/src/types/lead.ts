@@ -90,7 +90,8 @@ export interface Lead {
   cascadedFrom?: string; // Company ID if archived as part of company cascade
 
   // Manual nurture tracking
-  lastContactedDate?: Date; // Manually set date when lead was last contacted (for nurture reminders)
+  lastContactedDate?: Date; // Manually set date when lead was first contacted (for nurture tracking)
+  secondContactDate?: Date; // Date of follow-up contact (for nurture gap tracking)
 
   // Final email for nurture leads
   finalEmail?: string; // Final email text sent to nurture lead

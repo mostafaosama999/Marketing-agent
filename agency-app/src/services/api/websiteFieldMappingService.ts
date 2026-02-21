@@ -41,20 +41,24 @@ export function saveWebsiteFieldMapping(mapping: WebsiteFieldMapping): void {
 export function getCompanyWebsite(company: Company): string | undefined {
   const mapping = getWebsiteFieldMapping();
 
+  let resolved: string | undefined;
+
   if (!mapping) {
-    // No mapping set, try top-level website field
-    return company.website;
+    resolved = company.website;
+  } else if (mapping.useTopLevel) {
+    resolved = company.website;
+  } else if (mapping.customFieldName) {
+    resolved = company.customFields?.[mapping.customFieldName];
+  } else {
+    resolved = company.website;
   }
 
-  if (mapping.useTopLevel) {
-    return company.website;
+  // Fallback to Apollo enrichment website if nothing else resolved
+  if (!resolved && company.apolloEnrichment?.website) {
+    resolved = company.apolloEnrichment.website;
   }
 
-  if (mapping.customFieldName) {
-    return company.customFields?.[mapping.customFieldName];
-  }
-
-  return company.website; // fallback
+  return resolved;
 }
 
 /**

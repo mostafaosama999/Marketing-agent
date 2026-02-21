@@ -73,7 +73,8 @@ export type ServiceType =
   | "v2-stage2-content-gaps"
   | "v2-stage3-generate-ideas"
   | "v2-stage4-validate-ideas"
-  | "blog-audit";
+  | "blog-audit"
+  | "website-discovery";
 
 export interface ApiCostRecord {
   userId: string;

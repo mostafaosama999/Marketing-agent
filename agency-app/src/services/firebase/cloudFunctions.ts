@@ -1377,6 +1377,26 @@ export async function generateBlogAudit(
 }
 
 /**
+ * Discover a company's website via OpenAI lookup
+ */
+export async function discoverCompanyWebsite(
+  companyName: string
+): Promise<{ website: string | null; source: string }> {
+  try {
+    const discover = httpsCallable<
+      { companyName: string },
+      { website: string | null; source: string }
+    >(functions, 'discoverCompanyWebsiteCloud', { timeout: 30000 });
+
+    const result = await discover({ companyName });
+    return result.data;
+  } catch (error: any) {
+    console.error('Error discovering company website:', error);
+    throw new Error(error.message || 'Failed to discover company website');
+  }
+}
+
+/**
  * Send Slack notification after all offer versions complete
  */
 export async function sendOfferSlackNotification(

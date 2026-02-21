@@ -155,3 +155,6 @@ export {sendOfferSlackNotificationCloud} from "./notifications/sendOfferSlackNot
 
 // Export Blog Audit agentic pipeline
 export {generateBlogAuditCloud} from "./blogAudit/blogAuditFunction";
+
+// Export website discovery function
+export {discoverCompanyWebsiteCloud} from "./search/discoverCompanyWebsite";

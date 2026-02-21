@@ -294,16 +294,22 @@ async function findWritingProgramLinksOnPage(
  */
 function isNotFoundPage(finalUrl: string, htmlContent: string): boolean {
   const lowerUrl = finalUrl.toLowerCase();
-  const lowerContent = htmlContent.toLowerCase().substring(0, 5000);
+  const lowerContent = htmlContent.toLowerCase().substring(0, 10000);
 
   // Check URL patterns
   if (
     lowerUrl.includes("not-found") ||
     lowerUrl.includes("404") ||
-    lowerUrl.includes("error") ||
     lowerUrl.endsWith("/not-found.htm") ||
     lowerUrl.endsWith("/not-found.html")
   ) {
+    return true;
+  }
+
+  // Check <title> tag for 404 indicators
+  const titleMatch = htmlContent.match(/<title[^>]*>(.*?)<\/title>/i);
+  const title = titleMatch ? titleMatch[1].toLowerCase() : "";
+  if (title.includes("404") || title.includes("not found") || title.includes("page not found")) {
     return true;
   }
 
@@ -311,12 +317,17 @@ function isNotFoundPage(finalUrl: string, htmlContent: string): boolean {
   const errorPatterns = [
     "page not found",
     "404 error",
+    "error 404",
     "page could not be found",
     "page couldn't be found",
     "this page doesn't exist",
     "page does not exist",
     "the page you are looking for",
     "the page you were looking for",
+    "you're looking for doesn't exist",
+    "you're looking for does not exist",
+    "page you requested",
+    "no longer exists",
     "sorry, we couldn't find",
     "oops! that page can't be found",
   ];
@@ -381,8 +392,9 @@ function hasWritingProgramContent(htmlContent: string): boolean {
     return true;
   }
 
-  // Consider valid if at least 1 strong keyword found
-  return foundKeywords.length >= 1;
+  // Require at least 2 keywords to avoid false positives from thin pages
+  // (e.g., SPA navigation containing "contributor" in a link)
+  return foundKeywords.length >= 2;
 }
 
 /**
@@ -413,6 +425,18 @@ async function checkUrl(
         exists: false,
         error: "Redirects to Not Found page",
       };
+    }
+
+    // Check for thin/empty content (SPA shells that render 404s client-side)
+    if (htmlContent) {
+      const strippedText = htmlContent.replace(/<[^>]*>/g, " ").replace(/\s+/g, " ").trim();
+      if (strippedText.length < 200) {
+        return {
+          url,
+          exists: false,
+          error: "Page has insufficient content (likely SPA shell or error page)",
+        };
+      }
     }
 
     // Always validate content for writing program pages

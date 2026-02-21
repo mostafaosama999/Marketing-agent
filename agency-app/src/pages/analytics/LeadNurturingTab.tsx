@@ -1,5 +1,5 @@
 // src/pages/analytics/LeadNurturingTab.tsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   Box,
   Typography,
@@ -16,6 +16,7 @@ import {
   Tooltip,
   Collapse,
   Button,
+  Chip,
 } from '@mui/material';
 import {
   Spa as NurtureIcon,
@@ -26,10 +27,62 @@ import {
   Close as CloseIcon,
   Email as EmailIcon,
   Save as SaveIcon,
+  Refresh as RefreshIcon,
+  RssFeed as BlogActivityIcon,
 } from '@mui/icons-material';
 import { subscribeToLeads, updateLeadField } from '../../services/api/leads';
+import { getCompany, updateCompany } from '../../services/api/companies';
+import { analyzeBlog } from '../../services/firebase/cloudFunctions';
+import { transformBlogResult } from '../../services/api/bulkBlogAnalysisService';
+import { getCompanyWebsite } from '../../services/api/websiteFieldMappingService';
+import { getCompanyBlogUrl } from '../../services/api/blogUrlFieldMappingService';
+import { BulkBlogAnalysisDialog } from '../../components/features/analytics/BulkBlogAnalysisDialog';
 import { Lead } from '../../types/lead';
+import { Company } from '../../types/crm';
 import { useAuth } from '../../contexts/AuthContext';
+
+type BlogActivityTier = 'high' | 'medium' | 'low' | 'very_low' | 'not_analyzed';
+
+function getBlogActivityTier(company: Company | undefined): BlogActivityTier {
+  if (!company?.blogAnalysis) return 'not_analyzed';
+
+  const { monthlyFrequency, lastActivePost } = company.blogAnalysis;
+
+  if (monthlyFrequency === 0) return 'very_low';
+
+  if (lastActivePost) {
+    const lastPostDate = new Date(lastActivePost);
+    const daysSince = Math.floor(
+      (Date.now() - lastPostDate.getTime()) / (1000 * 60 * 60 * 24)
+    );
+    if (daysSince > 90 && monthlyFrequency <= 1) return 'very_low';
+  }
+
+  if (monthlyFrequency >= 4) return 'high';
+  if (monthlyFrequency >= 2) return 'medium';
+  if (monthlyFrequency >= 1) return 'low';
+
+  return 'very_low';
+}
+
+const TIER_CONFIG: Record<BlogActivityTier, { label: string; bgcolor: string; color: string }> = {
+  high: { label: 'High', bgcolor: '#dcfce7', color: '#16a34a' },
+  medium: { label: 'Medium', bgcolor: '#fef3c7', color: '#d97706' },
+  low: { label: 'Low', bgcolor: '#fee2e2', color: '#dc2626' },
+  very_low: { label: 'Inactive', bgcolor: '#f1f5f9', color: '#94a3b8' },
+  not_analyzed: { label: 'N/A', bgcolor: '#f8fafc', color: '#cbd5e1' },
+};
+
+function getAnalyzedAgoLabel(lastAnalyzedAt: Date | undefined): string {
+  if (!lastAnalyzedAt) return '';
+  const d = lastAnalyzedAt instanceof Date ? lastAnalyzedAt : new Date(lastAnalyzedAt);
+  const days = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60 * 24));
+  if (days === 0) return 'today';
+  if (days === 1) return '1 day ago';
+  if (days < 30) return `${days}d ago`;
+  const months = Math.floor(days / 30);
+  return `${months}mo ago`;
+}
 
 const LeadNurturingTab: React.FC = () => {
   const { userProfile } = useAuth();
@@ -41,16 +94,19 @@ const LeadNurturingTab: React.FC = () => {
   const [savingEmailLeadId, setSavingEmailLeadId] = useState<string | null>(null);
   const [editingDateLeadId, setEditingDateLeadId] = useState<string | null>(null);
   const [editingDateValue, setEditingDateValue] = useState<string>('');
+  const [editingSecondDateLeadId, setEditingSecondDateLeadId] = useState<string | null>(null);
+  const [editingSecondDateValue, setEditingSecondDateValue] = useState<string>('');
+
+  // Blog activity state
+  const [companyMap, setCompanyMap] = useState<Map<string, Company>>(new Map());
+  const [bulkDialogOpen, setBulkDialogOpen] = useState(false);
+  const [singleCheckLoadingId, setSingleCheckLoadingId] = useState<string | null>(null);
+  const prevCompanyIdsRef = useRef<string>('');
 
   // Subscribe to leads
   useEffect(() => {
     const unsubscribe = subscribeToLeads((leadsData) => {
       setLeads(leadsData);
-      // Expand all nurture leads by default
-      const nurtureIds = leadsData
-        .filter(lead => lead.status === 'nurture')
-        .map(lead => lead.id);
-      setExpandedRows(new Set(nurtureIds));
       setLoading(false);
     });
 
@@ -66,6 +122,86 @@ const LeadNurturingTab: React.FC = () => {
       if (!b.lastContactedDate) return -1;
       return new Date(a.lastContactedDate).getTime() - new Date(b.lastContactedDate).getTime();
     });
+
+  // Fetch company data for nurture leads
+  const fetchCompanyData = useCallback(async (companyIds: string[]) => {
+    try {
+      const companies = await Promise.all(
+        companyIds.map(id => getCompany(id))
+      );
+      setCompanyMap(prev => {
+        const next = new Map(prev);
+        companies.forEach(company => {
+          if (company) next.set(company.id, company);
+        });
+        return next;
+      });
+    } catch (err) {
+      console.error('Failed to fetch company data:', err);
+    }
+  }, []);
+
+  useEffect(() => {
+    const uniqueCompanyIds = Array.from(new Set(
+      nurtureLeads
+        .map(lead => lead.companyId)
+        .filter((id): id is string => !!id)
+    ));
+
+    const idsKey = uniqueCompanyIds.sort().join(',');
+    if (idsKey === prevCompanyIdsRef.current || uniqueCompanyIds.length === 0) return;
+    prevCompanyIdsRef.current = idsKey;
+
+    fetchCompanyData(uniqueCompanyIds);
+  }, [nurtureLeads, fetchCompanyData]);
+
+  // Single lead blog check handler
+  const handleSingleBlogCheck = async (lead: Lead) => {
+    if (!lead.companyId) return;
+    const company = companyMap.get(lead.companyId);
+    if (!company) return;
+
+    const url = getCompanyBlogUrl(company) || getCompanyWebsite(company) || company.website;
+    if (!url) return;
+
+    setSingleCheckLoadingId(lead.id);
+    try {
+      const result = await analyzeBlog(company.name, url);
+      const analysisData = transformBlogResult(result, url);
+      await updateCompany(company.id, { blogAnalysis: analysisData });
+      setCompanyMap(prev => {
+        const next = new Map(prev);
+        next.set(company.id, { ...company, blogAnalysis: analysisData });
+        return next;
+      });
+    } catch (err) {
+      console.error('Blog check failed:', err);
+    } finally {
+      setSingleCheckLoadingId(null);
+    }
+  };
+
+  // Get deduplicated companies for bulk operation
+  const getUniqueCompanies = (): Company[] => {
+    const seen = new Set<string>();
+    const result: Company[] = [];
+    nurtureLeads.forEach(lead => {
+      if (lead.companyId && !seen.has(lead.companyId)) {
+        seen.add(lead.companyId);
+        const company = companyMap.get(lead.companyId);
+        if (company) result.push(company);
+      }
+    });
+    return result;
+  };
+
+  // Refresh company data after bulk analysis
+  const handleBulkComplete = (updatedCompanyIds: string[]) => {
+    if (updatedCompanyIds.length > 0) {
+      fetchCompanyData(updatedCompanyIds);
+    }
+    setBulkDialogOpen(false);
+  };
 
   // Toggle row expansion
   const toggleRow = (leadId: string) => {
@@ -146,6 +282,36 @@ const LeadNurturingTab: React.FC = () => {
     setEditingDateValue('');
   };
 
+  // Handle save second contact date
+  const handleSaveSecondDate = async (leadId: string) => {
+    try {
+      const dateValue = editingSecondDateValue ? new Date(editingSecondDateValue) : null;
+      await updateLeadField(leadId, 'secondContactDate', dateValue);
+      setEditingSecondDateLeadId(null);
+      setEditingSecondDateValue('');
+    } catch (error) {
+      console.error('Failed to update second contact date:', error);
+    }
+  };
+
+  const handleStartEditingSecondDate = (lead: Lead) => {
+    setEditingSecondDateLeadId(lead.id);
+    setEditingSecondDateValue(formatDateForInput(lead.secondContactDate));
+  };
+
+  const handleCancelEditingSecondDate = () => {
+    setEditingSecondDateLeadId(null);
+    setEditingSecondDateValue('');
+  };
+
+  // Calculate day gap between first and second contact
+  const getDayGap = (first: Date | undefined, second: Date | undefined): number | null => {
+    if (!first || !second) return null;
+    const d1 = first instanceof Date ? first : new Date(first);
+    const d2 = second instanceof Date ? second : new Date(second);
+    return Math.floor((d2.getTime() - d1.getTime()) / (1000 * 60 * 60 * 24));
+  };
+
   if (loading) {
     return (
       <Box display="flex" justifyContent="center" my={8}>
@@ -182,10 +348,29 @@ const LeadNurturingTab: React.FC = () => {
 
       {/* Nurture Leads Table */}
       <Paper sx={{ p: 3 }}>
-        <Typography variant="h6" gutterBottom sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2 }}>
-          <NurtureIcon sx={{ color: '#00bcd4' }} />
-          All Nurture Leads
-        </Typography>
+        <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', mb: 2 }}>
+          <Typography variant="h6" sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <NurtureIcon sx={{ color: '#00bcd4' }} />
+            All Nurture Leads
+          </Typography>
+          <Button
+            variant="contained"
+            size="small"
+            startIcon={<BlogActivityIcon />}
+            onClick={() => setBulkDialogOpen(true)}
+            disabled={nurtureLeads.length === 0}
+            sx={{
+              textTransform: 'none',
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              fontWeight: 600,
+              '&:hover': {
+                background: 'linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%)',
+              },
+            }}
+          >
+            Check All Blog Activity
+          </Button>
+        </Box>
 
         {nurtureLeads.length === 0 ? (
           <Box sx={{ py: 6, textAlign: 'center' }}>
@@ -206,7 +391,9 @@ const LeadNurturingTab: React.FC = () => {
                   <TableCell sx={{ fontWeight: 600 }}>Lead Name</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>Company</TableCell>
                   <TableCell sx={{ fontWeight: 600 }}>Email</TableCell>
-                  <TableCell sx={{ fontWeight: 600 }}>Last Contacted</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Blog Activity</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>First Contact</TableCell>
+                  <TableCell sx={{ fontWeight: 600 }}>Follow-Up</TableCell>
                 </TableRow>
               </TableHead>
               <TableBody>
@@ -246,6 +433,55 @@ const LeadNurturingTab: React.FC = () => {
                         <Typography variant="body2" color="text.secondary">
                           {lead.email || '—'}
                         </Typography>
+                      </TableCell>
+                      <TableCell>
+                        {(() => {
+                          const company = lead.companyId ? companyMap.get(lead.companyId) : undefined;
+                          const tier = getBlogActivityTier(company);
+                          const cfg = TIER_CONFIG[tier];
+                          const analyzedAt = company?.blogAnalysis?.lastAnalyzedAt;
+                          const freq = company?.blogAnalysis?.monthlyFrequency;
+
+                          return (
+                            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                              <Tooltip title={
+                                tier !== 'not_analyzed' && analyzedAt
+                                  ? `${freq} posts/mo - Analyzed ${getAnalyzedAgoLabel(analyzedAt)}`
+                                  : 'Not analyzed yet'
+                              }>
+                                <Chip
+                                  label={cfg.label}
+                                  size="small"
+                                  sx={{
+                                    fontSize: '10px',
+                                    height: 22,
+                                    bgcolor: cfg.bgcolor,
+                                    color: cfg.color,
+                                    fontWeight: 600,
+                                  }}
+                                />
+                              </Tooltip>
+                              <Tooltip title="Check blog activity">
+                                <span>
+                                  <IconButton
+                                    size="small"
+                                    onClick={(e) => {
+                                      e.stopPropagation();
+                                      handleSingleBlogCheck(lead);
+                                    }}
+                                    disabled={singleCheckLoadingId === lead.id || !lead.companyId}
+                                    sx={{ p: 0.3 }}
+                                  >
+                                    {singleCheckLoadingId === lead.id
+                                      ? <CircularProgress size={14} sx={{ color: '#667eea' }} />
+                                      : <RefreshIcon sx={{ fontSize: 14, color: '#667eea' }} />
+                                    }
+                                  </IconButton>
+                                </span>
+                              </Tooltip>
+                            </Box>
+                          );
+                        })()}
                       </TableCell>
                       <TableCell>
                         {editingDateLeadId === lead.id ? (
@@ -306,11 +542,81 @@ const LeadNurturingTab: React.FC = () => {
                           </Box>
                         )}
                       </TableCell>
+                      <TableCell>
+                        {editingSecondDateLeadId === lead.id ? (
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                            <TextField
+                              type="date"
+                              size="small"
+                              value={editingSecondDateValue}
+                              onChange={(e) => setEditingSecondDateValue(e.target.value)}
+                              sx={{
+                                width: 140,
+                                '& .MuiInputBase-input': {
+                                  fontSize: '0.8rem',
+                                  py: 0.5,
+                                }
+                              }}
+                            />
+                            <IconButton
+                              size="small"
+                              onClick={() => handleSaveSecondDate(lead.id)}
+                              sx={{ color: '#4caf50' }}
+                            >
+                              <CheckIcon fontSize="small" />
+                            </IconButton>
+                            <IconButton
+                              size="small"
+                              onClick={handleCancelEditingSecondDate}
+                              sx={{ color: '#ef4444' }}
+                            >
+                              <CloseIcon fontSize="small" />
+                            </IconButton>
+                          </Box>
+                        ) : (
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              gap: 0.5,
+                              cursor: 'pointer',
+                              '&:hover .edit-icon-second': { opacity: 1 }
+                            }}
+                            onClick={() => handleStartEditingSecondDate(lead)}
+                          >
+                            <Box>
+                              <Typography variant="body2" color="text.secondary">
+                                {formatDate(lead.secondContactDate)}
+                              </Typography>
+                              {(() => {
+                                const gap = getDayGap(lead.lastContactedDate, lead.secondContactDate);
+                                if (gap === null) return null;
+                                return (
+                                  <Typography variant="caption" sx={{ color: '#667eea', fontWeight: 600, fontSize: '10px' }}>
+                                    ({gap}d gap)
+                                  </Typography>
+                                );
+                              })()}
+                            </Box>
+                            <Tooltip title="Edit date">
+                              <EditIcon
+                                className="edit-icon-second"
+                                sx={{
+                                  fontSize: 14,
+                                  color: '#94a3b8',
+                                  opacity: 0,
+                                  transition: 'opacity 0.2s'
+                                }}
+                              />
+                            </Tooltip>
+                          </Box>
+                        )}
+                      </TableCell>
                     </TableRow>
 
                     {/* Expanded Row */}
                     <TableRow>
-                      <TableCell sx={{ py: 0, borderBottom: expandedRows.has(lead.id) ? undefined : 'none' }} colSpan={5}>
+                      <TableCell sx={{ py: 0, borderBottom: expandedRows.has(lead.id) ? undefined : 'none' }} colSpan={7}>
                         <Collapse in={expandedRows.has(lead.id)} timeout="auto" unmountOnExit>
                           <Box sx={{ py: 3, px: 2 }}>
                             {/* Final Email Section */}
@@ -437,6 +743,14 @@ const LeadNurturingTab: React.FC = () => {
           </TableContainer>
         )}
       </Paper>
+
+      {/* Bulk Blog Analysis Dialog */}
+      <BulkBlogAnalysisDialog
+        open={bulkDialogOpen}
+        companies={getUniqueCompanies()}
+        onClose={() => setBulkDialogOpen(false)}
+        onComplete={handleBulkComplete}
+      />
     </Box>
   );
 };

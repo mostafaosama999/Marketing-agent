@@ -453,17 +453,28 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
                   {isColumnVisible('programFound') && (
                     <TableCell>
                       {company.writingProgramAnalysis?.hasProgram === true ? (
-                        <Chip
-                          icon={<CheckIcon sx={{ fontSize: '14px' }} />}
-                          label="Yes"
-                          size="small"
-                          sx={{
-                            bgcolor: '#dcfce7',
-                            color: '#16a34a',
-                            fontSize: '10px',
-                            height: '20px',
-                          }}
-                        />
+                        <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.3 }}>
+                          <Chip
+                            icon={<CheckIcon sx={{ fontSize: '14px' }} />}
+                            label="Yes"
+                            size="small"
+                            sx={{
+                              bgcolor: '#dcfce7',
+                              color: '#16a34a',
+                              fontSize: '10px',
+                              height: '20px',
+                            }}
+                          />
+                          {company.writingProgramAnalysis?.lastAnalyzedAt && (
+                            <Typography variant="caption" sx={{ fontSize: '9px', color: '#94a3b8', ml: 0.5 }}>
+                              {(() => {
+                                const d = company.writingProgramAnalysis.lastAnalyzedAt;
+                                const date = d instanceof Date ? d : (d as any)?.toDate ? (d as any).toDate() : new Date(d);
+                                return `Searched ${date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`;
+                              })()}
+                            </Typography>
+                          )}
+                        </Box>
                       ) : company.writingProgramAnalysis?.hasProgram === false && company.writingProgramAnalysis?.lastSearchedAt ? (
                         <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 0.3 }}>
                           <Chip

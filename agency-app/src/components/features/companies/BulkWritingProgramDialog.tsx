@@ -26,6 +26,8 @@ import {
 import {
   CheckCircle as SuccessIcon,
   Error as ErrorIcon,
+  Cached as CachedIcon,
+  SkipNext as SkipIcon,
 } from '@mui/icons-material';
 import { Company } from '../../../types/crm';
 import { updateCompany } from '../../../services/api/companies';
@@ -58,6 +60,7 @@ interface CompanyProgress {
   selectedUrl?: string;
   urlSource?: 'mapped' | 'searched'; // Track where URL came from
   analysisData?: any;
+  alreadyAnalyzed?: boolean; // true if fully analyzed in a prior run
 }
 
 export const BulkWritingProgramDialog: React.FC<BulkWritingProgramDialogProps> = ({
@@ -73,64 +76,163 @@ export const BulkWritingProgramDialog: React.FC<BulkWritingProgramDialogProps> =
   const [totalCost, setTotalCost] = useState(0);
   const [useMappedField, setUseMappedField] = useState(true); // Default to true
 
+  // Classify a company based on existing Firestore data for resume logic
+  const classifyCompany = (company: Company): {
+    bucket: 'fully_analyzed' | 'cached_urls' | 'searched_not_found' | 'needs_finding';
+    foundUrls: string[];
+    urlSource?: 'mapped' | 'searched';
+  } => {
+    const wpa = company.writingProgramAnalysis;
+
+    // Fully analyzed (has program with URL and analysis timestamp)
+    if (wpa?.hasProgram === true && wpa.programUrl && wpa.lastAnalyzedAt) {
+      return { bucket: 'fully_analyzed', foundUrls: [wpa.programUrl], urlSource: 'searched' };
+    }
+
+    // Has cached URLs from a previous interrupted finding phase
+    if (wpa?.cachedFoundUrls && wpa.cachedFoundUrls.length > 0) {
+      return {
+        bucket: 'cached_urls',
+        foundUrls: wpa.cachedFoundUrls,
+        urlSource: wpa.cachedFoundUrlSource || 'searched',
+      };
+    }
+
+    // Previously searched, definitively no program found
+    if (wpa?.hasProgram === false && wpa.lastSearchedAt) {
+      return { bucket: 'searched_not_found', foundUrls: [] };
+    }
+
+    // Needs finding
+    return { bucket: 'needs_finding', foundUrls: [] };
+  };
+
   // Initialize progress map and start finding when dialog opens
   useEffect(() => {
     if (open) {
-      // Reset state when dialog opens
+      // Classify companies and build initial progress with resume logic
       const initialProgress = new Map<string, CompanyProgress>();
+      const companiesNeedingWork: Company[] = [];
+      let preResolvedCount = 0;
+
       companies.forEach(company => {
-        initialProgress.set(company.id, {
-          companyId: company.id,
-          companyName: company.name,
-          findingStatus: 'pending',
-          foundUrls: [],
-        });
+        const classification = classifyCompany(company);
+
+        if (classification.bucket === 'fully_analyzed') {
+          initialProgress.set(company.id, {
+            companyId: company.id,
+            companyName: company.name,
+            findingStatus: 'success',
+            findingMessage: 'Already analyzed',
+            foundUrls: classification.foundUrls,
+            selectedUrl: undefined, // Default to skip (already done)
+            urlSource: classification.urlSource,
+            alreadyAnalyzed: true,
+          });
+          preResolvedCount++;
+        } else if (classification.bucket === 'cached_urls') {
+          initialProgress.set(company.id, {
+            companyId: company.id,
+            companyName: company.name,
+            findingStatus: 'success',
+            findingMessage: `Restored ${classification.foundUrls.length} cached URL(s)`,
+            foundUrls: classification.foundUrls,
+            selectedUrl: classification.foundUrls[0],
+            urlSource: classification.urlSource,
+          });
+          preResolvedCount++;
+        } else if (classification.bucket === 'searched_not_found') {
+          initialProgress.set(company.id, {
+            companyId: company.id,
+            companyName: company.name,
+            findingStatus: 'success',
+            findingMessage: 'No URLs found (previously searched)',
+            foundUrls: [],
+          });
+          preResolvedCount++;
+        } else {
+          initialProgress.set(company.id, {
+            companyId: company.id,
+            companyName: company.name,
+            findingStatus: 'pending',
+            foundUrls: [],
+          });
+          companiesNeedingWork.push(company);
+        }
       });
+
       setProgress(initialProgress);
       setPhase('finding');
-      setFindingProgress(0);
+      setFindingProgress(companies.length > 0 ? (preResolvedCount / companies.length) * 100 : 0);
       setAnalyzingProgress(0);
       setTotalCost(0);
 
-      // Start finding URLs after state is set
-      setTimeout(() => {
-        startFindingPhase();
-      }, 0);
+      if (companiesNeedingWork.length === 0) {
+        // All companies already resolved, skip straight to confirmation
+        setTimeout(() => setPhase('confirmation'), 300);
+      } else {
+        // Start finding only for companies that need it
+        setTimeout(() => {
+          startFindingPhase(companiesNeedingWork, preResolvedCount);
+        }, 0);
+      }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open]);
 
-  const startFindingPhase = async () => {
+  // Persist found URLs to Firestore (non-blocking on failure)
+  const persistFoundUrls = async (companyId: string, company: Company, urls: string[], source: 'mapped' | 'searched') => {
+    try {
+      const existingWpa = company.writingProgramAnalysis || {};
+      if (urls.length > 0) {
+        await updateCompany(companyId, {
+          writingProgramAnalysis: {
+            ...existingWpa,
+            cachedFoundUrls: urls,
+            cachedFoundUrlSource: source,
+            lastSearchedAt: new Date(),
+          },
+        });
+      } else {
+        // No URLs found - save "not found" marker immediately
+        if (!company.writingProgramAnalysis?.hasProgram) {
+          await updateCompany(companyId, {
+            writingProgramAnalysis: {
+              hasProgram: false,
+              programUrl: null,
+              isOpen: null,
+              openDates: null,
+              payment: { amount: null, method: null, details: null, sourceSnippet: null, historical: null },
+              lastAnalyzedAt: new Date(),
+              lastSearchedAt: new Date(),
+            },
+          });
+        }
+      }
+    } catch (err) {
+      console.error(`[BulkWritingProgram] Failed to persist found URLs for ${companyId}:`, err);
+    }
+  };
+
+  const startFindingPhase = async (companiesForFinding: Company[], initialCompletedCount: number) => {
     console.log('[BulkWritingProgram] ========== STARTING FINDING PHASE ==========');
-    console.log('[BulkWritingProgram] Total companies to process:', companies.length);
-    console.log('[BulkWritingProgram] Companies:', companies.map(c => ({
-      id: c.id,
-      name: c.name,
-      website: c.website,
-      hasWritingProgramAnalysis: !!(c as any).writingProgramAnalysis,
-    })));
-    console.log('[BulkWritingProgram] useMappedField:', useMappedField);
-    console.log('[BulkWritingProgram] Mapped field name:', getProgramUrlFieldMapping());
+    console.log('[BulkWritingProgram] Companies needing finding:', companiesForFinding.length);
+    console.log('[BulkWritingProgram] Already resolved:', initialCompletedCount);
 
     setPhase('finding');
-    setFindingProgress(0);
 
     // Separate companies into two groups:
     // 1. Companies with mapped field URLs (skip search)
     // 2. Companies that need URL search
-    const companiesWithMappedUrls: Company[] = [];
     const companiesNeedingSearch: Company[] = [];
 
-    let completedCount = 0;
+    let completedCount = initialCompletedCount;
 
-    companies.forEach(company => {
+    companiesForFinding.forEach(company => {
       // Check if we should use mapped field first
       if (useMappedField) {
         const programUrl = getCompanyProgramUrl(company);
-        console.log(`[BulkWritingProgram] Checking mapped field for ${company.name}:`, programUrl);
         if (programUrl) {
-          console.log(`[BulkWritingProgram] ✓ Found mapped URL for ${company.name}:`, programUrl);
-          companiesWithMappedUrls.push(company);
           // Update progress immediately for mapped URLs
           setProgress(prev => {
             const newProgress = new Map(prev);
@@ -146,33 +248,22 @@ export const BulkWritingProgramDialog: React.FC<BulkWritingProgramDialogProps> =
           });
           completedCount++;
           setFindingProgress((completedCount / companies.length) * 100);
+          // Persist to Firestore (non-blocking)
+          persistFoundUrls(company.id, company, [programUrl], 'mapped');
           return;
         }
       }
 
       // No mapped URL - needs search
-      console.log(`[BulkWritingProgram] ✗ No mapped URL for ${company.name}, adding to search queue`);
       companiesNeedingSearch.push(company);
     });
 
-    // If there are companies needing search, use the bulk service
-    console.log('[BulkWritingProgram] Companies needing search:', companiesNeedingSearch.length);
-    console.log('[BulkWritingProgram] Companies with mapped URLs:', companiesWithMappedUrls.length);
-
     if (companiesNeedingSearch.length > 0) {
       try {
-        console.log('[BulkWritingProgram] ========== CALLING bulkFindWritingPrograms ==========');
-        console.log('[BulkWritingProgram] Passing companies:', companiesNeedingSearch.map(c => ({
-          id: c.id,
-          name: c.name,
-          website: c.website,
-        })));
-
         // Call the bulk service with progress callback
         const results = await bulkFindWritingPrograms(
           companiesNeedingSearch,
           (companyId, phase, status, message) => {
-            console.log(`[BulkWritingProgram] Progress callback: ${companyId} - ${phase} - ${status} - ${message}`);
             // Update progress for this company
             setProgress(prev => {
               const newProgress = new Map(prev);
@@ -186,18 +277,8 @@ export const BulkWritingProgramDialog: React.FC<BulkWritingProgramDialogProps> =
           }
         );
 
-        console.log('[BulkWritingProgram] ========== bulkFindWritingPrograms RETURNED ==========');
-        console.log('[BulkWritingProgram] Results size:', results.size);
-        console.log('[BulkWritingProgram] Results:', Array.from(results.entries()).map(([id, r]) => ({
-          companyId: id,
-          success: r.success,
-          urlCount: r.urls?.length || 0,
-          aiSuggestionsCount: r.aiSuggestions?.length || 0,
-          error: r.error,
-        })));
-
-        // Process the results
-        results.forEach((result, companyId) => {
+        // Process the results and persist each to Firestore
+        for (const [companyId, result] of Array.from(results.entries())) {
           const allUrls: string[] = [];
 
           // Add pattern-matched URLs
@@ -207,7 +288,7 @@ export const BulkWritingProgramDialog: React.FC<BulkWritingProgramDialogProps> =
 
           // Add AI suggestions
           if (result.aiSuggestions) {
-            allUrls.push(...result.aiSuggestions.map(s => s.url));
+            allUrls.push(...result.aiSuggestions.filter(s => s.verified).map(s => s.url));
           }
 
           // Update final progress with all URLs
@@ -228,13 +309,16 @@ export const BulkWritingProgramDialog: React.FC<BulkWritingProgramDialogProps> =
 
           completedCount++;
           setFindingProgress((completedCount / companies.length) * 100);
-        });
+
+          // Persist to Firestore incrementally (non-blocking)
+          const company = companies.find(c => c.id === companyId);
+          if (company) {
+            persistFoundUrls(companyId, company, allUrls, 'searched');
+          }
+        }
 
       } catch (error: any) {
-        console.error('[BulkWritingProgram] ========== ERROR in bulkFindWritingPrograms ==========');
-        console.error('[BulkWritingProgram] Error:', error);
-        console.error('[BulkWritingProgram] Error message:', error.message);
-        console.error('[BulkWritingProgram] Error stack:', error.stack);
+        console.error('[BulkWritingProgram] Error in bulkFindWritingPrograms:', error);
         // Mark all companies needing search as errored
         companiesNeedingSearch.forEach(company => {
           setProgress(prev => {
@@ -263,34 +347,11 @@ export const BulkWritingProgramDialog: React.FC<BulkWritingProgramDialogProps> =
     setPhase('analyzing');
     setAnalyzingProgress(0);
 
-    // Get companies with selected URLs
-    const companiesToAnalyze = Array.from(progress.values()).filter(p => p.selectedUrl);
+    // Get companies with selected URLs (exclude already-analyzed)
+    const companiesToAnalyze = Array.from(progress.values()).filter(p => p.selectedUrl && !p.alreadyAnalyzed);
 
     if (companiesToAnalyze.length === 0) {
-      // Still save "searched but not found" markers for skipped companies
-      const skippedCompanies = Array.from(progress.values()).filter(
-        p => p.foundUrls.length === 0 && !p.selectedUrl
-      );
-      for (const skipped of skippedCompanies) {
-        try {
-          const company = companies.find(c => c.id === skipped.companyId);
-          if (company && !company.writingProgramAnalysis?.hasProgram) {
-            await updateCompany(skipped.companyId, {
-              writingProgramAnalysis: {
-                hasProgram: false,
-                programUrl: null,
-                isOpen: null,
-                openDates: null,
-                payment: { amount: null, method: null, details: null, sourceSnippet: null, historical: null },
-                lastAnalyzedAt: new Date(),
-                lastSearchedAt: new Date(),
-              },
-            });
-          }
-        } catch (error) {
-          console.error(`Error saving search marker for company ${skipped.companyId}:`, error);
-        }
-      }
+      // "Not found" markers were already saved during finding phase
       setPhase('complete');
       return;
     }
@@ -308,14 +369,14 @@ export const BulkWritingProgramDialog: React.FC<BulkWritingProgramDialogProps> =
     });
 
     let completedCount = 0;
-    let totalCost = 0;
+    let runningCost = 0;
 
     try {
-      // Call the bulk service with progress callback
-      const results = await bulkAnalyzeWritingPrograms(
+      // Call the bulk service with real-time Firestore saves via onCompanyResult
+      await bulkAnalyzeWritingPrograms(
         selections,
         (companyId, phase, status, message) => {
-          // Update progress for this company
+          // Update UI progress for this company
           setProgress(prev => {
             const newProgress = new Map(prev);
             const cp = newProgress.get(companyId);
@@ -325,19 +386,24 @@ export const BulkWritingProgramDialog: React.FC<BulkWritingProgramDialogProps> =
             }
             return newProgress;
           });
-        }
-      );
 
-      // Process the results and save to Firestore
-      for (const [companyId, result] of Array.from(results.entries())) {
-        try {
+          // Track completion for progress bar
+          if (status === 'success' || status === 'error') {
+            completedCount++;
+            setAnalyzingProgress((completedCount / companiesToAnalyze.length) * 100);
+          }
+        },
+        // onCompanyResult: save each result to Firestore immediately
+        async (companyId, result) => {
           if (result.success && result.data) {
-            // Save to Firestore
+            // Save to Firestore immediately (clear cache fields)
             await updateCompany(companyId, {
               writingProgramAnalysis: {
                 ...result.data,
                 programUrl: result.programUrl,
                 lastAnalyzedAt: new Date(),
+                cachedFoundUrls: null,
+                cachedFoundUrlSource: null,
               },
             });
 
@@ -357,86 +423,31 @@ export const BulkWritingProgramDialog: React.FC<BulkWritingProgramDialogProps> =
 
             // Accumulate cost
             if (result.data.costInfo) {
-              totalCost += result.data.costInfo.totalCost || 0;
+              runningCost += result.data.costInfo.totalCost || 0;
+              setTotalCost(runningCost);
             }
-          } else {
-            // Update with error
-            setProgress(prev => {
-              const newProgress = new Map(prev);
-              const cp = newProgress.get(companyId);
-              if (cp) {
-                cp.analyzingStatus = 'error';
-                cp.analyzingMessage = result.error || 'Failed to analyze';
-              }
-              return newProgress;
-            });
           }
-
-          completedCount++;
-          setAnalyzingProgress((completedCount / companiesToAnalyze.length) * 100);
-
-        } catch (error: any) {
-          console.error(`Error saving analysis for company ${companyId}:`, error);
-          setProgress(prev => {
-            const newProgress = new Map(prev);
-            const cp = newProgress.get(companyId);
-            if (cp) {
-              cp.analyzingStatus = 'error';
-              cp.analyzingMessage = error.message || 'Failed to save analysis';
-            }
-            return newProgress;
-          });
-          completedCount++;
-          setAnalyzingProgress((completedCount / companiesToAnalyze.length) * 100);
         }
-      }
+      );
 
     } catch (error: any) {
       console.error('Error in bulk analyze writing programs:', error);
-      // Mark all as errored
+      // Mark remaining as errored
       companiesToAnalyze.forEach(cp => {
         setProgress(prev => {
           const newProgress = new Map(prev);
           const companyProgress = newProgress.get(cp.companyId);
-          if (companyProgress) {
+          if (companyProgress && companyProgress.analyzingStatus !== 'success') {
             companyProgress.analyzingStatus = 'error';
             companyProgress.analyzingMessage = error.message || 'Failed to analyze';
           }
           return newProgress;
         });
-        completedCount++;
-        setAnalyzingProgress((completedCount / companiesToAnalyze.length) * 100);
       });
     }
 
-    setTotalCost(totalCost);
+    setTotalCost(runningCost);
     setAnalyzingProgress(100);
-
-    // Save "searched but not found" marker for skipped companies (no URLs found)
-    const skippedCompanies = Array.from(progress.values()).filter(
-      p => p.foundUrls.length === 0 && !p.selectedUrl
-    );
-    for (const skipped of skippedCompanies) {
-      try {
-        // Only save if company doesn't already have a successful analysis
-        const company = companies.find(c => c.id === skipped.companyId);
-        if (company && !company.writingProgramAnalysis?.hasProgram) {
-          await updateCompany(skipped.companyId, {
-            writingProgramAnalysis: {
-              hasProgram: false,
-              programUrl: null,
-              isOpen: null,
-              openDates: null,
-              payment: { amount: null, method: null, details: null, sourceSnippet: null, historical: null },
-              lastAnalyzedAt: new Date(),
-              lastSearchedAt: new Date(),
-            },
-          });
-        }
-      } catch (error) {
-        console.error(`Error saving search marker for company ${skipped.companyId}:`, error);
-      }
-    }
 
     // Move to complete phase
     setTimeout(() => {
@@ -667,7 +678,39 @@ export const BulkWritingProgramDialog: React.FC<BulkWritingProgramDialogProps> =
                         </Typography>
                       </TableCell>
                       <TableCell>
-                        {companyProgress.urlSource === 'mapped' ? (
+                        {companyProgress.alreadyAnalyzed ? (
+                          <Chip
+                            size="small"
+                            label="Already Analyzed"
+                            icon={<SuccessIcon />}
+                            sx={{
+                              bgcolor: '#e8eaf6',
+                              color: '#5c6bc0',
+                              fontSize: '10px',
+                              height: '20px',
+                              '& .MuiChip-icon': {
+                                fontSize: 12,
+                                color: '#5c6bc0',
+                              },
+                            }}
+                          />
+                        ) : companyProgress.findingMessage?.includes('Restored') ? (
+                          <Chip
+                            size="small"
+                            label="Cached"
+                            icon={<CachedIcon />}
+                            sx={{
+                              bgcolor: '#fff3e0',
+                              color: '#e65100',
+                              fontSize: '10px',
+                              height: '20px',
+                              '& .MuiChip-icon': {
+                                fontSize: 12,
+                                color: '#e65100',
+                              },
+                            }}
+                          />
+                        ) : companyProgress.urlSource === 'mapped' ? (
                           <Chip
                             size="small"
                             label="Mapped Field"
@@ -701,7 +744,9 @@ export const BulkWritingProgramDialog: React.FC<BulkWritingProgramDialogProps> =
                         )}
                       </TableCell>
                       <TableCell>
-                        {companyProgress.foundUrls.length > 0 ? (
+                        {companyProgress.alreadyAnalyzed ? (
+                          <Chip label="Skip (done)" size="small" sx={{ bgcolor: '#e8eaf6', color: '#5c6bc0' }} />
+                        ) : companyProgress.foundUrls.length > 0 ? (
                           <Select
                             size="small"
                             value={companyProgress.selectedUrl || 'skip'}
@@ -812,22 +857,18 @@ export const BulkWritingProgramDialog: React.FC<BulkWritingProgramDialogProps> =
 
         {/* Phase 4: Complete */}
         {phase === 'complete' && (
-          <Box sx={{ textAlign: 'center', py: 4 }}>
-            <SuccessIcon sx={{ fontSize: 64, color: '#16a34a', mb: 2 }} />
-            <Typography variant="h6" fontWeight={600} sx={{ mb: 3 }}>
-              Analysis Complete!
-            </Typography>
-
-            <Box sx={{ display: 'flex', justifyContent: 'center', gap: 3, mb: 3 }}>
-              <Box>
+          <Box>
+            {/* Summary stats row */}
+            <Box sx={{ display: 'flex', justifyContent: 'center', gap: 3, mb: 2, pt: 2 }}>
+              <Box sx={{ textAlign: 'center' }}>
                 <Typography variant="h4" color="success.main" fontWeight={700}>
                   {getSuccessCount()}
                 </Typography>
                 <Typography variant="body2" color="text.secondary">
-                  Successfully analyzed
+                  Analyzed
                 </Typography>
               </Box>
-              <Box>
+              <Box sx={{ textAlign: 'center' }}>
                 <Typography variant="h4" color="warning.main" fontWeight={700}>
                   {getSkippedCount()}
                 </Typography>
@@ -835,7 +876,7 @@ export const BulkWritingProgramDialog: React.FC<BulkWritingProgramDialogProps> =
                   Skipped
                 </Typography>
               </Box>
-              <Box>
+              <Box sx={{ textAlign: 'center' }}>
                 <Typography variant="h4" color="error.main" fontWeight={700}>
                   {getErrorCount()}
                 </Typography>
@@ -843,15 +884,100 @@ export const BulkWritingProgramDialog: React.FC<BulkWritingProgramDialogProps> =
                   Failed
                 </Typography>
               </Box>
+              {totalCost > 0 && (
+                <Box sx={{ textAlign: 'center' }}>
+                  <Typography variant="h4" sx={{ color: '#667eea' }} fontWeight={700}>
+                    ${totalCost.toFixed(2)}
+                  </Typography>
+                  <Typography variant="body2" color="text.secondary">
+                    Cost
+                  </Typography>
+                </Box>
+              )}
             </Box>
 
-            {totalCost > 0 && (
-              <Box sx={{ mt: 2, p: 2, bgcolor: '#f9fafb', borderRadius: 2, display: 'inline-block' }}>
-                <Typography variant="body2" fontWeight={600}>
-                  Total Cost: ${totalCost.toFixed(2)}
-                </Typography>
-              </Box>
-            )}
+            {/* Detailed results table */}
+            <TableContainer component={Paper} sx={{ maxHeight: 350 }}>
+              <Table size="small">
+                <TableHead>
+                  <TableRow>
+                    <TableCell>Company</TableCell>
+                    <TableCell>Status</TableCell>
+                    <TableCell>Details</TableCell>
+                  </TableRow>
+                </TableHead>
+                <TableBody>
+                  {Array.from(progress.values())
+                    .sort((a, b) => {
+                      // Errors first, then successes, then skipped
+                      const order = (p: CompanyProgress) => {
+                        if (p.analyzingStatus === 'error' || (p.findingStatus === 'error' && !p.selectedUrl)) return 0;
+                        if (p.analyzingStatus === 'success') return 1;
+                        return 2;
+                      };
+                      return order(a) - order(b);
+                    })
+                    .map((cp) => {
+                      const isError = cp.analyzingStatus === 'error' || (cp.findingStatus === 'error' && !cp.selectedUrl);
+                      const isSuccess = cp.analyzingStatus === 'success';
+                      const isSkipped = !isError && !isSuccess;
+
+                      return (
+                        <TableRow key={cp.companyId} sx={isError ? { bgcolor: '#fff5f5' } : undefined}>
+                          <TableCell>
+                            <Typography variant="body2" fontWeight={600} fontSize="11px">
+                              {cp.companyName}
+                            </Typography>
+                          </TableCell>
+                          <TableCell>
+                            {isError && (
+                              <Chip
+                                icon={<ErrorIcon />}
+                                label="Failed"
+                                size="small"
+                                sx={{ bgcolor: '#fee2e2', color: '#dc2626', fontSize: '10px', height: '20px' }}
+                              />
+                            )}
+                            {isSuccess && (
+                              <Chip
+                                icon={<SuccessIcon />}
+                                label="Success"
+                                size="small"
+                                sx={{ bgcolor: '#dcfce7', color: '#16a34a', fontSize: '10px', height: '20px' }}
+                              />
+                            )}
+                            {isSkipped && (
+                              <Chip
+                                icon={<SkipIcon />}
+                                label="Skipped"
+                                size="small"
+                                sx={{ bgcolor: '#f3f4f6', color: '#6b7280', fontSize: '10px', height: '20px' }}
+                              />
+                            )}
+                          </TableCell>
+                          <TableCell>
+                            <Typography
+                              variant="body2"
+                              fontSize="11px"
+                              sx={isError ? { color: '#dc2626' } : undefined}
+                            >
+                              {isError
+                                ? (cp.analyzingMessage || cp.findingMessage || 'Unknown error')
+                                : isSuccess
+                                  ? (cp.analyzingMessage || 'Analyzed')
+                                  : (cp.alreadyAnalyzed
+                                      ? 'Already analyzed'
+                                      : cp.foundUrls.length === 0
+                                        ? 'No URLs found'
+                                        : 'Skipped by user')}
+                            </Typography>
+                          </TableCell>
+                        </TableRow>
+                      );
+                    })}
+                </TableBody>
+              </Table>
+            </TableContainer>
           </Box>
         )}
       </DialogContent>

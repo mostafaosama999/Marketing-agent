@@ -175,6 +175,9 @@ export interface Company {
       totalCost: number;
       totalTokens: number;
     };
+    // Cached finding-phase results (survives crashes for resume)
+    cachedFoundUrls?: string[];
+    cachedFoundUrlSource?: 'mapped' | 'searched';
   };
 
   // Blog Analysis

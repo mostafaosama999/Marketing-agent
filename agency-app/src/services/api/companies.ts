@@ -71,6 +71,8 @@ function convertToCompany(id: string, data: any): Company {
         : data.writingProgramAnalysis.lastSearchedAt
           ? new Date(data.writingProgramAnalysis.lastSearchedAt)
           : undefined,
+      cachedFoundUrls: data.writingProgramAnalysis.cachedFoundUrls || undefined,
+      cachedFoundUrlSource: data.writingProgramAnalysis.cachedFoundUrlSource || undefined,
     } : undefined,
     blogAnalysis: data.blogAnalysis ? {
       ...data.blogAnalysis,

@@ -81,6 +81,7 @@ function convertToLead(id: string, data: any): Lead {
     archiveReason: data.archiveReason,
     cascadedFrom: data.cascadedFrom,
     lastContactedDate: safeToDate(data.lastContactedDate),
+    secondContactDate: safeToDate(data.secondContactDate),
     finalEmail: data.finalEmail,
     finalEmailUpdatedAt: safeToDate(data.finalEmailUpdatedAt),
     finalEmailUpdatedBy: data.finalEmailUpdatedBy,
