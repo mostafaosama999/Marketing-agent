@@ -32,6 +32,9 @@ interface ParsedApplicant {
   phone: string;
   linkedInUrl: string;
   bio: string;
+  education: string;
+  sex: string;
+  age: string;
   formAnswers: Record<string, string>;
   submittedAt?: string;
 }
@@ -106,6 +109,9 @@ export const CSVImportDialog: React.FC<CSVImportDialogProps> = ({
             phone: (row['Phone'] || row['Hiring Contact Phone 2'] || '').replace(/'/g, '').trim(),
             linkedInUrl: (row['LinkedIn URL'] || '').trim(),
             bio: (row['Bio'] || row['Hiring Contact Bio 2'] || '').trim(),
+            education: (row['Education'] || row['University'] || '').trim(),
+            sex: (row['Sex'] || row['Gender'] || '').trim(),
+            age: (row['Age'] || '').trim(),
             formAnswers,
             submittedAt: row['Date'] || undefined,
           });

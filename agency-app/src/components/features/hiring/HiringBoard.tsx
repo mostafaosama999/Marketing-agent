@@ -2,14 +2,17 @@ import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { Box, Typography, Button, Snackbar, Alert, CircularProgress } from '@mui/material';
 import { Upload as UploadIcon } from '@mui/icons-material';
 import { Applicant, ApplicantStatus, HIRING_STAGES } from '../../../types/applicant';
-import { subscribeToApplicants, updateApplicantStatus } from '../../../services/api/applicants';
+import { subscribeToApplicants, updateApplicantStatus, markHiringSeen, getLastSeenHiring } from '../../../services/api/applicants';
+import { useAuth } from '../../../contexts/AuthContext';
 import { ApplicantColumn } from './ApplicantColumn';
 import { ApplicantDetailDialog } from './ApplicantDetailDialog';
 import { CSVImportDialog } from './CSVImportDialog';
 
 const HiringBoard: React.FC = () => {
+  const { user } = useAuth();
   const [applicants, setApplicants] = useState<Applicant[]>([]);
   const [loading, setLoading] = useState(true);
+  const [lastSeenAt, setLastSeenAt] = useState<Date | null>(null);
   const [draggedApplicant, setDraggedApplicant] = useState<Applicant | null>(null);
   const [dragOverColumn, setDragOverColumn] = useState<string | null>(null);
   const [selectedApplicant, setSelectedApplicant] = useState<Applicant | null>(null);
@@ -21,6 +24,20 @@ const HiringBoard: React.FC = () => {
     severity: 'success',
   });
   const dragOverRef = useRef<string | null>(null);
+
+  // Load last seen, capture it for NEW badges, then mark current visit
+  useEffect(() => {
+    if (!user?.uid) return;
+    getLastSeenHiring(user.uid).then((date) => {
+      setLastSeenAt(date);
+      // Mark as seen after a short delay so the user sees the NEW badges briefly
+      setTimeout(() => {
+        markHiringSeen(user.uid);
+        // Update local state so NEW badges disappear
+        setLastSeenAt(new Date());
+      }, 3000);
+    });
+  }, [user?.uid]);
 
   useEffect(() => {
     const unsubscribe = subscribeToApplicants((data) => {
@@ -191,6 +208,7 @@ const HiringBoard: React.FC = () => {
             key={stage.id}
             stage={stage}
             applicants={getApplicantsForStage(stage.id)}
+            lastSeenAt={lastSeenAt}
             onDragOver={(e) => handleColumnDragOver(e, stage.id)}
             onDrop={handleDrop}
             onDragStart={handleDragStart}

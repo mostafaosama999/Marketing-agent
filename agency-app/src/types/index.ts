@@ -104,3 +104,38 @@ export type {
   GATrafficSourceSummary,
   GAChartDataPoint
 } from './googleAnalytics';
+
+// Event types
+export type {
+  Event,
+  EventStatus,
+  EventType,
+  TicketAvailability,
+  IcpMatch,
+  EventCompanyRole,
+  EventLeadRole,
+  EventLeadPersona,
+  OutreachStatus,
+  EventDiscoverySource,
+  EventLocation,
+  EventPricing,
+  EventScoringBreakdown,
+  EventIcpSummary,
+  OutreachEntry,
+  EventCompany,
+  EventLead,
+  EventFormData,
+  EventCompanyFormData,
+  EventLeadFormData,
+  EventFilters,
+} from './event';
+
+export {
+  EVENT_STATUS_ORDER,
+  EVENT_STATUS_LABELS,
+  EVENT_STATUS_COLORS,
+  EVENT_TYPE_LABELS,
+  ICP_MATCH_LABELS,
+  PERSONA_LABELS,
+  PERSONA_COLORS,
+} from './event';

@@ -22,9 +22,12 @@ import {
   Email as EmailIcon,
   Phone as PhoneIcon,
   LinkOff as LinkOffIcon,
+  School as SchoolIcon,
+  Person as PersonIcon,
+  Cake as CakeIcon,
 } from '@mui/icons-material';
 import { Applicant, ApplicantStatus, HIRING_STAGES } from '../../../types/applicant';
-import { updateApplicant } from '../../../services/api/applicants';
+import { updateApplicant, deleteApplicant } from '../../../services/api/applicants';
 
 interface ApplicantDetailDialogProps {
   applicant: Applicant | null;
@@ -74,6 +77,7 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
   const [notes, setNotes] = useState('');
   const [status, setStatus] = useState<ApplicantStatus>('applied');
   const [saving, setSaving] = useState(false);
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   useEffect(() => {
     if (applicant) {
@@ -183,6 +187,30 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
           </Box>
         </Box>
 
+        {/* Key Info Summary */}
+        {(applicant.age || applicant.sex || applicant.education) && (
+          <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+            {applicant.sex && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1, borderRadius: 2, background: '#f1f5f9', border: '1px solid #e2e8f0' }}>
+                <PersonIcon sx={{ fontSize: 16, color: '#6366f1' }} />
+                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>{applicant.sex}</Typography>
+              </Box>
+            )}
+            {applicant.age && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1, borderRadius: 2, background: '#f1f5f9', border: '1px solid #e2e8f0' }}>
+                <CakeIcon sx={{ fontSize: 16, color: '#ec4899' }} />
+                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>{applicant.age} years old</Typography>
+              </Box>
+            )}
+            {applicant.education && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1, borderRadius: 2, background: '#f1f5f9', border: '1px solid #e2e8f0' }}>
+                <SchoolIcon sx={{ fontSize: 16, color: '#f59e0b' }} />
+                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>{applicant.education}</Typography>
+              </Box>
+            )}
+          </Box>
+        )}
+
         <Divider sx={{ mb: 3 }} />
 
         {/* Contact Info */}
@@ -197,14 +225,6 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
               {applicant.email}
             </Link>
           </Box>
-          {applicant.phone && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-              <PhoneIcon sx={{ fontSize: 18, color: '#10b981' }} />
-              <Typography variant="body2" sx={{ color: '#1e293b' }}>
-                {applicant.phone}
-              </Typography>
-            </Box>
-          )}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
             {hasLinkedIn ? (
               <>
@@ -321,24 +341,58 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
         />
       </DialogContent>
 
-      <DialogActions sx={{ px: 4, py: 2, background: '#f8fafc' }}>
-        <Button onClick={onClose} sx={{ color: '#64748b', textTransform: 'none' }}>
-          Cancel
-        </Button>
-        <Button
-          variant="contained"
-          onClick={handleSave}
-          disabled={saving || !hasChanges}
-          sx={{
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            borderRadius: 2,
-            px: 4,
-            textTransform: 'none',
-            fontWeight: 600,
-          }}
-        >
-          {saving ? 'Saving...' : 'Save Changes'}
-        </Button>
+      <DialogActions sx={{ px: 4, py: 2, background: '#f8fafc', justifyContent: 'space-between' }}>
+        <Box>
+          {!confirmDelete ? (
+            <Button
+              onClick={() => setConfirmDelete(true)}
+              sx={{ color: '#ef4444', textTransform: 'none', fontSize: '13px' }}
+            >
+              Delete
+            </Button>
+          ) : (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography sx={{ fontSize: '13px', color: '#ef4444' }}>Are you sure?</Typography>
+              <Button
+                size="small"
+                onClick={async () => {
+                  await deleteApplicant(applicant.id);
+                  setConfirmDelete(false);
+                  onClose();
+                }}
+                sx={{ color: '#ef4444', textTransform: 'none', fontWeight: 700, minWidth: 'auto' }}
+              >
+                Yes, delete
+              </Button>
+              <Button
+                size="small"
+                onClick={() => setConfirmDelete(false)}
+                sx={{ color: '#64748b', textTransform: 'none', minWidth: 'auto' }}
+              >
+                No
+              </Button>
+            </Box>
+          )}
+        </Box>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <Button onClick={onClose} sx={{ color: '#64748b', textTransform: 'none' }}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            onClick={handleSave}
+            disabled={saving || !hasChanges}
+            sx={{
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              borderRadius: 2,
+              px: 4,
+              textTransform: 'none',
+              fontWeight: 600,
+            }}
+          >
+            {saving ? 'Saving...' : 'Save Changes'}
+          </Button>
+        </Box>
       </DialogActions>
     </Dialog>
   );

@@ -9,6 +9,9 @@ export interface Applicant {
   phone: string;
   linkedInUrl: string;
   bio: string;
+  education: string;
+  sex: string;
+  age: string;
   status: ApplicantStatus;
   score: number | null;
   notes: string;

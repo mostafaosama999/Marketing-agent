@@ -8,17 +8,20 @@ import { Applicant } from '../../../types/applicant';
 
 interface ApplicantCardProps {
   applicant: Applicant;
+  isNew?: boolean;
   onDragStart: (e: React.DragEvent, applicant: Applicant) => void;
   onClick: (applicant: Applicant) => void;
 }
 
 export const ApplicantCard: React.FC<ApplicantCardProps> = ({
   applicant,
+  isNew,
   onDragStart,
   onClick,
 }) => {
   const hasLinkedIn = !!applicant.linkedInUrl;
   const answerCount = Object.keys(applicant.formAnswers).length;
+  const infoParts = [applicant.sex, applicant.age ? `${applicant.age}y` : '', applicant.education].filter(Boolean);
 
   return (
     <Box
@@ -33,6 +36,7 @@ export const ApplicantCard: React.FC<ApplicantCardProps> = ({
         border: hasLinkedIn ? '1px solid #e2e8f0' : '1px solid #fde68a',
         transition: 'all 0.2s cubic-bezier(0.4, 0, 0.2, 1)',
         flexShrink: 0,
+        position: 'relative',
         opacity: hasLinkedIn ? 1 : 0.85,
         '&:hover': {
           boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
@@ -42,6 +46,29 @@ export const ApplicantCard: React.FC<ApplicantCardProps> = ({
         },
       }}
     >
+      {/* NEW Badge */}
+      {isNew && (
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 8,
+            right: 8,
+            background: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)',
+            color: 'white',
+            borderRadius: '6px',
+            px: 1,
+            py: 0.25,
+            fontSize: '9px',
+            fontWeight: 800,
+            textTransform: 'uppercase',
+            letterSpacing: '0.5px',
+            boxShadow: '0 2px 8px rgba(239, 68, 68, 0.4)',
+          }}
+        >
+          NEW
+        </Box>
+      )}
+
       {/* No LinkedIn Warning Banner */}
       {!hasLinkedIn && (
         <Box
@@ -71,25 +98,27 @@ export const ApplicantCard: React.FC<ApplicantCardProps> = ({
           fontSize: '15px',
           color: '#1e293b',
           mb: 0.5,
+          pr: isNew ? 5 : 0,
         }}
       >
         {applicant.name}
       </Typography>
 
-      {/* Email */}
-      <Typography
-        variant="body2"
-        sx={{
-          color: '#64748b',
-          fontSize: '12px',
-          mb: 1,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {applicant.email}
-      </Typography>
+      {/* Age · Sex · University */}
+      {infoParts.length > 0 && (
+        <Typography
+          sx={{
+            color: '#64748b',
+            fontSize: '12px',
+            mb: 0.75,
+            overflow: 'hidden',
+            textOverflow: 'ellipsis',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {infoParts.join(' · ')}
+        </Typography>
+      )}
 
       {/* Score + Answer Count */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
@@ -127,11 +156,6 @@ export const ApplicantCard: React.FC<ApplicantCardProps> = ({
           </Tooltip>
         )}
       </Box>
-
-      {/* Submission Date */}
-      <Typography sx={{ fontSize: '11px', color: '#94a3b8', mb: 1.5 }}>
-        {applicant.submittedAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
-      </Typography>
 
       {/* Bottom Row: LinkedIn + Source */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

@@ -1,5 +1,5 @@
 // src/components/layout/Navbar.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   AppBar,
   Toolbar,
@@ -11,6 +11,7 @@ import {
   Avatar,
   Chip,
   IconButton,
+  Badge,
   styled,
 } from '@mui/material';
 import {
@@ -25,10 +26,12 @@ import {
   Campaign,
   Assessment,
   PersonAdd,
+  Event as EventIcon,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLocation, Link } from 'react-router-dom';
 import NotificationBell from './NotificationBell';
+import { subscribeToApplicants, subscribeToLastSeenHiring } from '../../services/api/applicants';
 
 // Styled Components for Modern Design
 const ModernAppBar = styled(AppBar)(({ theme }) => ({
@@ -167,9 +170,34 @@ const UserSection = styled(Box)(({ theme }) => ({
 }));
 
 const Navbar: React.FC = () => {
-  const { userProfile, logout } = useAuth();
+  const { userProfile, user, logout } = useAuth();
   const location = useLocation();
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null);
+  const [unseenHiringCount, setUnseenHiringCount] = useState(0);
+
+  // Track unseen hiring applicants
+  useEffect(() => {
+    if (!user?.uid || !(userProfile?.role === 'Manager' || userProfile?.role === 'CEO')) return;
+
+    let lastSeen: Date | null = null;
+    const unsubs: (() => void)[] = [];
+
+    const unsubLastSeen = subscribeToLastSeenHiring(user.uid, (date) => {
+      lastSeen = date;
+    });
+    unsubs.push(unsubLastSeen);
+
+    const unsubApplicants = subscribeToApplicants((applicants) => {
+      const count = applicants.filter((a) => {
+        if (!lastSeen) return true; // never visited = all are new
+        return a.createdAt > lastSeen;
+      }).length;
+      setUnseenHiringCount(count);
+    });
+    unsubs.push(unsubApplicants);
+
+    return () => unsubs.forEach((u) => u());
+  }, [user?.uid, userProfile?.role]);
 
   const handleMenuClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget);
@@ -266,14 +294,37 @@ const Navbar: React.FC = () => {
 
           {/* Hiring Pipeline Button - Left Side */}
           {(userProfile?.role === 'Manager' || userProfile?.role === 'CEO') && (
-            <NavButton
-              isActive={location.pathname === '/hiring'}
-              startIcon={<PersonAdd />}
-              {...({ component: Link, to: '/hiring' } as any)}
+            <Badge
+              badgeContent={unseenHiringCount}
+              color="error"
+              max={99}
+              sx={{
+                '& .MuiBadge-badge': {
+                  fontSize: '10px',
+                  fontWeight: 700,
+                  minWidth: 18,
+                  height: 18,
+                },
+              }}
             >
-              HIRING
-            </NavButton>
+              <NavButton
+                isActive={location.pathname === '/hiring'}
+                startIcon={<PersonAdd />}
+                {...({ component: Link, to: '/hiring' } as any)}
+              >
+                HIRING
+              </NavButton>
+            </Badge>
           )}
+
+          {/* Events Button - Left Side */}
+          <NavButton
+            isActive={location.pathname === '/events' || location.pathname.startsWith('/events/')}
+            startIcon={<EventIcon />}
+            {...({ component: Link, to: '/events' } as any)}
+          >
+            EVENTS
+          </NavButton>
         </Box>
 
         {/* Spacer to push nav items to the right */}

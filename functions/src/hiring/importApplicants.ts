@@ -10,6 +10,9 @@ interface ApplicantInput {
   phone?: string;
   linkedInUrl?: string;
   bio?: string;
+  education?: string;
+  sex?: string;
+  age?: string;
   formAnswers?: Record<string, string>;
   submittedAt?: string;
 }
@@ -68,6 +71,9 @@ export const importApplicantsCloud = functions
           phone: applicant.phone || "",
           linkedInUrl: applicant.linkedInUrl || "",
           bio: applicant.bio || "",
+          education: applicant.education || "",
+          sex: applicant.sex || "",
+          age: applicant.age || "",
           status: "applied",
           score: null,
           notes: "",

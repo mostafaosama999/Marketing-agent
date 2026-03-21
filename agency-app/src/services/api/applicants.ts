@@ -7,6 +7,9 @@ import {
   orderBy,
   addDoc,
   updateDoc,
+  deleteDoc,
+  setDoc,
+  getDoc,
   serverTimestamp,
   Unsubscribe,
 } from 'firebase/firestore';
@@ -34,6 +37,9 @@ function convertToApplicant(id: string, data: any): Applicant {
     phone: data.phone || '',
     linkedInUrl: data.linkedInUrl || '',
     bio: data.bio || '',
+    education: data.education || '',
+    sex: data.sex || '',
+    age: data.age || '',
     status: data.status || 'applied',
     score: data.score !== undefined ? data.score : null,
     notes: data.notes || '',
@@ -87,6 +93,41 @@ export async function updateApplicant(
     ...updates,
     updatedAt: serverTimestamp(),
   });
+}
+
+export async function deleteApplicant(id: string): Promise<void> {
+  const ref = doc(db, APPLICANTS_COLLECTION, id);
+  await deleteDoc(ref);
+}
+
+// --- Unseen applicants tracking ---
+
+export async function getLastSeenHiring(userId: string): Promise<Date | null> {
+  const ref = doc(db, 'userPreferences', userId);
+  const snap = await getDoc(ref);
+  if (!snap.exists()) return null;
+  const ts = snap.data()?.lastSeenHiringAt;
+  return safeToDate(ts) || null;
+}
+
+export function subscribeToLastSeenHiring(
+  userId: string,
+  callback: (lastSeen: Date | null) => void
+): Unsubscribe {
+  const ref = doc(db, 'userPreferences', userId);
+  return onSnapshot(ref, (snap) => {
+    if (!snap.exists()) {
+      callback(null);
+      return;
+    }
+    const ts = snap.data()?.lastSeenHiringAt;
+    callback(safeToDate(ts) || null);
+  });
+}
+
+export async function markHiringSeen(userId: string): Promise<void> {
+  const ref = doc(db, 'userPreferences', userId);
+  await setDoc(ref, { lastSeenHiringAt: serverTimestamp() }, { merge: true });
 }
 
 export async function createApplicant(

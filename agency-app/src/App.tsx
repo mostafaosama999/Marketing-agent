@@ -21,6 +21,8 @@ import CompanyDetailPage from './pages/companies/CompanyDetailPage';
 import LeadDetailPage from './pages/leads/LeadDetailPage';
 import SettingsPage from './pages/settings/SettingsPage';
 import KPIsPage from './pages/analytics/KPIsPage';
+import { EventsPage } from './pages/events/EventsPage';
+import { EventDetailPage } from './pages/events/EventDetailPage';
 
 // Components
 import Navbar from './components/layout/Navbar';
@@ -44,7 +46,7 @@ function AppContent() {
   }, [location.pathname]);
   
   // Routes that need full-height fixed layout (CRM board, Companies)
-  const fixedHeightRoutes = ['/', '/crm', '/leads', '/companies', '/hiring'];
+  const fixedHeightRoutes = ['/', '/crm', '/leads', '/companies', '/hiring', '/events'];
   const isFixedHeightRoute = fixedHeightRoutes.includes(location.pathname);
 
   if (isFixedHeightRoute) {
@@ -68,6 +70,7 @@ function AppContent() {
             <Route path="/crm" element={<CRMBoard />} />
             <Route path="/leads" element={<CRMBoard />} />
             <Route path="/companies" element={<CompaniesPage />} />
+            <Route path="/events" element={<EventsPage />} />
             <Route path="/hiring" element={<HiringBoard />} />
           </Routes>
         </Box>
@@ -88,6 +91,7 @@ function AppContent() {
         overflow: 'auto'
       }}>
         <Routes>
+          <Route path="/events/:eventId" element={<EventDetailPage />} />
           <Route path="/companies/:companyId" element={<CompanyDetailPage />} />
           <Route path="/leads/:leadId" element={<LeadDetailPage />} />
           <Route path="/team" element={<TeamManagement />} />
