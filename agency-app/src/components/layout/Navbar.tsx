@@ -24,6 +24,7 @@ import {
   Settings,
   Campaign,
   Assessment,
+  PersonAdd,
 } from '@mui/icons-material';
 import { useAuth } from '../../contexts/AuthContext';
 import { useLocation, Link } from 'react-router-dom';
@@ -213,6 +214,7 @@ const Navbar: React.FC = () => {
       items.push({ label: 'MONITORING', path: '/monitoring', icon: Analytics });
     }
 
+
     // Writers see their specific dashboard
     if (userProfile.role === 'Writer') {
       items.push({ label: 'MY TASKS', path: '/writer', icon: Assignment });
@@ -261,6 +263,17 @@ const Navbar: React.FC = () => {
               }}
             />
           </NavButton>
+
+          {/* Hiring Pipeline Button - Left Side */}
+          {(userProfile?.role === 'Manager' || userProfile?.role === 'CEO') && (
+            <NavButton
+              isActive={location.pathname === '/hiring'}
+              startIcon={<PersonAdd />}
+              {...({ component: Link, to: '/hiring' } as any)}
+            >
+              HIRING
+            </NavButton>
+          )}
         </Box>
 
         {/* Spacer to push nav items to the right */}

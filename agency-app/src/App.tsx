@@ -25,6 +25,7 @@ import KPIsPage from './pages/analytics/KPIsPage';
 // Components
 import Navbar from './components/layout/Navbar';
 import CRMBoard from './components/features/crm/CRMBoard';
+import HiringBoard from './components/features/hiring/HiringBoard';
 
 // Component to handle different layouts based on route
 function AppContent() {
@@ -43,7 +44,7 @@ function AppContent() {
   }, [location.pathname]);
   
   // Routes that need full-height fixed layout (CRM board, Companies)
-  const fixedHeightRoutes = ['/', '/crm', '/leads', '/companies'];
+  const fixedHeightRoutes = ['/', '/crm', '/leads', '/companies', '/hiring'];
   const isFixedHeightRoute = fixedHeightRoutes.includes(location.pathname);
 
   if (isFixedHeightRoute) {
@@ -67,6 +68,7 @@ function AppContent() {
             <Route path="/crm" element={<CRMBoard />} />
             <Route path="/leads" element={<CRMBoard />} />
             <Route path="/companies" element={<CompaniesPage />} />
+            <Route path="/hiring" element={<HiringBoard />} />
           </Routes>
         </Box>
       </Box>

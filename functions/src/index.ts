@@ -158,3 +158,7 @@ export {generateBlogAuditCloud} from "./blogAudit/blogAuditFunction";
 
 // Export website discovery function
 export {discoverCompanyWebsiteCloud} from "./search/discoverCompanyWebsite";
+
+// Export hiring pipeline functions
+export {webflowHiringWebhook} from "./hiring/webflowWebhook";
+export {importApplicantsCloud} from "./hiring/importApplicants";
