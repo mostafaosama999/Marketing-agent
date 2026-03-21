@@ -21,18 +21,53 @@ interface EventsFiltersProps {
   search: string;
   statusFilter: EventStatus | 'all';
   typeFilter: EventType | 'all';
+  dateFrom: string;
+  dateTo: string;
   onSearchChange: (value: string) => void;
   onStatusChange: (value: EventStatus | 'all') => void;
   onTypeChange: (value: EventType | 'all') => void;
+  onDateFromChange: (value: string) => void;
+  onDateToChange: (value: string) => void;
 }
+
+const selectSx = {
+  borderRadius: 2,
+  bgcolor: 'white',
+  fontSize: '14px',
+  '& .MuiOutlinedInput-notchedOutline': { borderColor: '#e2e8f0' },
+  '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#667eea' },
+  '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#667eea' },
+};
+
+const inputLabelSx = {
+  fontSize: '14px',
+  '&.Mui-focused': { color: '#667eea' },
+};
+
+const dateFieldSx = {
+  minWidth: 150,
+  '& .MuiOutlinedInput-root': {
+    borderRadius: 2,
+    bgcolor: 'white',
+    fontSize: '14px',
+    '& fieldset': { borderColor: '#e2e8f0' },
+    '&:hover fieldset': { borderColor: '#667eea' },
+    '&.Mui-focused fieldset': { borderColor: '#667eea' },
+  },
+  '& .MuiInputLabel-root': inputLabelSx,
+};
 
 export const EventsFilters: React.FC<EventsFiltersProps> = ({
   search,
   statusFilter,
   typeFilter,
+  dateFrom,
+  dateTo,
   onSearchChange,
   onStatusChange,
   onTypeChange,
+  onDateFromChange,
+  onDateToChange,
 }) => {
   return (
     <Box
@@ -56,51 +91,25 @@ export const EventsFilters: React.FC<EventsFiltersProps> = ({
           ),
         }}
         sx={{
-          minWidth: 260,
+          minWidth: 220,
           '& .MuiOutlinedInput-root': {
             borderRadius: 2,
             bgcolor: 'white',
             fontSize: '14px',
-            '& fieldset': {
-              borderColor: '#e2e8f0',
-            },
-            '&:hover fieldset': {
-              borderColor: '#667eea',
-            },
-            '&.Mui-focused fieldset': {
-              borderColor: '#667eea',
-            },
+            '& fieldset': { borderColor: '#e2e8f0' },
+            '&:hover fieldset': { borderColor: '#667eea' },
+            '&.Mui-focused fieldset': { borderColor: '#667eea' },
           },
         }}
       />
 
-      <FormControl size="small" sx={{ minWidth: 160 }}>
-        <InputLabel
-          sx={{
-            fontSize: '14px',
-            '&.Mui-focused': { color: '#667eea' },
-          }}
-        >
-          Status
-        </InputLabel>
+      <FormControl size="small" sx={{ minWidth: 150 }}>
+        <InputLabel sx={inputLabelSx}>Status</InputLabel>
         <Select
           value={statusFilter}
           label="Status"
           onChange={(e) => onStatusChange(e.target.value as EventStatus | 'all')}
-          sx={{
-            borderRadius: 2,
-            bgcolor: 'white',
-            fontSize: '14px',
-            '& .MuiOutlinedInput-notchedOutline': {
-              borderColor: '#e2e8f0',
-            },
-            '&:hover .MuiOutlinedInput-notchedOutline': {
-              borderColor: '#667eea',
-            },
-            '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-              borderColor: '#667eea',
-            },
-          }}
+          sx={selectSx}
         >
           <MenuItem value="all">All Statuses</MenuItem>
           {(Object.keys(EVENT_STATUS_LABELS) as EventStatus[]).map((status) => (
@@ -111,33 +120,13 @@ export const EventsFilters: React.FC<EventsFiltersProps> = ({
         </Select>
       </FormControl>
 
-      <FormControl size="small" sx={{ minWidth: 160 }}>
-        <InputLabel
-          sx={{
-            fontSize: '14px',
-            '&.Mui-focused': { color: '#667eea' },
-          }}
-        >
-          Type
-        </InputLabel>
+      <FormControl size="small" sx={{ minWidth: 140 }}>
+        <InputLabel sx={inputLabelSx}>Type</InputLabel>
         <Select
           value={typeFilter}
           label="Type"
           onChange={(e) => onTypeChange(e.target.value as EventType | 'all')}
-          sx={{
-            borderRadius: 2,
-            bgcolor: 'white',
-            fontSize: '14px',
-            '& .MuiOutlinedInput-notchedOutline': {
-              borderColor: '#e2e8f0',
-            },
-            '&:hover .MuiOutlinedInput-notchedOutline': {
-              borderColor: '#667eea',
-            },
-            '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-              borderColor: '#667eea',
-            },
-          }}
+          sx={selectSx}
         >
           <MenuItem value="all">All Types</MenuItem>
           {(Object.keys(EVENT_TYPE_LABELS) as EventType[]).map((type) => (
@@ -147,6 +136,26 @@ export const EventsFilters: React.FC<EventsFiltersProps> = ({
           ))}
         </Select>
       </FormControl>
+
+      <TextField
+        size="small"
+        label="From"
+        type="date"
+        value={dateFrom}
+        onChange={(e) => onDateFromChange(e.target.value)}
+        InputLabelProps={{ shrink: true }}
+        sx={dateFieldSx}
+      />
+
+      <TextField
+        size="small"
+        label="To"
+        type="date"
+        value={dateTo}
+        onChange={(e) => onDateToChange(e.target.value)}
+        InputLabelProps={{ shrink: true }}
+        sx={dateFieldSx}
+      />
     </Box>
   );
 };
