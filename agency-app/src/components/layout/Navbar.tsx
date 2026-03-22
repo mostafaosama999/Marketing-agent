@@ -31,7 +31,7 @@ import {
 import { useAuth } from '../../contexts/AuthContext';
 import { useLocation, Link } from 'react-router-dom';
 import NotificationBell from './NotificationBell';
-import { subscribeToApplicants, subscribeToLastSeenHiring } from '../../services/api/applicants';
+import { subscribeToApplicants, subscribeToViewedApplicantIds } from '../../services/api/applicants';
 
 // Styled Components for Modern Design
 const ModernAppBar = styled(AppBar)(({ theme }) => ({
@@ -179,19 +179,16 @@ const Navbar: React.FC = () => {
   useEffect(() => {
     if (!user?.uid || !(userProfile?.role === 'Manager' || userProfile?.role === 'CEO')) return;
 
-    let lastSeen: Date | null = null;
+    let viewedIds: Set<string> = new Set();
     const unsubs: (() => void)[] = [];
 
-    const unsubLastSeen = subscribeToLastSeenHiring(user.uid, (date) => {
-      lastSeen = date;
+    const unsubViewed = subscribeToViewedApplicantIds(user.uid, (ids) => {
+      viewedIds = ids;
     });
-    unsubs.push(unsubLastSeen);
+    unsubs.push(unsubViewed);
 
     const unsubApplicants = subscribeToApplicants((applicants) => {
-      const count = applicants.filter((a) => {
-        if (!lastSeen) return true; // never visited = all are new
-        return a.createdAt > lastSeen;
-      }).length;
+      const count = applicants.filter((a) => !viewedIds.has(a.id)).length;
       setUnseenHiringCount(count);
     });
     unsubs.push(unsubApplicants);

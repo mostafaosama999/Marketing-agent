@@ -11,6 +11,7 @@ import {
   setDoc,
   getDoc,
   serverTimestamp,
+  arrayUnion,
   Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '../firebase/firestore';
@@ -100,34 +101,26 @@ export async function deleteApplicant(id: string): Promise<void> {
   await deleteDoc(ref);
 }
 
-// --- Unseen applicants tracking ---
+// --- Unseen applicants tracking (per-applicant) ---
 
-export async function getLastSeenHiring(userId: string): Promise<Date | null> {
-  const ref = doc(db, 'userPreferences', userId);
-  const snap = await getDoc(ref);
-  if (!snap.exists()) return null;
-  const ts = snap.data()?.lastSeenHiringAt;
-  return safeToDate(ts) || null;
-}
-
-export function subscribeToLastSeenHiring(
+export function subscribeToViewedApplicantIds(
   userId: string,
-  callback: (lastSeen: Date | null) => void
+  callback: (viewedIds: Set<string>) => void
 ): Unsubscribe {
   const ref = doc(db, 'userPreferences', userId);
   return onSnapshot(ref, (snap) => {
     if (!snap.exists()) {
-      callback(null);
+      callback(new Set());
       return;
     }
-    const ts = snap.data()?.lastSeenHiringAt;
-    callback(safeToDate(ts) || null);
+    const ids: string[] = snap.data()?.viewedApplicantIds || [];
+    callback(new Set(ids));
   });
 }
 
-export async function markHiringSeen(userId: string): Promise<void> {
+export async function markApplicantViewed(userId: string, applicantId: string): Promise<void> {
   const ref = doc(db, 'userPreferences', userId);
-  await setDoc(ref, { lastSeenHiringAt: serverTimestamp() }, { merge: true });
+  await setDoc(ref, { viewedApplicantIds: arrayUnion(applicantId) }, { merge: true });
 }
 
 export async function createApplicant(

@@ -6,7 +6,7 @@ import { ApplicantCard } from './ApplicantCard';
 interface ApplicantColumnProps {
   stage: HiringStage;
   applicants: Applicant[];
-  lastSeenAt: Date | null;
+  viewedIds: Set<string>;
   onDragOver: (e: React.DragEvent) => void;
   onDrop: (e: React.DragEvent, stageId: string) => void;
   onDragStart: (e: React.DragEvent, applicant: Applicant) => void;
@@ -17,7 +17,7 @@ interface ApplicantColumnProps {
 export const ApplicantColumn: React.FC<ApplicantColumnProps> = ({
   stage,
   applicants,
-  lastSeenAt,
+  viewedIds,
   onDragOver,
   onDrop,
   onDragStart,
@@ -107,7 +107,7 @@ export const ApplicantColumn: React.FC<ApplicantColumnProps> = ({
           <ApplicantCard
             key={applicant.id}
             applicant={applicant}
-            isNew={!lastSeenAt || applicant.createdAt > lastSeenAt}
+            isNew={!viewedIds.has(applicant.id)}
             onDragStart={onDragStart}
             onClick={onApplicantClick}
           />
