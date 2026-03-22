@@ -19,6 +19,15 @@ import { Applicant, ApplicantFormData, ApplicantStatus } from '../../types/appli
 
 const APPLICANTS_COLLECTION = 'applicants';
 
+function normalizeUrl(url: string): string {
+  if (!url) return '';
+  const trimmed = url.trim();
+  if (trimmed && !trimmed.startsWith('http://') && !trimmed.startsWith('https://')) {
+    return 'https://' + trimmed;
+  }
+  return trimmed;
+}
+
 function safeToDate(value: any): Date | undefined {
   if (!value) return undefined;
   if (value instanceof Date) return value;
@@ -36,7 +45,7 @@ function convertToApplicant(id: string, data: any): Applicant {
     name: data.name || '',
     email: data.email || '',
     phone: data.phone || '',
-    linkedInUrl: data.linkedInUrl || '',
+    linkedInUrl: normalizeUrl(data.linkedInUrl || ''),
     bio: data.bio || '',
     education: data.education || '',
     sex: data.sex || '',
