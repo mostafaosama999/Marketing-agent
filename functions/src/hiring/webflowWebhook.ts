@@ -28,13 +28,6 @@ function verifyWebflowSignature(
     .update(message)
     .digest("hex");
 
-  functions.logger.info("Signature debug", {
-    expectedHash: expected.substring(0, 16) + "...",
-    receivedHash: signature.substring(0, 16) + "...",
-    match: expected === signature,
-    timestampAge: age,
-  });
-
   try {
     return crypto.timingSafeEqual(
       Buffer.from(expected, "hex"),
@@ -86,11 +79,6 @@ export const webflowHiringWebhook = functions
       const rawBody = (req as any).rawBody?.toString("utf8") || JSON.stringify(req.body);
 
       const isValid = verifyWebflowSignature(rawBody, signature, timestamp, webhookSecret);
-      functions.logger.info("Webhook signature check", {
-        isValid,
-        hasRawBody: !!(req as any).rawBody,
-        bodyLength: rawBody.length,
-      });
     }
 
     try {
