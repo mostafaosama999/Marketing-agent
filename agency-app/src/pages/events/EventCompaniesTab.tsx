@@ -1,5 +1,5 @@
 // src/pages/events/EventCompaniesTab.tsx
-import React, { useState } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Box,
   Button,
@@ -18,6 +18,7 @@ import {
   TableHead,
   TableRow,
   TextField,
+  Tooltip,
   Typography,
   FormControlLabel,
   Switch,
@@ -29,7 +30,11 @@ import {
   HelpOutline as HelpIcon,
   Delete as DeleteIcon,
   Edit as EditIcon,
+  Link as LinkIcon,
+  LinkOff as LinkOffIcon,
 } from '@mui/icons-material';
+import { collection, onSnapshot } from 'firebase/firestore';
+import { db } from '../../services/firebase/firestore';
 import {
   EventCompany,
   EventCompanyFormData,
@@ -106,6 +111,41 @@ export const EventCompaniesTab: React.FC<EventCompaniesTabProps> = ({
   const [formData, setFormData] = useState<EventCompanyFormData>({ ...emptyForm });
   const [saving, setSaving] = useState(false);
 
+  // Fetch entities for matching
+  const [entities, setEntities] = useState<{ id: string; name: string }[]>([]);
+  useEffect(() => {
+    const unsubscribe = onSnapshot(collection(db, 'entities'), (snapshot) => {
+      const data = snapshot.docs.map((doc) => ({
+        id: doc.id,
+        name: (doc.data().name || '') as string,
+      }));
+      setEntities(data);
+    });
+    return () => unsubscribe();
+  }, []);
+
+  // Build a map of lowercase entity names to entity IDs for matching
+  const entityMatchMap = useMemo(() => {
+    const map = new Map<string, { id: string; name: string }>();
+    for (const entity of entities) {
+      if (entity.name) {
+        map.set(entity.name.toLowerCase().trim(), entity);
+      }
+    }
+    return map;
+  }, [entities]);
+
+  const findEntityMatch = (companyName: string): { id: string; name: string } | null => {
+    const normalized = companyName.toLowerCase().trim();
+    // Exact match
+    if (entityMatchMap.has(normalized)) return entityMatchMap.get(normalized)!;
+    // Partial match (entity name contained in company name or vice versa)
+    for (const [key, entity] of Array.from(entityMatchMap.entries())) {
+      if (normalized.includes(key) || key.includes(normalized)) return entity;
+    }
+    return null;
+  };
+
   const handleOpenDialog = () => {
     setFormData({ ...emptyForm });
     setDialogOpen(true);
@@ -171,13 +211,14 @@ export const EventCompaniesTab: React.FC<EventCompaniesTabProps> = ({
               <TableCell sx={{ fontWeight: 700, color: '#475569', fontSize: '13px' }}>Funding</TableCell>
               <TableCell sx={{ fontWeight: 700, color: '#475569', fontSize: '13px' }}>CWP</TableCell>
               <TableCell sx={{ fontWeight: 700, color: '#475569', fontSize: '13px' }}>Priority</TableCell>
+              <TableCell sx={{ fontWeight: 700, color: '#475569', fontSize: '13px' }}>In CRM</TableCell>
               <TableCell sx={{ fontWeight: 700, color: '#475569', fontSize: '13px' }} align="right">Actions</TableCell>
             </TableRow>
           </TableHead>
           <TableBody>
             {companies.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={8} align="center" sx={{ py: 6 }}>
+                <TableCell colSpan={9} align="center" sx={{ py: 6 }}>
                   <Typography variant="body2" sx={{ color: '#94a3b8' }}>
                     No companies added yet
                   </Typography>
@@ -201,7 +242,19 @@ export const EventCompaniesTab: React.FC<EventCompaniesTabProps> = ({
                         {company.companyName}
                       </Typography>
                       {company.companyWebsite && (
-                        <Typography variant="caption" sx={{ color: '#94a3b8' }}>
+                        <Typography
+                          variant="caption"
+                          component="a"
+                          href={company.companyWebsite.startsWith('http') ? company.companyWebsite : `https://${company.companyWebsite}`}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          sx={{
+                            color: '#667eea',
+                            textDecoration: 'none',
+                            display: 'block',
+                            '&:hover': { textDecoration: 'underline' },
+                          }}
+                        >
                           {company.companyWebsite}
                         </Typography>
                       )}
@@ -264,6 +317,48 @@ export const EventCompaniesTab: React.FC<EventCompaniesTabProps> = ({
                           }}
                         />
                       )}
+                    </TableCell>
+                    <TableCell>
+                      {(() => {
+                        const match = company.entityId
+                          ? { id: company.entityId, name: company.companyName }
+                          : findEntityMatch(company.companyName);
+                        if (match) {
+                          return (
+                            <Tooltip title={`Matched: ${match.name}`}>
+                              <Chip
+                                icon={<LinkIcon sx={{ fontSize: 14 }} />}
+                                label="Linked"
+                                size="small"
+                                component="a"
+                                href={`/companies/${match.id}`}
+                                clickable
+                                sx={{
+                                  bgcolor: '#dcfce7',
+                                  color: '#166534',
+                                  fontWeight: 600,
+                                  fontSize: '12px',
+                                  '& .MuiChip-icon': { color: '#166534' },
+                                }}
+                              />
+                            </Tooltip>
+                          );
+                        }
+                        return (
+                          <Chip
+                            icon={<LinkOffIcon sx={{ fontSize: 14 }} />}
+                            label="Not in CRM"
+                            size="small"
+                            sx={{
+                              bgcolor: '#f1f5f9',
+                              color: '#94a3b8',
+                              fontWeight: 500,
+                              fontSize: '12px',
+                              '& .MuiChip-icon': { color: '#94a3b8' },
+                            }}
+                          />
+                        );
+                      })()}
                     </TableCell>
                     <TableCell align="right">
                       <IconButton
