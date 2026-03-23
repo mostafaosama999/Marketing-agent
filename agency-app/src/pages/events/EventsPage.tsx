@@ -1,5 +1,6 @@
 // src/pages/events/EventsPage.tsx
-import React, { useState, useMemo } from 'react';
+import React, { useState, useMemo, useCallback } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import {
   Box,
   Typography,
@@ -33,6 +34,7 @@ import { EventSummaryCards } from './EventSummaryCards';
 import { EventsFilters } from './EventsFilters';
 import { EventsTable } from './EventsTable';
 import {
+  Event,
   EventStatus,
   EventType,
   EVENT_TYPE_LABELS,
@@ -71,18 +73,24 @@ const getDefaultFormData = (category: EventCategory) => ({
 });
 
 export const EventsPage: React.FC = () => {
-  // Tab state
-  const [tabValue, setTabValue] = useState(0);
+  // Tab state synced with URL
+  const [searchParams, setSearchParams] = useSearchParams();
+  const tabParam = searchParams.get('tab');
+  const tabValue = tabParam === 'educational' ? 1 : 0;
   const activeCategory: EventCategory = tabValue === 0 ? 'client' : 'educational';
 
-  const { events, loading, addEvent } = useEvents(activeCategory);
+  const { events, loading, addEvent, updateEvent } = useEvents(activeCategory);
+
+  const handleUpdatePrice = useCallback(async (eventId: string, pricing: Event['pricing']) => {
+    await updateEvent(eventId, { pricing });
+  }, [updateEvent]);
 
   // Filter state
   const [search, setSearch] = useState('');
   const [statusFilter, setStatusFilter] = useState<EventStatus | 'all'>('all');
   const [typeFilter, setTypeFilter] = useState<EventType | 'all'>('all');
-  const [dateFrom, setDateFrom] = useState('');
-  const [dateTo, setDateTo] = useState('');
+  const [monthFilter, setMonthFilter] = useState<number | 'all'>('all');
+  const [hideNoIcp, setHideNoIcp] = useState(false);
   const [tierFilter, setTierFilter] = useState<EducationalTier | 'all'>('all');
 
   // Add dialog state
@@ -112,12 +120,16 @@ export const EventsPage: React.FC = () => {
       filtered = filtered.filter((e) => e.eventType === typeFilter);
     }
 
-    if (dateFrom) {
-      filtered = filtered.filter((e) => e.startDate >= dateFrom);
+    if (monthFilter !== 'all') {
+      filtered = filtered.filter((e) => {
+        const date = new Date(e.startDate);
+        return date.getMonth() + 1 === monthFilter;
+      });
     }
 
-    if (dateTo) {
-      filtered = filtered.filter((e) => e.startDate <= dateTo);
+
+    if (hideNoIcp && activeCategory === 'client') {
+      filtered = filtered.filter((e) => (e.icpSummary?.totalIcpCompanies || 0) > 0);
     }
 
     if (tierFilter !== 'all' && activeCategory === 'educational') {
@@ -125,7 +137,7 @@ export const EventsPage: React.FC = () => {
     }
 
     return filtered;
-  }, [events, search, statusFilter, typeFilter, dateFrom, dateTo, tierFilter, activeCategory]);
+  }, [events, search, statusFilter, typeFilter, monthFilter, hideNoIcp, tierFilter, activeCategory]);
 
   const handleAddTag = () => {
     const tag = tagInput.trim().toLowerCase();
@@ -190,16 +202,17 @@ export const EventsPage: React.FC = () => {
     }
   };
 
-  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
-    setTabValue(newValue);
+  const handleTabChange = useCallback((_event: React.SyntheticEvent, newValue: number) => {
+    const tab = newValue === 1 ? 'educational' : 'client';
+    setSearchParams({ tab }, { replace: true });
     // Reset filters when switching tabs
     setSearch('');
     setStatusFilter('all');
     setTypeFilter('all');
-    setDateFrom('');
-    setDateTo('');
+    setMonthFilter('all');
+    setHideNoIcp(false);
     setTierFilter('all');
-  };
+  }, [setSearchParams]);
 
   if (loading) {
     return (
@@ -325,13 +338,13 @@ export const EventsPage: React.FC = () => {
               search={search}
               statusFilter={statusFilter}
               typeFilter={typeFilter}
-              dateFrom={dateFrom}
-              dateTo={dateTo}
+              monthFilter={monthFilter}
+              hideNoIcp={hideNoIcp}
               onSearchChange={setSearch}
               onStatusChange={setStatusFilter}
               onTypeChange={setTypeFilter}
-              onDateFromChange={setDateFrom}
-              onDateToChange={setDateTo}
+              onMonthChange={setMonthFilter}
+              onHideNoIcpChange={setHideNoIcp}
               category={activeCategory}
               tierFilter={tierFilter}
               onTierChange={setTierFilter}
@@ -346,7 +359,7 @@ export const EventsPage: React.FC = () => {
 
         {/* Table */}
         <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          <EventsTable events={filteredEvents} category={activeCategory} />
+          <EventsTable events={filteredEvents} category={activeCategory} onUpdatePrice={handleUpdatePrice} />
         </Box>
 
         {/* Add Event Dialog */}

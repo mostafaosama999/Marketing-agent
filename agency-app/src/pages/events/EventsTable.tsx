@@ -13,8 +13,12 @@ import {
   TableSortLabel,
   Typography,
   Chip,
+  IconButton,
+  TextField,
+  InputAdornment,
+  ClickAwayListener,
 } from '@mui/material';
-import { LocationOn } from '@mui/icons-material';
+import { LocationOn, Edit as EditIcon, Check as CheckIcon, Close as CloseIcon } from '@mui/icons-material';
 import {
   Event,
   EventCategory,
@@ -31,6 +35,7 @@ import {
 interface EventsTableProps {
   events: Event[];
   category?: EventCategory;
+  onUpdatePrice?: (eventId: string, pricing: Event['pricing']) => Promise<void>;
 }
 
 type SortField = 'name' | 'startDate' | 'location' | 'eventType' | 'eventScore' | 'status' | 'icpCompanies' | 'price' | 'tier' | 'organiser';
@@ -76,12 +81,53 @@ function formatPrice(pricing: Event['pricing']): string {
   return `${symbol}${pricing.ticketPrice.toLocaleString()}`;
 }
 
-export const EventsTable: React.FC<EventsTableProps> = ({ events, category = 'client' }) => {
+export const EventsTable: React.FC<EventsTableProps> = ({ events, category = 'client', onUpdatePrice }) => {
   const navigate = useNavigate();
   const [sortField, setSortField] = useState<SortField>('startDate');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
+
+  // Inline price editing state
+  const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
+  const [editPriceValue, setEditPriceValue] = useState<string>('');
+  const [editPriceCurrency, setEditPriceCurrency] = useState<string>('GBP');
+
+  const startPriceEdit = (e: React.MouseEvent, event: Event) => {
+    e.stopPropagation();
+    setEditingPriceId(event.id);
+    if (event.pricing.ticketStatus === 'free') {
+      setEditPriceValue('0');
+    } else {
+      setEditPriceValue(event.pricing.ticketPrice?.toString() || '');
+    }
+    setEditPriceCurrency(event.pricing.currency || 'GBP');
+  };
+
+  const cancelPriceEdit = (e?: React.MouseEvent) => {
+    e?.stopPropagation();
+    setEditingPriceId(null);
+    setEditPriceValue('');
+  };
+
+  const savePriceEdit = async (e: React.MouseEvent | React.KeyboardEvent, event: Event) => {
+    e.stopPropagation();
+    if (!onUpdatePrice) return;
+
+    const numValue = parseFloat(editPriceValue);
+    const isFree = editPriceValue === '' || editPriceValue === '0';
+
+    const updatedPricing: Event['pricing'] = {
+      ...event.pricing,
+      ticketPrice: isFree ? null : numValue,
+      ticketStatus: isFree ? 'free' : (event.pricing.ticketStatus === 'free' ? 'available' : event.pricing.ticketStatus),
+      currency: editPriceCurrency,
+    };
+
+    await onUpdatePrice(event.id, updatedPricing);
+    setEditingPriceId(null);
+    setEditPriceValue('');
+  };
 
   const handleSort = (field: SortField) => {
     if (sortField === field) {
@@ -283,10 +329,99 @@ export const EventsTable: React.FC<EventsTableProps> = ({ events, category = 'cl
           </Typography>
         );
       case 'price':
+        if (editingPriceId === event.id) {
+          const symbol = editPriceCurrency === 'GBP' ? '\u00A3' : editPriceCurrency === 'EUR' ? '\u20AC' : '$';
+          return (
+            <ClickAwayListener onClickAway={() => cancelPriceEdit()}>
+              <Box
+                sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
+                onClick={(e) => e.stopPropagation()}
+              >
+                <TextField
+                  autoFocus
+                  size="small"
+                  type="number"
+                  value={editPriceValue}
+                  onChange={(e) => setEditPriceValue(e.target.value)}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') savePriceEdit(e, event);
+                    if (e.key === 'Escape') cancelPriceEdit();
+                  }}
+                  placeholder="0 = Free"
+                  slotProps={{
+                    input: {
+                      startAdornment: (
+                        <InputAdornment position="start">
+                          <Typography sx={{ fontSize: '13px', color: '#64748b' }}>{symbol}</Typography>
+                        </InputAdornment>
+                      ),
+                    },
+                  }}
+                  sx={{
+                    width: 110,
+                    '& .MuiOutlinedInput-root': {
+                      height: 30,
+                      fontSize: '13px',
+                      borderRadius: 1.5,
+                      '& fieldset': { borderColor: '#667eea' },
+                      '&:hover fieldset': { borderColor: '#667eea' },
+                      '&.Mui-focused fieldset': { borderColor: '#667eea' },
+                    },
+                    '& input[type=number]': {
+                      MozAppearance: 'textfield',
+                    },
+                    '& input[type=number]::-webkit-outer-spin-button, & input[type=number]::-webkit-inner-spin-button': {
+                      WebkitAppearance: 'none',
+                    },
+                  }}
+                />
+                <IconButton
+                  size="small"
+                  onClick={(e) => savePriceEdit(e, event)}
+                  sx={{ color: '#16a34a', p: 0.25 }}
+                >
+                  <CheckIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+                <IconButton
+                  size="small"
+                  onClick={(e) => cancelPriceEdit(e)}
+                  sx={{ color: '#94a3b8', p: 0.25 }}
+                >
+                  <CloseIcon sx={{ fontSize: 16 }} />
+                </IconButton>
+              </Box>
+            </ClickAwayListener>
+          );
+        }
         return (
-          <Typography variant="body2" sx={{ color: '#475569', fontSize: '13px' }}>
-            {formatPrice(event.pricing)}
-          </Typography>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 0.5,
+              '&:hover .price-edit-btn': { opacity: 1 },
+            }}
+          >
+            <Typography variant="body2" sx={{ color: '#475569', fontSize: '13px' }}>
+              {formatPrice(event.pricing)}
+            </Typography>
+            {onUpdatePrice && (
+              <IconButton
+                className="price-edit-btn"
+                size="small"
+                onClick={(e) => startPriceEdit(e, event)}
+                sx={{
+                  opacity: 0,
+                  transition: 'opacity 0.15s',
+                  p: 0.25,
+                  color: '#94a3b8',
+                  '&:hover': { color: '#667eea', bgcolor: '#667eea10' },
+                }}
+              >
+                <EditIcon sx={{ fontSize: 14 }} />
+              </IconButton>
+            )}
+          </Box>
         );
       default:
         return null;

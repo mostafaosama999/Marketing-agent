@@ -32,6 +32,7 @@ import { EventOverviewTab } from './EventOverviewTab';
 import { EventCompaniesTab } from './EventCompaniesTab';
 import { EventLeadsTab } from './EventLeadsTab';
 import { EventNotesTab } from './EventNotesTab';
+import { OrganiserInsightsSection } from './OrganiserInsightsSection';
 
 const modernTheme = createTheme({
   typography: {
@@ -54,8 +55,10 @@ export const EventDetailPage: React.FC = () => {
     loading,
     companiesLoading,
     leadsLoading,
+    researching,
     error,
     updateEvent,
+    runOrganizerResearch,
     addCompany,
     updateCompany,
     deleteCompany,
@@ -432,6 +435,15 @@ export const EventDetailPage: React.FC = () => {
                     </Box>
                   </Box>
                 )}
+
+                {/* Organizer Insights — shown for both client and educational events */}
+                <Box sx={{ px: 4, pb: 4 }}>
+                  <OrganiserInsightsSection
+                    event={event}
+                    onResearch={runOrganizerResearch}
+                    researching={researching}
+                  />
+                </Box>
               </>
             )}
             {!isEducational && tabNames[tabValue] === 'companies' && (

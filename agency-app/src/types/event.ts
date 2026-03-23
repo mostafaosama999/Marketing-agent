@@ -69,6 +69,49 @@ export interface OutreachEntry {
   notes?: string;
 }
 
+// ── Organizer Research ──
+
+export type CredibilityLevel = 'high' | 'medium' | 'low' | 'unknown';
+export type ReputationRating = 'excellent' | 'good' | 'mixed' | 'poor' | 'unknown';
+export type RelevanceLevel = 'high' | 'medium' | 'low';
+
+export interface OrganizerResearch {
+  organizerName: string;
+  summary: string;
+
+  credibility: {
+    score: CredibilityLevel;
+    reasoning: string;
+    yearsActive?: number;
+    pastEditions?: number;
+  };
+
+  reputation: {
+    rating: ReputationRating;
+    highlights: string[];
+    concerns: string[];
+  };
+
+  relevanceToCodeContent: {
+    score: RelevanceLevel;
+    reasoning: string;
+    targetAudience: string;
+  };
+
+  notableSpeakers?: string[];
+  typicalAttendeeProfile?: string;
+
+  socialPresence: {
+    website?: string;
+    linkedin?: string;
+    twitter?: string;
+    followersEstimate?: string;
+  };
+
+  researchedAt: string;
+  sources: string[];
+}
+
 // ── Main Event Document ──
 
 export interface Event {
@@ -116,8 +159,10 @@ export interface Event {
   notes?: string;
   recommendedActions?: string[];
 
-  // ── Educational event fields (only populated when category === 'educational') ──
+  // Organiser — available for both categories (client events derive from event name or companies)
   organiser?: string;
+
+  // ── Educational event fields (only populated when category === 'educational') ──
   audienceDescription?: string;
   gating?: string;
   keyTopics?: string[];
@@ -125,6 +170,9 @@ export interface Event {
   collaborationPotential?: string;
   tier?: EducationalTier;
   educationalScoringBreakdown?: EducationalScoringBreakdown;
+
+  // Organizer research (both categories)
+  organizerResearch?: OrganizerResearch;
 
   // Timestamps
   createdAt: string;

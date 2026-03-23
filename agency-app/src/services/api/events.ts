@@ -47,8 +47,10 @@ function convertToEvent(id: string, data: any): Event {
     icpSummary: data.icpSummary || undefined,
     notes: data.notes || '',
     recommendedActions: data.recommendedActions || [],
-    // Educational fields
+    // Organiser (both categories) + research
     organiser: data.organiser || undefined,
+    organizerResearch: data.organizerResearch || undefined,
+    // Educational fields
     audienceDescription: data.audienceDescription || undefined,
     gating: data.gating || undefined,
     keyTopics: data.keyTopics || undefined,

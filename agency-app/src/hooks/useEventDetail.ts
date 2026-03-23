@@ -9,6 +9,7 @@ import {
 } from '../types/event';
 import { eventsService } from '../services/api/events';
 import { eventSubcollectionsService } from '../services/api/eventSubcollections';
+import { researchOrganizer } from '../services/api/organizerResearch';
 
 interface UseEventDetailReturn {
   event: Event | null;
@@ -17,9 +18,11 @@ interface UseEventDetailReturn {
   loading: boolean;
   companiesLoading: boolean;
   leadsLoading: boolean;
+  researching: boolean;
   error: string | null;
 
   updateEvent: (updates: Partial<Event>) => Promise<void>;
+  runOrganizerResearch: () => Promise<void>;
 
   addCompany: (data: EventCompanyFormData) => Promise<string | null>;
   updateCompany: (companyId: string, updates: Partial<EventCompany>) => Promise<void>;
@@ -37,6 +40,7 @@ export const useEventDetail = (eventId: string | undefined): UseEventDetailRetur
   const [loading, setLoading] = useState(true);
   const [companiesLoading, setCompaniesLoading] = useState(true);
   const [leadsLoading, setLeadsLoading] = useState(true);
+  const [researching, setResearching] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   // Load event
@@ -173,6 +177,29 @@ export const useEventDetail = (eventId: string | undefined): UseEventDetailRetur
     );
   }, [eventId, withErrorHandling]);
 
+  const runOrganizerResearch = useCallback(async (): Promise<void> => {
+    if (!eventId || !event) return;
+    setResearching(true);
+    setError(null);
+    try {
+      const research = await researchOrganizer({
+        eventId,
+        eventName: event.name,
+        organizerName: event.organiser || undefined,
+        eventWebsite: event.website || undefined,
+        eventType: event.eventType,
+        eventCategory: event.category,
+      });
+      // Update local state with research results
+      setEvent((prev) => prev ? { ...prev, organizerResearch: research } : prev);
+    } catch (err) {
+      console.error('Error running organizer research:', err);
+      setError(err instanceof Error ? err.message : 'Failed to research organizer');
+    } finally {
+      setResearching(false);
+    }
+  }, [eventId, event]);
+
   return {
     event,
     companies,
@@ -180,8 +207,10 @@ export const useEventDetail = (eventId: string | undefined): UseEventDetailRetur
     loading,
     companiesLoading,
     leadsLoading,
+    researching,
     error,
     updateEvent,
+    runOrganizerResearch,
     addCompany,
     updateCompany,
     deleteCompany,
