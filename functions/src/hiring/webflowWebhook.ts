@@ -1,9 +1,12 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import * as crypto from "crypto";
+import {appendToTab} from "../utils/sheetsUtils";
 
 const db = admin.firestore();
 const APPLICANTS_COLLECTION = "applicants";
+const HIRING_SHEET_ID = "1rs-yLkcHUcL9hNBNAdtOxlkiORlqDAuvLG6kqtFOtlY";
+const HIRING_SHEET_TAB = "Sheet1";
 
 /**
  * Verify Webflow webhook signature (HMAC-SHA256).
@@ -108,14 +111,28 @@ export const webflowHiringWebhook = functions
       }
 
       // Check for duplicate by email
-      const existing = await db.collection(APPLICANTS_COLLECTION)
+      const existingByEmail = await db.collection(APPLICANTS_COLLECTION)
         .where("email", "==", email)
         .limit(1)
         .get();
 
-      if (!existing.empty) {
-        res.status(200).json({skipped: true, reason: "Applicant already exists", email});
+      if (!existingByEmail.empty) {
+        res.status(200).json({skipped: true, reason: "Applicant already exists (email match)", email});
         return;
+      }
+
+      // Also check by Webflow submission ID (prevents race condition duplicates)
+      const submissionId = payload.id || null;
+      if (submissionId) {
+        const existingBySubmission = await db.collection(APPLICANTS_COLLECTION)
+          .where("webflowSubmissionId", "==", submissionId)
+          .limit(1)
+          .get();
+
+        if (!existingBySubmission.empty) {
+          res.status(200).json({skipped: true, reason: "Submission already processed", submissionId});
+          return;
+        }
       }
 
       // Build formAnswers from question fields
@@ -162,6 +179,26 @@ export const webflowHiringWebhook = functions
         email,
         formName: payload.name,
       });
+
+      // Sync to Google Sheets hiring tracker
+      try {
+        const submittedDate = payload.submittedAt
+          ? new Date(payload.submittedAt).toISOString().split("T")[0]
+          : new Date().toISOString().split("T")[0];
+
+        await appendToTab(HIRING_SHEET_ID, HIRING_SHEET_TAB, [[
+          name,
+          email,
+          data["LinkedIn URL"] || data["Linked in url"] || data["LinkedIn url"] || "",
+          data["Education"] || data["education"] || data["University"] || "",
+          data["Age"] || data["age"] || "",
+          submittedDate,
+        ]]);
+        functions.logger.info("Applicant synced to Google Sheet", {name, email});
+      } catch (sheetError) {
+        // Don't fail the webhook if sheet sync fails
+        functions.logger.error("Failed to sync applicant to Sheet", sheetError);
+      }
 
       res.status(200).json({success: true, id: docRef.id});
     } catch (error) {
