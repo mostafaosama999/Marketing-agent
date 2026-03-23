@@ -4,6 +4,7 @@ import { useParams, useNavigate, useSearchParams, Link } from 'react-router-dom'
 import {
   Box,
   Button,
+  Chip,
   CircularProgress,
   IconButton,
   Tabs,
@@ -19,6 +20,13 @@ import {
   OpenInNew as OpenInNewIcon,
 } from '@mui/icons-material';
 import { useEventDetail } from '../../hooks/useEventDetail';
+import {
+  EventCategory,
+  EducationalTier,
+  EDUCATIONAL_TIER_LABELS,
+  EDUCATIONAL_TIER_COLORS,
+  EVENT_CATEGORY_LABELS,
+} from '../../types/event';
 import { EventStatusStepper } from './EventStatusStepper';
 import { EventOverviewTab } from './EventOverviewTab';
 import { EventCompaniesTab } from './EventCompaniesTab';
@@ -31,7 +39,8 @@ const modernTheme = createTheme({
   },
 });
 
-const TAB_NAMES = ['overview', 'companies', 'leads', 'notes'] as const;
+const CLIENT_TAB_NAMES = ['overview', 'companies', 'leads', 'notes'] as const;
+const EDUCATIONAL_TAB_NAMES = ['overview', 'notes'] as const;
 
 export const EventDetailPage: React.FC = () => {
   const { eventId } = useParams<{ eventId: string }>();
@@ -55,9 +64,12 @@ export const EventDetailPage: React.FC = () => {
     deleteLead,
   } = useEventDetail(eventId);
 
+  const isEducational = event?.category === 'educational';
+  const tabNames = isEducational ? EDUCATIONAL_TAB_NAMES : CLIENT_TAB_NAMES;
+
   // Tab state from URL
   const tabParam = searchParams.get('tab') || 'overview';
-  const tabValue = Math.max(0, TAB_NAMES.indexOf(tabParam as typeof TAB_NAMES[number]));
+  const tabValue = Math.max(0, (tabNames as readonly string[]).indexOf(tabParam));
 
   const handleTabChange = (event: React.SyntheticEvent, newValue: number) => {
     const nativeEvent = event.nativeEvent as MouseEvent;
@@ -69,7 +81,7 @@ export const EventDetailPage: React.FC = () => {
     ) {
       return;
     }
-    setSearchParams({ tab: TAB_NAMES[newValue] });
+    setSearchParams({ tab: tabNames[newValue] });
   };
 
   // Derived metrics
@@ -199,6 +211,17 @@ export const EventDetailPage: React.FC = () => {
                   >
                     {event.name}
                   </Typography>
+                  <Chip
+                    label={isEducational ? 'Educational Event' : 'Client Event'}
+                    size="small"
+                    sx={{
+                      fontWeight: 600,
+                      fontSize: '0.75rem',
+                      bgcolor: isEducational ? '#f3e8ff' : '#dbeafe',
+                      color: isEducational ? '#7c3aed' : '#1e40af',
+                      border: 'none',
+                    }}
+                  />
                   {event.website && (
                     <IconButton
                       href={event.website}
@@ -264,30 +287,154 @@ export const EventDetailPage: React.FC = () => {
           <Box sx={{ borderBottom: 1, borderColor: 'divider', px: 4 }}>
             <Tabs value={tabValue} onChange={handleTabChange}>
               <Tab label="Overview" {...({ component: Link, to: `?tab=overview` } as any)} />
-              <Tab
-                label={`Companies (${companies.length})`}
-                {...({ component: Link, to: `?tab=companies` } as any)}
-              />
-              <Tab
-                label={`Leads (${leads.length})`}
-                {...({ component: Link, to: `?tab=leads` } as any)}
-              />
+              {!isEducational && (
+                <Tab
+                  label={`Companies (${companies.length})`}
+                  {...({ component: Link, to: `?tab=companies` } as any)}
+                />
+              )}
+              {!isEducational && (
+                <Tab
+                  label={`Leads (${leads.length})`}
+                  {...({ component: Link, to: `?tab=leads` } as any)}
+                />
+              )}
               <Tab label="Notes" {...({ component: Link, to: `?tab=notes` } as any)} />
             </Tabs>
           </Box>
 
           {/* Tab Content */}
           <Box>
-            {tabValue === 0 && (
-              <EventOverviewTab
-                event={event}
-                companiesCount={companies.length}
-                icpCompaniesCount={icpCompaniesCount}
-                decisionMakersCount={decisionMakersCount}
-                cwpCount={cwpCount}
-              />
+            {tabNames[tabValue] === 'overview' && (
+              <>
+                <EventOverviewTab
+                  event={event}
+                  companiesCount={companies.length}
+                  icpCompaniesCount={icpCompaniesCount}
+                  decisionMakersCount={decisionMakersCount}
+                  cwpCount={cwpCount}
+                />
+
+                {/* Educational event additional details */}
+                {isEducational && (
+                  <Box sx={{ px: 4, pb: 4 }}>
+                    <Box
+                      sx={{
+                        display: 'grid',
+                        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+                        gap: 3,
+                      }}
+                    >
+                      {/* Left column: metadata fields */}
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        {event.organiser && (
+                          <Box>
+                            <Typography variant="subtitle2" sx={{ color: '#94a3b8', fontWeight: 600, mb: 0.5, textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '0.05em' }}>
+                              Organiser
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: '#334155' }}>
+                              {event.organiser}
+                            </Typography>
+                          </Box>
+                        )}
+                        {event.audienceDescription && (
+                          <Box>
+                            <Typography variant="subtitle2" sx={{ color: '#94a3b8', fontWeight: 600, mb: 0.5, textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '0.05em' }}>
+                              Audience
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: '#334155' }}>
+                              {event.audienceDescription}
+                            </Typography>
+                          </Box>
+                        )}
+                        {event.gating && (
+                          <Box>
+                            <Typography variant="subtitle2" sx={{ color: '#94a3b8', fontWeight: 600, mb: 0.5, textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '0.05em' }}>
+                              Gating
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: '#334155' }}>
+                              {event.gating}
+                            </Typography>
+                          </Box>
+                        )}
+                        {event.tier && (
+                          <Box>
+                            <Typography variant="subtitle2" sx={{ color: '#94a3b8', fontWeight: 600, mb: 0.5, textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '0.05em' }}>
+                              Tier
+                            </Typography>
+                            <Chip
+                              label={EDUCATIONAL_TIER_LABELS[event.tier]}
+                              size="small"
+                              sx={{
+                                fontWeight: 600,
+                                fontSize: '0.75rem',
+                                bgcolor: EDUCATIONAL_TIER_COLORS[event.tier].bg,
+                                color: EDUCATIONAL_TIER_COLORS[event.tier].text,
+                                border: 'none',
+                              }}
+                            />
+                          </Box>
+                        )}
+                        {event.collaborationPotential && (
+                          <Box>
+                            <Typography variant="subtitle2" sx={{ color: '#94a3b8', fontWeight: 600, mb: 0.5, textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '0.05em' }}>
+                              Collaboration Potential
+                            </Typography>
+                            <Typography variant="body2" sx={{ color: '#334155' }}>
+                              {event.collaborationPotential}
+                            </Typography>
+                          </Box>
+                        )}
+                      </Box>
+
+                      {/* Right column: lists */}
+                      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                        {event.keyTopics && event.keyTopics.length > 0 && (
+                          <Box>
+                            <Typography variant="subtitle2" sx={{ color: '#94a3b8', fontWeight: 600, mb: 1, textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '0.05em' }}>
+                              Key Topics
+                            </Typography>
+                            <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.75 }}>
+                              {event.keyTopics.map((topic, idx) => (
+                                <Chip
+                                  key={idx}
+                                  label={topic}
+                                  size="small"
+                                  sx={{
+                                    fontWeight: 500,
+                                    fontSize: '0.75rem',
+                                    bgcolor: '#f1f5f9',
+                                    color: '#475569',
+                                    border: 'none',
+                                  }}
+                                />
+                              ))}
+                            </Box>
+                          </Box>
+                        )}
+                        {event.questionsToAsk && event.questionsToAsk.length > 0 && (
+                          <Box>
+                            <Typography variant="subtitle2" sx={{ color: '#94a3b8', fontWeight: 600, mb: 1, textTransform: 'uppercase', fontSize: '0.7rem', letterSpacing: '0.05em' }}>
+                              Questions to Ask
+                            </Typography>
+                            <Box component="ul" sx={{ m: 0, pl: 2.5 }}>
+                              {event.questionsToAsk.map((question, idx) => (
+                                <Box component="li" key={idx} sx={{ mb: 0.5 }}>
+                                  <Typography variant="body2" sx={{ color: '#334155' }}>
+                                    {question}
+                                  </Typography>
+                                </Box>
+                              ))}
+                            </Box>
+                          </Box>
+                        )}
+                      </Box>
+                    </Box>
+                  </Box>
+                )}
+              </>
             )}
-            {tabValue === 1 && (
+            {!isEducational && tabNames[tabValue] === 'companies' && (
               companiesLoading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
                   <CircularProgress size={36} sx={{ color: '#667eea' }} />
@@ -302,7 +449,7 @@ export const EventDetailPage: React.FC = () => {
                 />
               )
             )}
-            {tabValue === 2 && (
+            {!isEducational && tabNames[tabValue] === 'leads' && (
               leadsLoading ? (
                 <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
                   <CircularProgress size={36} sx={{ color: '#667eea' }} />
@@ -317,7 +464,7 @@ export const EventDetailPage: React.FC = () => {
                 />
               )
             )}
-            {tabValue === 3 && (
+            {tabNames[tabValue] === 'notes' && (
               <EventNotesTab
                 notes={event.notes || ''}
                 onSave={handleNotesSave}

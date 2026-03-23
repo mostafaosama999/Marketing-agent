@@ -17,19 +17,31 @@ import {
 import { LocationOn } from '@mui/icons-material';
 import {
   Event,
+  EventCategory,
   EventStatus,
   EventType,
+  EducationalTier,
   EVENT_STATUS_LABELS,
   EVENT_STATUS_COLORS,
   EVENT_TYPE_LABELS,
+  EDUCATIONAL_TIER_LABELS,
+  EDUCATIONAL_TIER_COLORS,
 } from '../../types/event';
 
 interface EventsTableProps {
   events: Event[];
+  category?: EventCategory;
 }
 
-type SortField = 'name' | 'startDate' | 'location' | 'eventType' | 'eventScore' | 'status' | 'icpCompanies' | 'price';
+type SortField = 'name' | 'startDate' | 'location' | 'eventType' | 'eventScore' | 'status' | 'icpCompanies' | 'price' | 'tier' | 'organiser';
 type SortDirection = 'asc' | 'desc';
+
+const TIER_ORDER: Record<string, number> = {
+  must_attend: 0,
+  strong: 1,
+  worth_trying: 2,
+  skip: 3,
+};
 
 function formatDateRange(startDate: string, endDate: string): string {
   const start = new Date(startDate);
@@ -64,7 +76,7 @@ function formatPrice(pricing: Event['pricing']): string {
   return `${symbol}${pricing.ticketPrice.toLocaleString()}`;
 }
 
-export const EventsTable: React.FC<EventsTableProps> = ({ events }) => {
+export const EventsTable: React.FC<EventsTableProps> = ({ events, category = 'client' }) => {
   const navigate = useNavigate();
   const [sortField, setSortField] = useState<SortField>('startDate');
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
@@ -109,6 +121,12 @@ export const EventsTable: React.FC<EventsTableProps> = ({ events }) => {
         case 'price':
           comparison = (a.pricing?.ticketPrice || 0) - (b.pricing?.ticketPrice || 0);
           break;
+        case 'tier':
+          comparison = (TIER_ORDER[a.tier || 'skip'] ?? 4) - (TIER_ORDER[b.tier || 'skip'] ?? 4);
+          break;
+        case 'organiser':
+          comparison = (a.organiser || '').localeCompare(b.organiser || '');
+          break;
       }
 
       return sortDirection === 'asc' ? comparison : -comparison;
@@ -122,16 +140,158 @@ export const EventsTable: React.FC<EventsTableProps> = ({ events }) => {
     [sortedEvents, page, rowsPerPage]
   );
 
-  const columns: { field: SortField; label: string; width?: string }[] = [
-    { field: 'name', label: 'Name', width: '25%' },
-    { field: 'startDate', label: 'Date', width: '16%' },
-    { field: 'location', label: 'Location', width: '14%' },
-    { field: 'eventType', label: 'Type', width: '10%' },
-    { field: 'eventScore', label: 'Score', width: '8%' },
-    { field: 'status', label: 'Status', width: '10%' },
-    { field: 'icpCompanies', label: 'ICP Companies', width: '10%' },
-    { field: 'price', label: 'Price', width: '7%' },
-  ];
+  const columns = useMemo((): { field: SortField; label: string; width?: string }[] => {
+    if (category === 'educational') {
+      return [
+        { field: 'name', label: 'Name', width: '22%' },
+        { field: 'startDate', label: 'Date', width: '14%' },
+        { field: 'location', label: 'Location', width: '12%' },
+        { field: 'eventType', label: 'Type', width: '9%' },
+        { field: 'eventScore', label: 'Score', width: '7%' },
+        { field: 'tier', label: 'Tier', width: '9%' },
+        { field: 'organiser', label: 'Organiser', width: '12%' },
+        { field: 'status', label: 'Status', width: '8%' },
+        { field: 'price', label: 'Price', width: '7%' },
+      ];
+    }
+    return [
+      { field: 'name', label: 'Name', width: '25%' },
+      { field: 'startDate', label: 'Date', width: '16%' },
+      { field: 'location', label: 'Location', width: '14%' },
+      { field: 'eventType', label: 'Type', width: '10%' },
+      { field: 'eventScore', label: 'Score', width: '8%' },
+      { field: 'status', label: 'Status', width: '10%' },
+      { field: 'icpCompanies', label: 'ICP Companies', width: '10%' },
+      { field: 'price', label: 'Price', width: '7%' },
+    ];
+  }, [category]);
+
+  const renderCell = (event: Event, field: SortField) => {
+    const scoreStyle = getScoreBadgeStyle(event.eventScore || 0);
+    const statusColor = EVENT_STATUS_COLORS[event.status as EventStatus] || EVENT_STATUS_COLORS.discovered;
+
+    switch (field) {
+      case 'name':
+        return (
+          <Typography
+            variant="body2"
+            sx={{
+              fontWeight: 600,
+              color: '#1e293b',
+              fontSize: '13px',
+              '&:hover': { color: '#667eea' },
+            }}
+          >
+            {event.name}
+          </Typography>
+        );
+      case 'startDate':
+        return (
+          <Typography variant="body2" sx={{ color: '#475569', fontSize: '13px' }}>
+            {formatDateRange(event.startDate, event.endDate)}
+          </Typography>
+        );
+      case 'location':
+        return (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+            <LocationOn sx={{ fontSize: 14, color: '#94a3b8' }} />
+            <Typography variant="body2" sx={{ color: '#475569', fontSize: '13px' }}>
+              {event.location?.city}
+              {event.location?.country ? `, ${event.location.country}` : ''}
+            </Typography>
+          </Box>
+        );
+      case 'eventType':
+        return (
+          <Chip
+            label={EVENT_TYPE_LABELS[event.eventType as EventType] || event.eventType}
+            size="small"
+            sx={{
+              bgcolor: '#f1f5f9',
+              color: '#475569',
+              fontWeight: 500,
+              fontSize: '11px',
+              height: 24,
+              borderRadius: 1.5,
+            }}
+          />
+        );
+      case 'eventScore':
+        return (
+          <Box
+            sx={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              bgcolor: scoreStyle.bg,
+              color: scoreStyle.text,
+              fontWeight: 700,
+              fontSize: '12px',
+              borderRadius: 1.5,
+              px: 1.5,
+              py: 0.5,
+              minWidth: 36,
+            }}
+          >
+            {event.eventScore ?? '-'}
+          </Box>
+        );
+      case 'status':
+        return (
+          <Chip
+            label={EVENT_STATUS_LABELS[event.status as EventStatus] || event.status}
+            size="small"
+            sx={{
+              bgcolor: statusColor.bg,
+              color: statusColor.text,
+              fontWeight: 600,
+              fontSize: '11px',
+              height: 24,
+              borderRadius: 1.5,
+            }}
+          />
+        );
+      case 'icpCompanies':
+        return (
+          <Typography variant="body2" sx={{ color: '#475569', fontSize: '13px', fontWeight: 500 }}>
+            {event.icpSummary?.totalIcpCompanies ?? 0}
+          </Typography>
+        );
+      case 'tier': {
+        const tier = event.tier as EducationalTier | undefined;
+        if (!tier) return <Typography variant="body2" sx={{ color: '#94a3b8', fontSize: '13px' }}>-</Typography>;
+        const tierColor = EDUCATIONAL_TIER_COLORS[tier] || { bg: '#e2e8f0', text: '#64748b' };
+        return (
+          <Chip
+            label={EDUCATIONAL_TIER_LABELS[tier] || tier}
+            size="small"
+            sx={{
+              bgcolor: tierColor.bg,
+              color: tierColor.text,
+              fontWeight: 600,
+              fontSize: '11px',
+              height: 24,
+              borderRadius: 1.5,
+            }}
+          />
+        );
+      }
+      case 'organiser':
+        return (
+          <Typography variant="body2" sx={{ color: '#475569', fontSize: '13px' }}>
+            {event.organiser || '-'}
+          </Typography>
+        );
+      case 'price':
+        return (
+          <Typography variant="body2" sx={{ color: '#475569', fontSize: '13px' }}>
+            {formatPrice(event.pricing)}
+          </Typography>
+        );
+      default:
+        return null;
+    }
+  };
 
   if (events.length === 0) {
     return (
@@ -206,129 +366,30 @@ export const EventsTable: React.FC<EventsTableProps> = ({ events }) => {
             </TableRow>
           </TableHead>
           <TableBody>
-            {paginatedEvents.map((event) => {
-              const scoreStyle = getScoreBadgeStyle(event.eventScore || 0);
-              const statusColor = EVENT_STATUS_COLORS[event.status as EventStatus] || EVENT_STATUS_COLORS.discovered;
-
-              return (
-                <TableRow
-                  key={event.id}
-                  hover
-                  onClick={() => navigate(`/events/${event.id}`)}
-                  sx={{
-                    cursor: 'pointer',
-                    '&:hover': {
-                      bgcolor: 'rgba(102, 126, 234, 0.04)',
-                    },
-                    '& td': {
-                      borderBottom: '1px solid #f1f5f9',
-                      py: 1.5,
-                      fontSize: '13px',
-                    },
-                  }}
-                >
-                  {/* Name */}
-                  <TableCell>
-                    <Typography
-                      variant="body2"
-                      sx={{
-                        fontWeight: 600,
-                        color: '#1e293b',
-                        fontSize: '13px',
-                        '&:hover': { color: '#667eea' },
-                      }}
-                    >
-                      {event.name}
-                    </Typography>
+            {paginatedEvents.map((event) => (
+              <TableRow
+                key={event.id}
+                hover
+                onClick={() => navigate(`/events/${event.id}`)}
+                sx={{
+                  cursor: 'pointer',
+                  '&:hover': {
+                    bgcolor: 'rgba(102, 126, 234, 0.04)',
+                  },
+                  '& td': {
+                    borderBottom: '1px solid #f1f5f9',
+                    py: 1.5,
+                    fontSize: '13px',
+                  },
+                }}
+              >
+                {columns.map((col) => (
+                  <TableCell key={col.field}>
+                    {renderCell(event, col.field)}
                   </TableCell>
-
-                  {/* Date */}
-                  <TableCell>
-                    <Typography variant="body2" sx={{ color: '#475569', fontSize: '13px' }}>
-                      {formatDateRange(event.startDate, event.endDate)}
-                    </Typography>
-                  </TableCell>
-
-                  {/* Location */}
-                  <TableCell>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
-                      <LocationOn sx={{ fontSize: 14, color: '#94a3b8' }} />
-                      <Typography variant="body2" sx={{ color: '#475569', fontSize: '13px' }}>
-                        {event.location?.city}
-                        {event.location?.country ? `, ${event.location.country}` : ''}
-                      </Typography>
-                    </Box>
-                  </TableCell>
-
-                  {/* Type */}
-                  <TableCell>
-                    <Chip
-                      label={EVENT_TYPE_LABELS[event.eventType as EventType] || event.eventType}
-                      size="small"
-                      sx={{
-                        bgcolor: '#f1f5f9',
-                        color: '#475569',
-                        fontWeight: 500,
-                        fontSize: '11px',
-                        height: 24,
-                        borderRadius: 1.5,
-                      }}
-                    />
-                  </TableCell>
-
-                  {/* Score */}
-                  <TableCell>
-                    <Box
-                      sx={{
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        bgcolor: scoreStyle.bg,
-                        color: scoreStyle.text,
-                        fontWeight: 700,
-                        fontSize: '12px',
-                        borderRadius: 1.5,
-                        px: 1.5,
-                        py: 0.5,
-                        minWidth: 36,
-                      }}
-                    >
-                      {event.eventScore ?? '-'}
-                    </Box>
-                  </TableCell>
-
-                  {/* Status */}
-                  <TableCell>
-                    <Chip
-                      label={EVENT_STATUS_LABELS[event.status as EventStatus] || event.status}
-                      size="small"
-                      sx={{
-                        bgcolor: statusColor.bg,
-                        color: statusColor.text,
-                        fontWeight: 600,
-                        fontSize: '11px',
-                        height: 24,
-                        borderRadius: 1.5,
-                      }}
-                    />
-                  </TableCell>
-
-                  {/* ICP Companies */}
-                  <TableCell>
-                    <Typography variant="body2" sx={{ color: '#475569', fontSize: '13px', fontWeight: 500 }}>
-                      {event.icpSummary?.totalIcpCompanies ?? 0}
-                    </Typography>
-                  </TableCell>
-
-                  {/* Price */}
-                  <TableCell>
-                    <Typography variant="body2" sx={{ color: '#475569', fontSize: '13px' }}>
-                      {formatPrice(event.pricing)}
-                    </Typography>
-                  </TableCell>
-                </TableRow>
-              );
-            })}
+                ))}
+              </TableRow>
+            ))}
           </TableBody>
         </Table>
       </TableContainer>

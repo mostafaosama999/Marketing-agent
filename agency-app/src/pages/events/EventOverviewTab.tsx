@@ -14,7 +14,15 @@ import {
   Groups as GroupsIcon,
   Code as CodeIcon,
 } from '@mui/icons-material';
-import { Event, EVENT_TYPE_LABELS } from '../../types/event';
+import {
+  Event,
+  EVENT_TYPE_LABELS,
+  EventCategory,
+  EducationalTier,
+  EDUCATIONAL_TIER_LABELS,
+  EDUCATIONAL_TIER_COLORS,
+  EducationalScoringBreakdown,
+} from '../../types/event';
 
 interface EventOverviewTabProps {
   event: Event;
@@ -300,6 +308,211 @@ export const EventOverviewTab: React.FC<EventOverviewTabProps> = ({
           </Paper>
         </Grid>
       </Grid>
+
+      {/* Educational Event Details */}
+      {event.category === 'educational' && (
+        <Grid container spacing={3} sx={{ mt: 1 }}>
+          {/* Educational Details Card */}
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Paper
+              elevation={0}
+              sx={{
+                p: 3,
+                borderRadius: 3,
+                background: 'rgba(255, 255, 255, 0.7)',
+                backdropFilter: 'blur(10px)',
+                border: '1px solid rgba(0, 0, 0, 0.06)',
+                boxShadow: '0 2px 12px rgba(0, 0, 0, 0.04)',
+                height: '100%',
+              }}
+            >
+              <Typography
+                variant="h6"
+                sx={{ fontWeight: 600, mb: 2, color: '#1e293b' }}
+              >
+                Educational Details
+              </Typography>
+
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                {event.organiser && (
+                  <DetailRow label="Organiser" value={event.organiser} />
+                )}
+                {event.audienceDescription && (
+                  <DetailRow label="Audience" value={event.audienceDescription} />
+                )}
+                {event.gating && (
+                  <DetailRow label="Entry Requirements" value={event.gating} />
+                )}
+                {event.tier && (
+                  <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <Typography variant="body2" sx={{ color: '#64748b', fontWeight: 500 }}>
+                      Tier
+                    </Typography>
+                    <Chip
+                      label={EDUCATIONAL_TIER_LABELS[event.tier]}
+                      size="small"
+                      sx={{
+                        bgcolor: EDUCATIONAL_TIER_COLORS[event.tier].bg,
+                        color: EDUCATIONAL_TIER_COLORS[event.tier].text,
+                        fontWeight: 600,
+                      }}
+                    />
+                  </Box>
+                )}
+              </Box>
+
+              {/* Educational Scoring Breakdown */}
+              {event.educationalScoringBreakdown && (
+                <Box sx={{ mt: 3, pt: 3, borderTop: '1px solid rgba(0, 0, 0, 0.06)' }}>
+                  <Typography variant="subtitle2" sx={{ color: '#64748b', fontWeight: 600, mb: 2 }}>
+                    Scoring Breakdown
+                  </Typography>
+                  {[
+                    { label: 'Attendee Relevance', value: event.educationalScoringBreakdown.attendeeRelevance, max: 35 },
+                    { label: 'Learning & Content Quality', value: event.educationalScoringBreakdown.learningContentQuality, max: 30 },
+                    { label: 'Networking & Collaboration', value: event.educationalScoringBreakdown.networkingCollaboration, max: 20 },
+                    { label: 'Logistics & Accessibility', value: event.educationalScoringBreakdown.logisticsAccessibility, max: 15 },
+                  ].map((item) => (
+                    <Box key={item.label} sx={{ mb: 1.5 }}>
+                      <Box sx={{ display: 'flex', justifyContent: 'space-between', mb: 0.5 }}>
+                        <Typography variant="caption" sx={{ color: '#64748b' }}>
+                          {item.label}
+                        </Typography>
+                        <Typography variant="caption" sx={{ color: '#1e293b', fontWeight: 600 }}>
+                          {item.value}/{item.max}
+                        </Typography>
+                      </Box>
+                      <LinearProgress
+                        variant="determinate"
+                        value={(item.value / item.max) * 100}
+                        sx={{
+                          height: 6,
+                          borderRadius: 3,
+                          bgcolor: 'rgba(102, 126, 234, 0.1)',
+                          '& .MuiLinearProgress-bar': {
+                            borderRadius: 3,
+                            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                          },
+                        }}
+                      />
+                    </Box>
+                  ))}
+                </Box>
+              )}
+            </Paper>
+          </Grid>
+
+          {/* Key Topics + Questions + Collaboration */}
+          <Grid size={{ xs: 12, md: 6 }}>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3, height: '100%' }}>
+              {/* Key Topics */}
+              {event.keyTopics && event.keyTopics.length > 0 && (
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 3,
+                    borderRadius: 3,
+                    background: 'rgba(255, 255, 255, 0.7)',
+                    backdropFilter: 'blur(10px)',
+                    border: '1px solid rgba(0, 0, 0, 0.06)',
+                    boxShadow: '0 2px 12px rgba(0, 0, 0, 0.04)',
+                  }}
+                >
+                  <Typography
+                    variant="h6"
+                    sx={{ fontWeight: 600, mb: 2, color: '#1e293b' }}
+                  >
+                    Key Topics
+                  </Typography>
+                  <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                    {event.keyTopics.map((topic, index) => (
+                      <Chip
+                        key={index}
+                        label={topic}
+                        size="small"
+                        sx={{
+                          bgcolor: 'rgba(102, 126, 234, 0.1)',
+                          color: '#667eea',
+                          fontWeight: 500,
+                        }}
+                      />
+                    ))}
+                  </Box>
+                </Paper>
+              )}
+
+              {/* Questions to Ask */}
+              {event.questionsToAsk && event.questionsToAsk.length > 0 && (
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 3,
+                    borderRadius: 3,
+                    background: 'rgba(255, 255, 255, 0.7)',
+                    backdropFilter: 'blur(10px)',
+                    border: '1px solid rgba(0, 0, 0, 0.06)',
+                    boxShadow: '0 2px 12px rgba(0, 0, 0, 0.04)',
+                  }}
+                >
+                  <Typography
+                    variant="h6"
+                    sx={{ fontWeight: 600, mb: 2, color: '#1e293b' }}
+                  >
+                    Questions to Ask
+                  </Typography>
+                  <Box component="ul" sx={{ pl: 2.5, m: 0 }}>
+                    {event.questionsToAsk.map((question, index) => (
+                      <Box
+                        component="li"
+                        key={index}
+                        sx={{
+                          mb: 1,
+                          color: '#475569',
+                          fontSize: '14px',
+                          lineHeight: 1.6,
+                          '&::marker': {
+                            color: '#667eea',
+                          },
+                        }}
+                      >
+                        {question}
+                      </Box>
+                    ))}
+                  </Box>
+                </Paper>
+              )}
+
+              {/* Collaboration Potential */}
+              {event.collaborationPotential && (
+                <Paper
+                  elevation={0}
+                  sx={{
+                    p: 3,
+                    borderRadius: 3,
+                    background: 'rgba(255, 255, 255, 0.7)',
+                    backdropFilter: 'blur(10px)',
+                    border: '1px solid rgba(0, 0, 0, 0.06)',
+                    boxShadow: '0 2px 12px rgba(0, 0, 0, 0.04)',
+                  }}
+                >
+                  <Typography
+                    variant="h6"
+                    sx={{ fontWeight: 600, mb: 2, color: '#1e293b' }}
+                  >
+                    Collaboration Potential
+                  </Typography>
+                  <Typography
+                    variant="body2"
+                    sx={{ color: '#475569', lineHeight: 1.7 }}
+                  >
+                    {event.collaborationPotential}
+                  </Typography>
+                </Paper>
+              )}
+            </Box>
+          </Grid>
+        </Grid>
+      )}
     </Box>
   );
 };

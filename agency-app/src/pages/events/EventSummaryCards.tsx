@@ -6,11 +6,13 @@ import {
   CalendarMonth,
   People,
   Timer,
+  EmojiEvents,
 } from '@mui/icons-material';
-import { Event } from '../../types/event';
+import { Event, EventCategory } from '../../types/event';
 
 interface EventSummaryCardsProps {
   events: Event[];
+  category?: EventCategory;
 }
 
 interface MetricCard {
@@ -20,7 +22,7 @@ interface MetricCard {
   color: string;
 }
 
-export const EventSummaryCards: React.FC<EventSummaryCardsProps> = ({ events }) => {
+export const EventSummaryCards: React.FC<EventSummaryCardsProps> = ({ events, category = 'client' }) => {
   const metrics = useMemo((): MetricCard[] => {
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -39,12 +41,6 @@ export const EventSummaryCards: React.FC<EventSummaryCardsProps> = ({ events }) 
       return start.getMonth() === currentMonth && start.getFullYear() === currentYear;
     });
 
-    // Total ICP companies across upcoming events
-    const totalIcpCompanies = upcomingEvents.reduce(
-      (sum, e) => sum + (e.icpSummary?.totalIcpCompanies || 0),
-      0
-    );
-
     // Next event countdown
     const futureEvents = events
       .filter((e) => {
@@ -61,6 +57,24 @@ export const EventSummaryCards: React.FC<EventSummaryCardsProps> = ({ events }) 
       countdownText = diffDays === 0 ? 'Today' : diffDays === 1 ? '1 day' : `${diffDays} days`;
     }
 
+    // Third card differs by category
+    const thirdCard: MetricCard = category === 'educational'
+      ? {
+          label: 'Must Attend',
+          value: upcomingEvents.filter((e) => e.tier === 'must_attend').length,
+          icon: <EmojiEvents sx={{ fontSize: 28 }} />,
+          color: '#10b981',
+        }
+      : {
+          label: 'Total ICP Companies',
+          value: upcomingEvents.reduce(
+            (sum, e) => sum + (e.icpSummary?.totalIcpCompanies || 0),
+            0
+          ),
+          icon: <People sx={{ fontSize: 28 }} />,
+          color: '#22c55e',
+        };
+
     return [
       {
         label: 'Upcoming Events',
@@ -74,12 +88,7 @@ export const EventSummaryCards: React.FC<EventSummaryCardsProps> = ({ events }) 
         icon: <CalendarMonth sx={{ fontSize: 28 }} />,
         color: '#764ba2',
       },
-      {
-        label: 'Total ICP Companies',
-        value: totalIcpCompanies,
-        icon: <People sx={{ fontSize: 28 }} />,
-        color: '#22c55e',
-      },
+      thirdCard,
       {
         label: 'Next Event Countdown',
         value: countdownText,
@@ -87,7 +96,7 @@ export const EventSummaryCards: React.FC<EventSummaryCardsProps> = ({ events }) 
         color: '#f59e0b',
       },
     ];
-  }, [events]);
+  }, [events, category]);
 
   return (
     <Grid container spacing={3}>

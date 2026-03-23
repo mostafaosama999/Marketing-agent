@@ -19,8 +19,15 @@ import {
   Grid,
   Chip,
   IconButton,
+  Tabs,
+  Tab,
 } from '@mui/material';
-import { Add as AddIcon, Close as CloseIcon } from '@mui/icons-material';
+import {
+  Add as AddIcon,
+  Close as CloseIcon,
+  Business as BusinessIcon,
+  School as SchoolIcon,
+} from '@mui/icons-material';
 import { useEvents } from '../../hooks/useEvents';
 import { EventSummaryCards } from './EventSummaryCards';
 import { EventsFilters } from './EventsFilters';
@@ -30,6 +37,9 @@ import {
   EventType,
   EVENT_TYPE_LABELS,
   EventFormData,
+  EventCategory,
+  EducationalTier,
+  EDUCATIONAL_TIER_LABELS,
 } from '../../types/event';
 
 const modernTheme = createTheme({
@@ -38,7 +48,7 @@ const modernTheme = createTheme({
   },
 });
 
-const defaultFormData = {
+const getDefaultFormData = (category: EventCategory) => ({
   name: '',
   website: '',
   description: '',
@@ -52,10 +62,20 @@ const defaultFormData = {
   eventScore: 0,
   status: 'discovered' as EventStatus,
   discoveredBy: 'manual' as const,
-};
+  category,
+  // Educational-specific fields
+  organiser: '',
+  audienceDescription: '',
+  gating: '',
+  tier: 'worth_trying' as EducationalTier,
+});
 
 export const EventsPage: React.FC = () => {
-  const { events, loading, addEvent } = useEvents();
+  // Tab state
+  const [tabValue, setTabValue] = useState(0);
+  const activeCategory: EventCategory = tabValue === 0 ? 'client' : 'educational';
+
+  const { events, loading, addEvent } = useEvents(activeCategory);
 
   // Filter state
   const [search, setSearch] = useState('');
@@ -63,10 +83,11 @@ export const EventsPage: React.FC = () => {
   const [typeFilter, setTypeFilter] = useState<EventType | 'all'>('all');
   const [dateFrom, setDateFrom] = useState('');
   const [dateTo, setDateTo] = useState('');
+  const [tierFilter, setTierFilter] = useState<EducationalTier | 'all'>('all');
 
   // Add dialog state
   const [addDialogOpen, setAddDialogOpen] = useState(false);
-  const [formData, setFormData] = useState({ ...defaultFormData });
+  const [formData, setFormData] = useState(getDefaultFormData(activeCategory));
   const [tagInput, setTagInput] = useState('');
   const [saving, setSaving] = useState(false);
 
@@ -99,8 +120,12 @@ export const EventsPage: React.FC = () => {
       filtered = filtered.filter((e) => e.startDate <= dateTo);
     }
 
+    if (tierFilter !== 'all' && activeCategory === 'educational') {
+      filtered = filtered.filter((e) => e.tier === tierFilter);
+    }
+
     return filtered;
-  }, [events, search, statusFilter, typeFilter, dateFrom, dateTo]);
+  }, [events, search, statusFilter, typeFilter, dateFrom, dateTo, tierFilter, activeCategory]);
 
   const handleAddTag = () => {
     const tag = tagInput.trim().toLowerCase();
@@ -114,24 +139,66 @@ export const EventsPage: React.FC = () => {
     setFormData({ ...formData, tags: formData.tags.filter((t) => t !== tag) });
   };
 
+  const handleOpenAddDialog = () => {
+    setFormData(getDefaultFormData(activeCategory));
+    setAddDialogOpen(true);
+  };
+
   const handleSave = async () => {
     if (!formData.name || !formData.startDate) return;
     setSaving(true);
     try {
-      await addEvent({
-        ...formData,
+      const baseData = {
+        name: formData.name,
         website: formData.website || null,
+        description: formData.description,
+        startDate: formData.startDate,
         endDate: formData.endDate || formData.startDate,
+        eventType: formData.eventType,
+        tags: formData.tags,
+        location: formData.location,
+        pricing: formData.pricing,
+        estimatedAttendance: formData.estimatedAttendance,
+        eventScore: formData.eventScore,
+        status: formData.status,
+        discoveredBy: formData.discoveredBy,
         discoveredAt: new Date().toISOString(),
-        icpSummary: { totalIcpCompanies: 0, totalDecisionMakers: 0, topCompanies: [] },
+        category: activeCategory,
         scoringBreakdown: { attendeeComposition: 0, decisionMakerAccess: 0, formatNetworking: 0, strategicBonus: 0 },
         recommendedActions: [],
-      } as Partial<EventFormData>);
+      };
+
+      if (activeCategory === 'client') {
+        await addEvent({
+          ...baseData,
+          icpSummary: { totalIcpCompanies: 0, totalDecisionMakers: 0, topCompanies: [] },
+        } as Partial<EventFormData>);
+      } else {
+        await addEvent({
+          ...baseData,
+          organiser: formData.organiser || undefined,
+          audienceDescription: formData.audienceDescription || undefined,
+          gating: formData.gating || undefined,
+          tier: formData.tier,
+        } as Partial<EventFormData>);
+      }
+
       setAddDialogOpen(false);
-      setFormData({ ...defaultFormData });
+      setFormData(getDefaultFormData(activeCategory));
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
+    setTabValue(newValue);
+    // Reset filters when switching tabs
+    setSearch('');
+    setStatusFilter('all');
+    setTypeFilter('all');
+    setDateFrom('');
+    setDateTo('');
+    setTierFilter('all');
   };
 
   if (loading) {
@@ -185,14 +252,16 @@ export const EventsPage: React.FC = () => {
                 Events
               </Typography>
               <Typography variant="body2" color="text.secondary">
-                Track developer events, conferences, and meetups with ICP companies
+                {activeCategory === 'client'
+                  ? 'Track developer events, conferences, and meetups with ICP companies'
+                  : 'Track agency owner events, masterminds, and networking for learning and growth'}
               </Typography>
             </Box>
 
             <Button
               variant="contained"
               startIcon={<AddIcon />}
-              onClick={() => setAddDialogOpen(true)}
+              onClick={handleOpenAddDialog}
               sx={{
                 background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                 textTransform: 'none',
@@ -209,6 +278,41 @@ export const EventsPage: React.FC = () => {
             >
               Add Event
             </Button>
+          </Box>
+
+          {/* Tabs */}
+          <Box sx={{ mb: 2, borderBottom: 1, borderColor: '#e2e8f0' }}>
+            <Tabs
+              value={tabValue}
+              onChange={handleTabChange}
+              TabIndicatorProps={{
+                sx: { backgroundColor: '#667eea' },
+              }}
+              sx={{
+                minHeight: 42,
+                '& .MuiTab-root': {
+                  textTransform: 'none',
+                  fontSize: '0.875rem',
+                  fontWeight: 600,
+                  color: '#64748b',
+                  minHeight: 42,
+                  '&.Mui-selected': {
+                    color: '#667eea',
+                  },
+                },
+              }}
+            >
+              <Tab
+                icon={<BusinessIcon sx={{ fontSize: 18 }} />}
+                iconPosition="start"
+                label="Client Events"
+              />
+              <Tab
+                icon={<SchoolIcon sx={{ fontSize: 18 }} />}
+                iconPosition="start"
+                label="Educational Events"
+              />
+            </Tabs>
           </Box>
 
           {/* Filter Bar */}
@@ -228,18 +332,21 @@ export const EventsPage: React.FC = () => {
               onTypeChange={setTypeFilter}
               onDateFromChange={setDateFrom}
               onDateToChange={setDateTo}
+              category={activeCategory}
+              tierFilter={tierFilter}
+              onTierChange={setTierFilter}
             />
           </Box>
         </Box>
 
         {/* Summary Cards */}
         <Box sx={{ mb: 3, flexShrink: 0 }}>
-          <EventSummaryCards events={events} />
+          <EventSummaryCards events={events} category={activeCategory} />
         </Box>
 
         {/* Table */}
         <Box sx={{ flex: 1, minHeight: 0, display: 'flex', flexDirection: 'column' }}>
-          <EventsTable events={filteredEvents} />
+          <EventsTable events={filteredEvents} category={activeCategory} />
         </Box>
 
         {/* Add Event Dialog */}
@@ -256,7 +363,9 @@ export const EventsPage: React.FC = () => {
           }}
         >
           <DialogTitle sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-            <Typography variant="h6" sx={{ fontWeight: 700 }}>Add Event</Typography>
+            <Typography variant="h6" sx={{ fontWeight: 700 }}>
+              Add {activeCategory === 'client' ? 'Client' : 'Educational'} Event
+            </Typography>
             <IconButton onClick={() => setAddDialogOpen(false)} size="small">
               <CloseIcon />
             </IconButton>
@@ -330,6 +439,57 @@ export const EventsPage: React.FC = () => {
                   </Box>
                 )}
               </Grid>
+
+              {/* Educational-specific fields */}
+              {activeCategory === 'educational' && (
+                <>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      fullWidth
+                      label="Organiser"
+                      value={formData.organiser}
+                      onChange={(e) => setFormData({ ...formData, organiser: e.target.value })}
+                      size="small"
+                      placeholder="Who runs this event?"
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <FormControl fullWidth size="small">
+                      <InputLabel>Tier</InputLabel>
+                      <Select
+                        value={formData.tier}
+                        label="Tier"
+                        onChange={(e) => setFormData({ ...formData, tier: e.target.value as EducationalTier })}
+                      >
+                        {(Object.keys(EDUCATIONAL_TIER_LABELS) as EducationalTier[]).map((t) => (
+                          <MenuItem key={t} value={t}>{EDUCATIONAL_TIER_LABELS[t]}</MenuItem>
+                        ))}
+                      </Select>
+                    </FormControl>
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      fullWidth
+                      label="Audience Description"
+                      value={formData.audienceDescription}
+                      onChange={(e) => setFormData({ ...formData, audienceDescription: e.target.value })}
+                      size="small"
+                      placeholder="Who attends? e.g. agency owners, freelancers"
+                    />
+                  </Grid>
+                  <Grid size={{ xs: 12, sm: 6 }}>
+                    <TextField
+                      fullWidth
+                      label="Gating"
+                      value={formData.gating}
+                      onChange={(e) => setFormData({ ...formData, gating: e.target.value })}
+                      size="small"
+                      placeholder="e.g. Open, Invite-only, Application required"
+                    />
+                  </Grid>
+                </>
+              )}
+
               <Grid size={{ xs: 12 }}>
                 <TextField fullWidth label="Description" value={formData.description} onChange={(e) => setFormData({ ...formData, description: e.target.value })} size="small" multiline rows={3} />
               </Grid>

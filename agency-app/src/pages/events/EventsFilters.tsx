@@ -13,8 +13,11 @@ import { Search as SearchIcon } from '@mui/icons-material';
 import {
   EventStatus,
   EventType,
+  EventCategory,
+  EducationalTier,
   EVENT_STATUS_LABELS,
   EVENT_TYPE_LABELS,
+  EDUCATIONAL_TIER_LABELS,
 } from '../../types/event';
 
 interface EventsFiltersProps {
@@ -28,6 +31,10 @@ interface EventsFiltersProps {
   onTypeChange: (value: EventType | 'all') => void;
   onDateFromChange: (value: string) => void;
   onDateToChange: (value: string) => void;
+  // Educational-specific
+  category?: EventCategory;
+  tierFilter?: EducationalTier | 'all';
+  onTierChange?: (value: EducationalTier | 'all') => void;
 }
 
 const selectSx = {
@@ -68,6 +75,9 @@ export const EventsFilters: React.FC<EventsFiltersProps> = ({
   onTypeChange,
   onDateFromChange,
   onDateToChange,
+  category,
+  tierFilter,
+  onTierChange,
 }) => {
   return (
     <Box
@@ -136,6 +146,25 @@ export const EventsFilters: React.FC<EventsFiltersProps> = ({
           ))}
         </Select>
       </FormControl>
+
+      {category === 'educational' && onTierChange && (
+        <FormControl size="small" sx={{ minWidth: 140 }}>
+          <InputLabel sx={inputLabelSx}>Tier</InputLabel>
+          <Select
+            value={tierFilter ?? 'all'}
+            label="Tier"
+            onChange={(e) => onTierChange(e.target.value as EducationalTier | 'all')}
+            sx={selectSx}
+          >
+            <MenuItem value="all">All Tiers</MenuItem>
+            {(Object.keys(EDUCATIONAL_TIER_LABELS) as EducationalTier[]).map((tier) => (
+              <MenuItem key={tier} value={tier}>
+                {EDUCATIONAL_TIER_LABELS[tier]}
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+      )}
 
       <TextField
         size="small"

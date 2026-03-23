@@ -1,6 +1,6 @@
 // src/hooks/useEvents.ts
 import { useState, useEffect, useCallback } from 'react';
-import { Event, EventFormData } from '../types/event';
+import { Event, EventCategory, EventFormData } from '../types/event';
 import { eventsService } from '../services/api/events';
 
 interface UseEventsReturn {
@@ -12,19 +12,24 @@ interface UseEventsReturn {
   deleteEvent: (eventId: string) => Promise<void>;
 }
 
-export const useEvents = (): UseEventsReturn => {
+export const useEvents = (category?: EventCategory): UseEventsReturn => {
   const [events, setEvents] = useState<Event[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    const unsubscribe = eventsService.subscribeToEvents((eventsData) => {
-      setEvents(eventsData);
-      setLoading(false);
-    });
+    const unsubscribe = category
+      ? eventsService.subscribeToEventsByCategory(category, (eventsData) => {
+          setEvents(eventsData);
+          setLoading(false);
+        })
+      : eventsService.subscribeToEvents((eventsData) => {
+          setEvents(eventsData);
+          setLoading(false);
+        });
 
     return () => unsubscribe();
-  }, []);
+  }, [category]);
 
   const addEvent = useCallback(async (data: Partial<EventFormData>): Promise<string | null> => {
     try {

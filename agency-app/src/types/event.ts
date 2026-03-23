@@ -3,9 +3,13 @@ import { Timestamp } from 'firebase/firestore';
 
 // ── Enums / Union Types ──
 
+export type EventCategory = 'client' | 'educational';
+
 export type EventStatus = 'discovered' | 'registered' | 'prep' | 'attended' | 'follow_up' | 'archived';
 
-export type EventType = 'conference' | 'exhibition' | 'hybrid' | 'meetup' | 'workshop' | 'hackathon';
+export type EventType = 'conference' | 'exhibition' | 'hybrid' | 'meetup' | 'workshop' | 'hackathon' | 'mastermind' | 'roundtable' | 'networking_walk' | 'supper_club' | 'retreat';
+
+export type EducationalTier = 'must_attend' | 'strong' | 'worth_trying' | 'skip';
 
 export type TicketAvailability = 'available' | 'sold_out' | 'waitlist' | 'free' | 'unknown';
 
@@ -45,6 +49,13 @@ export interface EventScoringBreakdown {
   strategicBonus: number;         // 0-15
 }
 
+export interface EducationalScoringBreakdown {
+  attendeeRelevance: number;        // 0-35
+  learningContentQuality: number;   // 0-30
+  networkingCollaboration: number;  // 0-20
+  logisticsAccessibility: number;   // 0-15
+}
+
 export interface EventIcpSummary {
   totalIcpCompanies: number;
   totalDecisionMakers: number;
@@ -65,6 +76,9 @@ export interface Event {
   name: string;
   website: string | null;
   description?: string;
+
+  // Category discriminator — separates client (ICP) events from educational (agency owner) events
+  category: EventCategory;
 
   // Dates
   startDate: string;
@@ -95,12 +109,22 @@ export interface Event {
   discoveredBy: EventDiscoverySource;
   sourceReport?: string | null;
 
-  // ICP summary (denormalized)
-  icpSummary: EventIcpSummary;
+  // ICP summary (denormalized) — client events only
+  icpSummary?: EventIcpSummary;
 
   // Notes & actions
   notes?: string;
   recommendedActions?: string[];
+
+  // ── Educational event fields (only populated when category === 'educational') ──
+  organiser?: string;
+  audienceDescription?: string;
+  gating?: string;
+  keyTopics?: string[];
+  questionsToAsk?: string[];
+  collaborationPotential?: string;
+  tier?: EducationalTier;
+  educationalScoringBreakdown?: EducationalScoringBreakdown;
 
   // Timestamps
   createdAt: string;
@@ -206,6 +230,30 @@ export const EVENT_TYPE_LABELS: Record<EventType, string> = {
   meetup: 'Meetup',
   workshop: 'Workshop',
   hackathon: 'Hackathon',
+  mastermind: 'Mastermind',
+  roundtable: 'Roundtable',
+  networking_walk: 'Networking Walk',
+  supper_club: 'Supper Club',
+  retreat: 'Retreat',
+};
+
+export const EVENT_CATEGORY_LABELS: Record<EventCategory, string> = {
+  client: 'Client Events',
+  educational: 'Educational Events',
+};
+
+export const EDUCATIONAL_TIER_LABELS: Record<EducationalTier, string> = {
+  must_attend: 'Must Attend',
+  strong: 'Strong',
+  worth_trying: 'Worth Trying',
+  skip: 'Skip',
+};
+
+export const EDUCATIONAL_TIER_COLORS: Record<EducationalTier, { bg: string; text: string }> = {
+  must_attend: { bg: '#dcfce7', text: '#166534' },
+  strong: { bg: '#dbeafe', text: '#1e40af' },
+  worth_trying: { bg: '#fef9c3', text: '#854d0e' },
+  skip: { bg: '#e2e8f0', text: '#64748b' },
 };
 
 export const ICP_MATCH_LABELS: Record<IcpMatch, string> = {

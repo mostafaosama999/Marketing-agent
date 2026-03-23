@@ -17,6 +17,14 @@
       ]
     },
     {
+      "collectionGroup": "events",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "category", "order": "ASCENDING" },
+        { "fieldPath": "startDate", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "companies",
       "queryScope": "COLLECTION_GROUP",
       "fields": [
