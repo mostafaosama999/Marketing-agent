@@ -266,13 +266,25 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
         <Divider sx={{ mb: 3 }} />
 
         {/* Form Answers */}
-        {Object.keys(applicant.formAnswers).length > 0 && (
+        {Object.keys(applicant.formAnswers).length > 0 && (() => {
+          // Map old short labels to full question text for existing data
+          const LABEL_TO_QUESTION: Record<string, string> = {
+            'Role Fit': "This role involves writing long-form technical blogs and tutorials, implementing and running real code, and revising work based on feedback. Does this match what you're looking for?",
+            'Technical Writing Experience': "Describe a technical concept you've written about before. What made it difficult to explain, and how did you approach it?",
+            'LLM Experience': "Have you ever built or worked with an LLM-based system (e.g., RAG, agents, embeddings, APIs)? If yes, briefly describe what you built or experimented with.",
+            'Languages & Tools': "What programming languages and tools have you used recently in hands-on work? Please be specific (language, framework, and what you built).",
+            'Writing Samples': "Share 1–2 technical writing samples (blog posts or tutorials) that you personally wrote and that include code you implemented and ran yourself.",
+            'Career Goals': "What are your 1–3 year goals as a freelancer or in your career?",
+          };
+          return (
           <>
             <Typography variant="subtitle2" sx={{ color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, mb: 2.5, fontSize: '11px', fontWeight: 700 }}>
               Application Answers
             </Typography>
 
-            {Object.entries(applicant.formAnswers).map(([question, answer]) => (
+            {Object.entries(applicant.formAnswers).map(([question, answer]) => {
+              const displayQuestion = LABEL_TO_QUESTION[question] || question;
+              return (
               <Box key={question} sx={{ mb: 3 }}>
                 <Typography
                   variant="subtitle2"
@@ -295,7 +307,7 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
                       flexShrink: 0,
                     }}
                   />
-                  {question}
+                  {displayQuestion}
                 </Typography>
                 <Box
                   sx={{
@@ -315,11 +327,13 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
                   </Typography>
                 </Box>
               </Box>
-            ))}
+              );
+            })}
 
             <Divider sx={{ mb: 3 }} />
           </>
-        )}
+          );
+        })()}
 
         {/* Notes */}
         <Typography variant="subtitle2" sx={{ color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, mb: 1.5, fontSize: '11px', fontWeight: 700 }}>

@@ -41,16 +41,16 @@ function verifyWebflowSignature(
   }
 }
 
-// Questions to store in formAnswers (shortened labels)
+// Questions to store in formAnswers (full question text)
 const QUESTION_MAP: Record<string, string> = {
-  "this role involves writing long-form technical blogs": "Role Fit",
-  "this role involves writing long form technical blogs": "Role Fit",
-  "describe a technical concept you": "Technical Writing Experience",
-  "have you ever built or worked with an llm": "LLM Experience",
-  "what programming languages and tools": "Languages & Tools",
-  "share 1": "Writing Samples",
-  "what are your 1-3 year goals": "Career Goals",
-  "what are your 1 3 year goals": "Career Goals",
+  "this role involves writing long-form technical blogs": "This role involves writing long-form technical blogs and tutorials, implementing and running real code, and revising work based on feedback. Does this match what you're looking for?",
+  "this role involves writing long form technical blogs": "This role involves writing long-form technical blogs and tutorials, implementing and running real code, and revising work based on feedback. Does this match what you're looking for?",
+  "describe a technical concept you": "Describe a technical concept you've written about before. What made it difficult to explain, and how did you approach it?",
+  "have you ever built or worked with an llm": "Have you ever built or worked with an LLM-based system (e.g., RAG, agents, embeddings, APIs)? If yes, briefly describe what you built or experimented with.",
+  "what programming languages and tools": "What programming languages and tools have you used recently in hands-on work? Please be specific (language, framework, and what you built).",
+  "share 1": "Share 1–2 technical writing samples (blog posts or tutorials) that you personally wrote and that include code you implemented and ran yourself.",
+  "what are your 1-3 year goals": "What are your 1–3 year goals as a freelancer or in your career?",
+  "what are your 1 3 year goals": "What are your 1–3 year goals as a freelancer or in your career?",
 };
 
 function matchQuestionKey(fieldName: string): string | null {
@@ -182,22 +182,35 @@ export const webflowHiringWebhook = functions
 
       // Sync to Google Sheets hiring tracker
       try {
+        functions.logger.info("Sheet sync started", {name, email, sheetId: HIRING_SHEET_ID, tab: HIRING_SHEET_TAB});
+
         const submittedDate = payload.submittedAt
           ? new Date(payload.submittedAt).toISOString().split("T")[0]
           : new Date().toISOString().split("T")[0];
 
-        await appendToTab(HIRING_SHEET_ID, HIRING_SHEET_TAB, [[
+        const sheetRow = [
           name,
           email,
           data["LinkedIn URL"] || data["Linked in url"] || data["LinkedIn url"] || "",
           data["Education"] || data["education"] || data["University"] || "",
           data["Age"] || data["age"] || "",
           submittedDate,
-        ]]);
-        functions.logger.info("Applicant synced to Google Sheet", {name, email});
-      } catch (sheetError) {
+        ];
+
+        functions.logger.info("Sheet sync calling appendToTab", {row: sheetRow});
+
+        await appendToTab(HIRING_SHEET_ID, HIRING_SHEET_TAB, [sheetRow]);
+
+        functions.logger.info("Sheet sync SUCCESS", {name, email});
+      } catch (sheetError: any) {
         // Don't fail the webhook if sheet sync fails
-        functions.logger.error("Failed to sync applicant to Sheet", sheetError);
+        functions.logger.error("Sheet sync FAILED", {
+          name,
+          email,
+          errorMessage: sheetError?.message || "Unknown",
+          errorCode: sheetError?.code,
+          errorStack: sheetError?.stack?.substring(0, 500),
+        });
       }
 
       res.status(200).json({success: true, id: docRef.id});
