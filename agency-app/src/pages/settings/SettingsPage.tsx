@@ -20,6 +20,7 @@ import { FieldDefinitionsTab } from '../../components/settings/FieldDefinitionsT
 import { GmailIntegrationTab } from '../../components/settings/GmailIntegrationTab';
 import { FollowUpTemplateTab } from '../../components/settings/FollowUpTemplateTab';
 import { OfferTemplateTab } from '../../components/settings/OfferTemplateTab';
+import { HiringEmailTemplatesTab } from '../../components/settings/HiringEmailTemplatesTab';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -49,6 +50,7 @@ const TAB_SLUGS = [
   'release-notes',
   'field-definitions',
   'integrations',
+  'hiring-templates',
 ] as const;
 
 export const SettingsPage: React.FC = () => {
@@ -195,6 +197,7 @@ export const SettingsPage: React.FC = () => {
             <Tab label="Release Notes" />
             <Tab label="Field Definitions" />
             <Tab label="Integrations" />
+            <Tab label="Hiring Templates" />
           </Tabs>
         </Box>
 
@@ -330,6 +333,11 @@ export const SettingsPage: React.FC = () => {
           {/* Integrations Tab */}
           <TabPanel value={tabValue} index={5}>
             <GmailIntegrationTab />
+          </TabPanel>
+
+          {/* Hiring Templates Tab */}
+          <TabPanel value={tabValue} index={6}>
+            <HiringEmailTemplatesTab />
           </TabPanel>
         </Box>
       </Box>

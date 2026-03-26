@@ -159,6 +159,7 @@ export const webflowHiringWebhook = functions
         education: data["Education"] || data["education"] || data["University"] || "",
         sex: data["Sex"] || data["sex"] || "",
         age: data["Age"] || data["age"] || "",
+        availability: data["When can you start?"] || data["when can you start?"] || data["When can you start"] || data["Notice period"] || data["notice period"] || "",
         status: "applied",
         score: null,
         notes: "",

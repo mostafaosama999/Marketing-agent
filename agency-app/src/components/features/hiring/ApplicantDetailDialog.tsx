@@ -25,6 +25,7 @@ import {
   School as SchoolIcon,
   Person as PersonIcon,
   Cake as CakeIcon,
+  CalendarToday as CalendarIcon,
 } from '@mui/icons-material';
 import { Applicant, ApplicantStatus, HIRING_STAGES } from '../../../types/applicant';
 import { updateApplicant, deleteApplicant } from '../../../services/api/applicants';
@@ -208,6 +209,12 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
               <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1, borderRadius: 2, background: '#f1f5f9', border: '1px solid #e2e8f0' }}>
                 <SchoolIcon sx={{ fontSize: 16, color: '#f59e0b' }} />
                 <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>{applicant.education}</Typography>
+              </Box>
+            )}
+            {applicant.availability && (
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1, borderRadius: 2, background: '#f1f5f9', border: '1px solid #e2e8f0' }}>
+                <CalendarIcon sx={{ fontSize: 16, color: '#0ea5e9' }} />
+                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>Start: {applicant.availability}</Typography>
               </Box>
             )}
           </Box>

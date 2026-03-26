@@ -50,6 +50,7 @@ function convertToApplicant(id: string, data: any): Applicant {
     education: data.education || '',
     sex: data.sex || '',
     age: data.age || '',
+    availability: data.availability || '',
     status: data.status || 'applied',
     score: data.score !== undefined ? data.score : null,
     notes: data.notes || '',

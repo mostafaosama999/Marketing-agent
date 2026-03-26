@@ -12,6 +12,7 @@ export interface Applicant {
   education: string;
   sex: string;
   age: string;
+  availability: string;
   status: ApplicantStatus;
   score: number | null;
   notes: string;

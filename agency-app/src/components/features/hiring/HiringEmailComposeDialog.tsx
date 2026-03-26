@@ -1,17 +1,20 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
   DialogContent,
   DialogActions,
   Button,
-  TextField,
   Box,
   Typography,
   Alert,
   CircularProgress,
   Link,
   IconButton,
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
 } from '@mui/material';
 import {
   Close as CloseIcon,
@@ -19,6 +22,8 @@ import {
   OpenInNew as OpenInNewIcon,
 } from '@mui/icons-material';
 import { createHiringDraft } from '../../../services/api/gmailService';
+import { getSettings } from '../../../services/api/settings';
+import { HiringEmailTemplate } from '../../../types/settings';
 
 interface HiringEmailComposeDialogProps {
   open: boolean;
@@ -35,15 +40,30 @@ export const HiringEmailComposeDialog: React.FC<HiringEmailComposeDialogProps> =
   applicantName,
   applicantEmail,
 }) => {
-  const [subject, setSubject] = useState(`Re: Your Application to CodeContent`);
-  const [body, setBody] = useState('');
+  const [templates, setTemplates] = useState<HiringEmailTemplate[]>([]);
+  const [selectedTemplateId, setSelectedTemplateId] = useState<string>('');
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<{ draftUrl?: string } | null>(null);
 
+  useEffect(() => {
+    if (open) {
+      const loadTemplates = async () => {
+        try {
+          const settings = await getSettings();
+          setTemplates(settings.hiringEmailTemplates || []);
+        } catch {
+          // Templates are optional
+        }
+      };
+      loadTemplates();
+    }
+  }, [open]);
+
   const handleCreateDraft = async () => {
-    if (!subject.trim() || !body.trim()) {
-      setError('Please fill in both subject and body');
+    const template = templates.find((t) => t.id === selectedTemplateId);
+    if (!template) {
+      setError('Please select a template');
       return;
     }
 
@@ -51,11 +71,12 @@ export const HiringEmailComposeDialog: React.FC<HiringEmailComposeDialogProps> =
       setSending(true);
       setError(null);
 
-      // Convert plain text body to HTML
-      const bodyHtml = body
-        .split('\n')
-        .map((line) => (line.trim() ? `<p>${line}</p>` : '<br>'))
-        .join('');
+      const replaceName = (text: string) =>
+        text.replace(/\{\{name\}\}/g, applicantName).replace(/\{\{email\}\}/g, applicantEmail);
+
+      const subject = replaceName(template.subject);
+      const body = replaceName(template.body);
+      const bodyHtml = body.replace(/\n/g, '<br>');
 
       const result = await createHiringDraft({
         applicantId,
@@ -77,8 +98,7 @@ export const HiringEmailComposeDialog: React.FC<HiringEmailComposeDialogProps> =
   };
 
   const handleClose = () => {
-    setSubject('Re: Your Application to CodeContent');
-    setBody('');
+    setSelectedTemplateId('');
     setError(null);
     setSuccess(null);
     onClose();
@@ -88,7 +108,7 @@ export const HiringEmailComposeDialog: React.FC<HiringEmailComposeDialogProps> =
     <Dialog
       open={open}
       onClose={handleClose}
-      maxWidth="md"
+      maxWidth="sm"
       fullWidth
       PaperProps={{
         sx: { borderRadius: 3 },
@@ -107,7 +127,7 @@ export const HiringEmailComposeDialog: React.FC<HiringEmailComposeDialogProps> =
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <EmailIcon />
           <Typography variant="h6" sx={{ fontWeight: 600 }}>
-            Compose Email to {applicantName}
+            Email {applicantName}
           </Typography>
         </Box>
         <IconButton onClick={handleClose} sx={{ color: 'white' }}>
@@ -125,10 +145,10 @@ export const HiringEmailComposeDialog: React.FC<HiringEmailComposeDialogProps> =
         {success ? (
           <Box sx={{ textAlign: 'center', py: 4 }}>
             <Typography variant="h6" sx={{ color: '#10b981', fontWeight: 600, mb: 2 }}>
-              Draft Created Successfully!
+              Draft Created!
             </Typography>
             <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-              A draft has been created in your mostafa@codecontent.net Gmail account.
+              Draft created in mostafa@codecontent.net for {applicantEmail}
             </Typography>
             {success.draftUrl && (
               <Button
@@ -156,35 +176,48 @@ export const HiringEmailComposeDialog: React.FC<HiringEmailComposeDialogProps> =
           </Box>
         ) : (
           <>
-            <TextField
-              label="To"
-              value={applicantEmail}
-              fullWidth
-              disabled
-              sx={{ mb: 2 }}
-              InputProps={{
-                sx: { bgcolor: '#f8fafc' },
-              }}
-            />
-            <TextField
-              label="Subject"
-              value={subject}
-              onChange={(e) => setSubject(e.target.value)}
-              fullWidth
-              sx={{ mb: 2 }}
-            />
-            <TextField
-              label="Email Body"
-              value={body}
-              onChange={(e) => setBody(e.target.value)}
-              fullWidth
-              multiline
-              rows={10}
-              placeholder={`Hi ${applicantName},\n\nThank you for your application to CodeContent...\n\nBest regards,\nMostafa`}
-            />
-            <Typography variant="caption" color="text.secondary" sx={{ mt: 1, display: 'block' }}>
-              This will create a draft in mostafa@codecontent.net — you can review and send it from Gmail.
+            <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+              To: <strong>{applicantEmail}</strong>
             </Typography>
+
+            <FormControl fullWidth>
+              <InputLabel>Select Template</InputLabel>
+              <Select
+                value={selectedTemplateId}
+                onChange={(e) => setSelectedTemplateId(e.target.value)}
+                label="Select Template"
+              >
+                <MenuItem value="" disabled>
+                  <em>None selected</em>
+                </MenuItem>
+                {templates.map((t) => (
+                  <MenuItem key={t.id} value={t.id}>
+                    {t.name}
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+
+            {selectedTemplateId && (() => {
+              const t = templates.find((t) => t.id === selectedTemplateId);
+              if (!t) return null;
+              return (
+                <Box sx={{ mt: 2, p: 2, bgcolor: '#f8fafc', borderRadius: 2, border: '1px solid #e2e8f0' }}>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                    Subject:
+                  </Typography>
+                  <Typography variant="body2" sx={{ mb: 1 }}>
+                    {t.subject.replace(/\{\{name\}\}/g, applicantName)}
+                  </Typography>
+                  <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
+                    Body:
+                  </Typography>
+                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', color: '#475569' }}>
+                    {t.body.replace(/\{\{name\}\}/g, applicantName).replace(/\{\{email\}\}/g, applicantEmail)}
+                  </Typography>
+                </Box>
+              );
+            })()}
           </>
         )}
       </DialogContent>
@@ -197,7 +230,7 @@ export const HiringEmailComposeDialog: React.FC<HiringEmailComposeDialogProps> =
           <Button
             variant="contained"
             onClick={handleCreateDraft}
-            disabled={sending || !subject.trim() || !body.trim()}
+            disabled={sending || !selectedTemplateId}
             startIcon={sending ? <CircularProgress size={20} /> : <EmailIcon />}
             sx={{
               background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -209,7 +242,7 @@ export const HiringEmailComposeDialog: React.FC<HiringEmailComposeDialogProps> =
               },
             }}
           >
-            {sending ? 'Creating Draft...' : 'Create Draft'}
+            {sending ? 'Creating...' : 'Create Draft'}
           </Button>
         )}
       </DialogActions>

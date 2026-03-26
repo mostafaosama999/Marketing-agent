@@ -66,6 +66,7 @@ function convertToSettings(data: any): AppSettings {
     dalleImageStylePrompt: data.dalleImageStylePrompt,
     followUpTemplate: data.followUpTemplate,
     followUpSubject: data.followUpSubject,
+    hiringEmailTemplates: data.hiringEmailTemplates || [],
     updatedAt: data.updatedAt?.toDate() || new Date(),
     updatedBy: data.updatedBy || '',
     createdAt: data.createdAt?.toDate(),

@@ -17,6 +17,16 @@ export interface OfferTemplateVersion {
 }
 
 /**
+ * A hiring email template (e.g., test task, rejection, interview)
+ */
+export interface HiringEmailTemplate {
+  id: string;           // auto-generated UUID
+  name: string;         // e.g., "Test Task", "Rejection", "Interview"
+  subject: string;      // e.g., "Next Stage for the Software Engineer Role"
+  body: string;         // Plain text body with {{name}} support
+}
+
+/**
  * Main settings interface for the application
  */
 export interface AppSettings {
@@ -59,6 +69,9 @@ export interface AppSettings {
   followUpTemplate?: string; // HTML body for follow-up emails
   followUpSubject?: string; // Subject override (defaults to "Re: <original subject>")
 
+  // Hiring Email Templates
+  hiringEmailTemplates?: HiringEmailTemplate[];
+
   // Metadata
   updatedAt: Date;
   updatedBy: string; // User ID who last updated settings
@@ -81,6 +94,7 @@ export interface UpdateSettingsRequest {
   dalleImageStylePrompt?: string;
   followUpTemplate?: string;
   followUpSubject?: string;
+  hiringEmailTemplates?: HiringEmailTemplate[];
 }
 
 /**
