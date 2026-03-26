@@ -125,14 +125,6 @@ export const GmailIntegrationTab: React.FC = () => {
     }
   };
 
-  if (loading) {
-    return (
-      <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
-        <CircularProgress />
-      </Box>
-    );
-  }
-
   return (
     <Box sx={{ maxWidth: 800 }}>
       <Typography variant="h5" sx={{ mb: 3, fontWeight: 600 }}>
@@ -148,22 +140,28 @@ export const GmailIntegrationTab: React.FC = () => {
       {/* Connection Status */}
       <Paper sx={{ p: 3, mb: 3 }}>
         <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
-          <EmailIcon sx={{ fontSize: 40, color: connected ? '#10b981' : '#94a3b8', mr: 2 }} />
+          <EmailIcon sx={{ fontSize: 40, color: !loading && connected ? '#10b981' : '#94a3b8', mr: 2 }} />
           <Box>
             <Typography variant="h6" sx={{ fontWeight: 600 }}>
               Gmail Account: mostafa.moqbel.ibrahim@gmail.com
             </Typography>
             <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
-              <Chip
-                icon={connected ? <CheckCircleIcon /> : <CancelIcon />}
-                label={connected ? 'Connected' : 'Not Connected'}
-                color={connected ? 'success' : 'default'}
-                size="small"
-              />
-              {connectionMessage && (
-                <Typography variant="body2" color="text.secondary">
-                  {connectionMessage}
-                </Typography>
+              {loading ? (
+                <CircularProgress size={16} />
+              ) : (
+                <>
+                  <Chip
+                    icon={connected ? <CheckCircleIcon /> : <CancelIcon />}
+                    label={connected ? 'Connected' : 'Not Connected'}
+                    color={connected ? 'success' : 'default'}
+                    size="small"
+                  />
+                  {connectionMessage && (
+                    <Typography variant="body2" color="text.secondary">
+                      {connectionMessage}
+                    </Typography>
+                  )}
+                </>
               )}
             </Box>
           </Box>

@@ -26,10 +26,10 @@ export const checkGmailConnectionStatus = functions.https.onCall(
       const gmail = google.gmail({version: "v1", auth: oauth2Client});
 
       // Test the connection by getting user profile
-      // This will fail if token is invalid or scopes are insufficient
+      // This will also refresh the access token if needed
       await gmail.users.getProfile({userId: "me"});
 
-      // Verify token has required scopes
+      // Now get token info (access_token is populated after the API call above)
       const tokenInfo = await oauth2Client.getTokenInfo(
         oauth2Client.credentials.access_token || ""
       );

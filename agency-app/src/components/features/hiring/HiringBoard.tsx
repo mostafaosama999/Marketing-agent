@@ -53,7 +53,7 @@ const HiringBoard: React.FC = () => {
         counts[a.education] = (counts[a.education] || 0) + 1;
       }
     }
-    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+    return Object.entries(counts).sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]));
   }, [applicants]);
 
   const genderCounts = useMemo(() => {

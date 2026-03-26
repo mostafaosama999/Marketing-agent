@@ -26,6 +26,7 @@ const OAUTH_CALLBACK_PATH = "/auth/gmail/callback";
 // Allowed origins for OAuth redirect
 const ALLOWED_ORIGINS = [
   "http://localhost:3000",
+  "http://localhost:3001",
   "https://marketing-app-2v32k.ondigitalocean.app",
 ];
 
