@@ -5,6 +5,7 @@
 
 import {google} from "googleapis";
 import {getAuthenticatedOAuth2Client} from "./oauthService";
+import type {GmailAccountType} from "./oauthService";
 
 export interface CreateDraftParams {
   to: string;
@@ -25,16 +26,18 @@ export interface CreateDraftResult {
 /**
  * Create a Gmail draft using the Gmail API
  * @param params Draft creation parameters
+ * @param accountType Which Gmail account to create the draft in
  * @returns Draft creation result with draft ID and URL
  */
 export async function createGmailDraft(
-  params: CreateDraftParams
+  params: CreateDraftParams,
+  accountType: GmailAccountType = "admin"
 ): Promise<CreateDraftResult> {
   try {
-    console.log("📧 [DraftService] Creating Gmail draft for:", params.to);
+    console.log(`📧 [DraftService] Creating Gmail draft for: ${params.to} (account: ${accountType})`);
 
     // Get authenticated OAuth2 client
-    const oauth2Client = await getAuthenticatedOAuth2Client();
+    const oauth2Client = await getAuthenticatedOAuth2Client(accountType);
     const gmail = google.gmail({version: "v1", auth: oauth2Client});
 
     // Construct email message in RFC 2822 format

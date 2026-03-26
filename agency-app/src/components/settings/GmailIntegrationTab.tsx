@@ -20,9 +20,15 @@ import {
   Email as EmailIcon,
   Refresh as RefreshIcon,
 } from '@mui/icons-material';
-import { checkGmailConnection, getGmailAuthUrl } from '../../services/api/gmailService';
+import {
+  checkGmailConnection,
+  getGmailAuthUrl,
+  checkHiringGmailConnection,
+  getHiringGmailAuthUrl,
+} from '../../services/api/gmailService';
 
 export const GmailIntegrationTab: React.FC = () => {
+  // Admin Gmail state
   const [loading, setLoading] = useState(true);
   const [connecting, setConnecting] = useState(false);
   const [connected, setConnected] = useState(false);
@@ -30,9 +36,16 @@ export const GmailIntegrationTab: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [connectionMessage, setConnectionMessage] = useState('');
 
+  // Hiring Gmail state
+  const [hiringLoading, setHiringLoading] = useState(true);
+  const [hiringConnecting, setHiringConnecting] = useState(false);
+  const [hiringConnected, setHiringConnected] = useState(false);
+  const [hiringMessage, setHiringMessage] = useState('');
+
   // Check connection status on mount
   useEffect(() => {
     checkConnection();
+    checkHiringConnection();
   }, []);
 
   const checkConnection = async () => {
@@ -48,6 +61,19 @@ export const GmailIntegrationTab: React.FC = () => {
       setError(err.message || 'Failed to check connection status');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const checkHiringConnection = async () => {
+    try {
+      setHiringLoading(true);
+      const result = await checkHiringGmailConnection();
+      setHiringConnected(result.connected);
+      setHiringMessage(result.message);
+    } catch (err: any) {
+      console.error('Error checking hiring Gmail connection:', err);
+    } finally {
+      setHiringLoading(false);
     }
   };
 
@@ -73,6 +99,29 @@ export const GmailIntegrationTab: React.FC = () => {
       setError(err.message || 'Failed to start connection process');
     } finally {
       setConnecting(false);
+    }
+  };
+
+  const handleConnectHiring = async () => {
+    try {
+      setHiringConnecting(true);
+      setError(null);
+      const authUrl = await getHiringGmailAuthUrl();
+
+      window.open(authUrl, '_blank', 'width=600,height=700');
+
+      alert(
+        'A new window has opened for Gmail authorization.\n\n' +
+        'Sign in with mostafa@codecontent.net and grant permissions.\n\n' +
+        'After authorizing:\n' +
+        '1. You\'ll be redirected back to the app\n' +
+        '2. Click "Refresh Status" below to verify the connection'
+      );
+    } catch (err: any) {
+      console.error('Error initiating hiring Gmail OAuth:', err);
+      setError(err.message || 'Failed to start connection process');
+    } finally {
+      setHiringConnecting(false);
     }
   };
 
@@ -231,6 +280,104 @@ export const GmailIntegrationTab: React.FC = () => {
             <ListItemText
               primary="Track Outreach"
               secondary="Keep track of when drafts were created for each lead"
+            />
+          </ListItem>
+        </List>
+      </Paper>
+
+      {/* Hiring Gmail Integration */}
+      <Divider sx={{ my: 4 }} />
+
+      <Typography variant="h5" sx={{ mb: 3, fontWeight: 600 }}>
+        Hiring Email Integration
+      </Typography>
+
+      <Paper sx={{ p: 3, mb: 3 }}>
+        <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
+          <EmailIcon sx={{ fontSize: 40, color: hiringConnected ? '#10b981' : '#94a3b8', mr: 2 }} />
+          <Box>
+            <Typography variant="h6" sx={{ fontWeight: 600 }}>
+              Hiring Account: mostafa@codecontent.net
+            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 0.5 }}>
+              {hiringLoading ? (
+                <CircularProgress size={16} />
+              ) : (
+                <>
+                  <Chip
+                    icon={hiringConnected ? <CheckCircleIcon /> : <CancelIcon />}
+                    label={hiringConnected ? 'Connected' : 'Not Connected'}
+                    color={hiringConnected ? 'success' : 'default'}
+                    size="small"
+                  />
+                  {hiringMessage && (
+                    <Typography variant="body2" color="text.secondary">
+                      {hiringMessage}
+                    </Typography>
+                  )}
+                </>
+              )}
+            </Box>
+          </Box>
+        </Box>
+
+        <Divider sx={{ my: 2 }} />
+
+        <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+          Used for creating email drafts to hiring applicants. Connect this Google Workspace account
+          to enable composing emails from the Hiring pipeline.
+        </Typography>
+
+        <Box sx={{ display: 'flex', gap: 2 }}>
+          <Button
+            variant="contained"
+            startIcon={hiringConnecting ? <CircularProgress size={20} /> : <EmailIcon />}
+            onClick={handleConnectHiring}
+            disabled={hiringConnecting}
+            sx={{
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              color: 'white',
+              fontWeight: 600,
+              textTransform: 'none',
+              '&:hover': {
+                background: 'linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%)',
+              },
+            }}
+          >
+            {hiringConnected ? 'Reconnect Hiring Gmail' : 'Connect Hiring Gmail'}
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<RefreshIcon />}
+            onClick={checkHiringConnection}
+            sx={{ textTransform: 'none', fontWeight: 600 }}
+          >
+            Refresh Status
+          </Button>
+        </Box>
+      </Paper>
+
+      <Paper sx={{ p: 3 }}>
+        <Typography variant="subtitle1" sx={{ fontWeight: 600, mb: 2 }}>
+          What you can do with hiring email:
+        </Typography>
+        <List>
+          <ListItem>
+            <ListItemIcon>
+              <CheckCircleIcon sx={{ color: '#10b981' }} />
+            </ListItemIcon>
+            <ListItemText
+              primary="Compose Applicant Emails"
+              secondary="Create email drafts to applicants directly from the hiring pipeline"
+            />
+          </ListItem>
+          <ListItem>
+            <ListItemIcon>
+              <CheckCircleIcon sx={{ color: '#10b981' }} />
+            </ListItemIcon>
+            <ListItemText
+              primary="Track Email Status"
+              secondary="See which applicants have been emailed and when"
             />
           </ListItem>
         </List>

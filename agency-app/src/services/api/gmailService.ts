@@ -70,7 +70,7 @@ export async function checkGmailConnection(): Promise<{
 }> {
   const functions = getFunctions();
   const checkStatus = httpsCallable<
-    {},
+    {accountType?: string},
     {connected: boolean; hasComposePermission?: boolean; message: string}
   >(functions, "checkGmailConnectionStatus");
 
@@ -92,7 +92,7 @@ export async function checkGmailConnection(): Promise<{
  */
 export async function getGmailAuthUrl(): Promise<string> {
   const functions = getFunctions();
-  const getAuthUrl = httpsCallable<{origin: string}, {success: boolean; authUrl: string; message: string}>(
+  const getAuthUrl = httpsCallable<{origin: string; accountType?: string}, {success: boolean; authUrl: string; message: string}>(
     functions,
     "getGmailAuthUrl"
   );
@@ -109,19 +109,116 @@ export async function getGmailAuthUrl(): Promise<string> {
 /**
  * Exchange OAuth authorization code for tokens
  */
-export async function exchangeGmailOAuthCode(code: string): Promise<{success: boolean; message: string}> {
+export async function exchangeGmailOAuthCode(code: string, accountType?: string): Promise<{success: boolean; message: string}> {
   const functions = getFunctions();
-  const exchangeCode = httpsCallable<{code: string; origin: string}, {success: boolean; message: string}>(
+  const exchangeCode = httpsCallable<{code: string; origin: string; accountType?: string}, {success: boolean; message: string}>(
     functions,
     "exchangeGmailOAuthCode"
   );
 
   try {
-    const result = await exchangeCode({code, origin: window.location.origin});
+    const result = await exchangeCode({code, origin: window.location.origin, accountType});
     return result.data;
   } catch (error) {
     console.error("Error exchanging OAuth code:", error);
     throw new Error(`Failed to exchange OAuth code: ${error}`);
+  }
+}
+
+// --- Hiring Gmail Account Functions ---
+
+/**
+ * Check if hiring Gmail account is connected
+ */
+export async function checkHiringGmailConnection(): Promise<{
+  connected: boolean;
+  hasComposePermission?: boolean;
+  message: string;
+}> {
+  const functions = getFunctions();
+  const checkStatus = httpsCallable<
+    {accountType: string},
+    {connected: boolean; hasComposePermission?: boolean; message: string}
+  >(functions, "checkGmailConnectionStatus");
+
+  try {
+    const result = await checkStatus({accountType: "hiring"});
+    return result.data;
+  } catch (error) {
+    console.error("Error checking hiring Gmail connection:", error);
+    return {
+      connected: false,
+      hasComposePermission: false,
+      message: "Failed to check connection status",
+    };
+  }
+}
+
+/**
+ * Get hiring Gmail OAuth authorization URL
+ */
+export async function getHiringGmailAuthUrl(): Promise<string> {
+  const functions = getFunctions();
+  const getAuthUrl = httpsCallable<
+    {origin: string; accountType: string},
+    {success: boolean; authUrl: string; message: string}
+  >(functions, "getGmailAuthUrl");
+
+  try {
+    const result = await getAuthUrl({origin: window.location.origin, accountType: "hiring"});
+    return result.data.authUrl;
+  } catch (error) {
+    console.error("Error getting hiring Gmail auth URL:", error);
+    throw new Error(`Failed to get auth URL: ${error}`);
+  }
+}
+
+/**
+ * Hiring Gmail Draft Creation
+ */
+export interface CreateHiringDraftRequest {
+  applicantId: string;
+  to: string;
+  subject: string;
+  bodyHtml: string;
+}
+
+export interface CreateHiringDraftResponse {
+  success: boolean;
+  draftId?: string;
+  draftUrl?: string;
+  message: string;
+  error?: string;
+}
+
+/**
+ * Create a Gmail draft for an applicant using the hiring email account
+ */
+export async function createHiringDraft(
+  request: CreateHiringDraftRequest
+): Promise<CreateHiringDraftResponse> {
+  const functions = getFunctions();
+  const createDraft = httpsCallable<CreateHiringDraftRequest, CreateHiringDraftResponse>(
+    functions,
+    "createHiringDraftCloud"
+  );
+
+  try {
+    const result = await createDraft(request);
+    return result.data;
+  } catch (error: any) {
+    console.error("Error creating hiring draft:", error);
+
+    if (error.code === "unauthenticated") {
+      throw new Error("You must be logged in to create drafts");
+    }
+    if (error.message?.includes("refresh token")) {
+      throw new Error(
+        "Hiring Gmail not connected. Please connect mostafa@codecontent.net in Settings → Integrations."
+      );
+    }
+
+    throw new Error(`Failed to create hiring draft: ${error.message || error}`);
   }
 }
 

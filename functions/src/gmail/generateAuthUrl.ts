@@ -6,9 +6,10 @@
 import * as functions from "firebase-functions";
 import {HttpsError} from "firebase-functions/v1/auth";
 import {generateAuthUrl} from "./oauthService";
+import type {GmailAccountType} from "./oauthService";
 
 export const getGmailAuthUrl = functions.https.onCall(
-  async (data: {origin?: string}, context) => {
+  async (data: {origin?: string; accountType?: GmailAccountType}, context) => {
     // Check authentication
     if (!context.auth) {
       throw new HttpsError(
@@ -17,11 +18,12 @@ export const getGmailAuthUrl = functions.https.onCall(
       );
     }
 
-    console.log(`Auth URL requested by user: ${context.auth.uid}`);
+    const accountType = data?.accountType || "admin";
+    console.log(`Auth URL requested by user: ${context.auth.uid} for account: ${accountType}`);
     console.log(`Origin: ${data?.origin || "not provided"}`);
 
     try {
-      const authUrl = generateAuthUrl(data?.origin);
+      const authUrl = generateAuthUrl(data?.origin, accountType);
 
       return {
         success: true,

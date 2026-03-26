@@ -28,6 +28,7 @@ import {
 } from '@mui/icons-material';
 import { Applicant, ApplicantStatus, HIRING_STAGES } from '../../../types/applicant';
 import { updateApplicant, deleteApplicant } from '../../../services/api/applicants';
+import { HiringEmailComposeDialog } from './HiringEmailComposeDialog';
 
 interface ApplicantDetailDialogProps {
   applicant: Applicant | null;
@@ -78,6 +79,7 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
   const [status, setStatus] = useState<ApplicantStatus>('applied');
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
+  const [composeOpen, setComposeOpen] = useState(false);
 
   useEffect(() => {
     if (applicant) {
@@ -224,6 +226,28 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
             <Link href={`mailto:${applicant.email}`} sx={{ color: '#1e293b', fontSize: '14px' }}>
               {applicant.email}
             </Link>
+            <Button
+              size="small"
+              startIcon={<EmailIcon sx={{ fontSize: 14 }} />}
+              onClick={() => setComposeOpen(true)}
+              sx={{
+                ml: 1,
+                background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                color: 'white',
+                textTransform: 'none',
+                fontWeight: 600,
+                fontSize: '12px',
+                borderRadius: 2,
+                px: 1.5,
+                py: 0.5,
+                minHeight: 0,
+                '&:hover': {
+                  background: 'linear-gradient(135deg, #5568d3 0%, #6a3f8f 100%)',
+                },
+              }}
+            >
+              Compose
+            </Button>
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
             {hasLinkedIn ? (
@@ -408,6 +432,17 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
           </Button>
         </Box>
       </DialogActions>
+
+      {/* Compose Email Dialog */}
+      {applicant && (
+        <HiringEmailComposeDialog
+          open={composeOpen}
+          onClose={() => setComposeOpen(false)}
+          applicantId={applicant.id}
+          applicantName={applicant.name}
+          applicantEmail={applicant.email}
+        />
+      )}
     </Dialog>
   );
 };

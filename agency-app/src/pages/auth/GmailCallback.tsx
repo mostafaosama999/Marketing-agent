@@ -17,34 +17,48 @@ const GmailCallback: React.FC = () => {
 
   useEffect(() => {
     const handleOAuthCallback = async () => {
-      // Extract authorization code from URL
+      // Extract authorization code and state from URL
       const params = new URLSearchParams(location.search);
       const code = params.get("code");
       const error = params.get("error");
+      const stateParam = params.get("state");
+
+      // Parse accountType from state (Google passes it back)
+      let accountType: string | undefined;
+      if (stateParam) {
+        try {
+          const stateData = JSON.parse(stateParam);
+          accountType = stateData.accountType;
+        } catch {
+          // Ignore parse errors
+        }
+      }
+
+      const isHiring = accountType === "hiring";
+      const redirectPath = isHiring ? "/settings/integrations" : "/inbound-generation";
 
       if (error) {
         setStatus("error");
         setMessage(`OAuth error: ${error}`);
-        setTimeout(() => navigate("/inbound-generation"), 3000);
+        setTimeout(() => navigate(redirectPath), 3000);
         return;
       }
 
       if (!code) {
         setStatus("error");
         setMessage("No authorization code received");
-        setTimeout(() => navigate("/inbound-generation"), 3000);
+        setTimeout(() => navigate(redirectPath), 3000);
         return;
       }
 
       try {
-        // Exchange code for tokens
-        const result = await exchangeGmailOAuthCode(code);
+        // Exchange code for tokens (pass accountType for hiring)
+        const result = await exchangeGmailOAuthCode(code, accountType);
 
         if (result.success) {
           setStatus("success");
           setMessage(result.message);
-          // Redirect to inbound generation page after success
-          setTimeout(() => navigate("/inbound-generation"), 2000);
+          setTimeout(() => navigate(redirectPath), 2000);
         } else {
           setStatus("error");
           setMessage("Failed to save OAuth tokens");

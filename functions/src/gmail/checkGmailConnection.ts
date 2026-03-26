@@ -5,10 +5,11 @@
 import * as functions from "firebase-functions";
 import {HttpsError} from "firebase-functions/v1/auth";
 import {getAuthenticatedOAuth2Client} from "./oauthService";
+import type {GmailAccountType} from "./oauthService";
 import {google} from "googleapis";
 
 export const checkGmailConnectionStatus = functions.https.onCall(
-  async (_data, context) => {
+  async (data: {accountType?: GmailAccountType} | undefined, context) => {
     // Check authentication
     if (!context.auth) {
       throw new HttpsError(
@@ -17,9 +18,11 @@ export const checkGmailConnectionStatus = functions.https.onCall(
       );
     }
 
+    const accountType = data?.accountType || "admin";
+
     try {
       // Try to get authenticated client and verify it works
-      const oauth2Client = await getAuthenticatedOAuth2Client();
+      const oauth2Client = await getAuthenticatedOAuth2Client(accountType);
       const gmail = google.gmail({version: "v1", auth: oauth2Client});
 
       // Test the connection by getting user profile

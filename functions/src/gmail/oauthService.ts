@@ -1,12 +1,20 @@
 /**
  * OAuth2 Service for Gmail API
  * Manages OAuth tokens and authentication
+ * Supports multiple accounts via accountType ("admin" for leads, "hiring" for hiring)
  */
 
 import {google} from "googleapis";
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import {FieldValue} from "firebase-admin/firestore";
+
+export type GmailAccountType = "admin" | "hiring";
+
+const ACCOUNT_EMAILS: Record<GmailAccountType, string> = {
+  admin: "mostafa.moqbel.ibrahim@gmail.com",
+  hiring: "mostafa@codecontent.net",
+};
 
 const SCOPES = [
   "https://www.googleapis.com/auth/gmail.readonly",
@@ -70,17 +78,23 @@ export function getOAuth2Client(origin?: string) {
 
 /**
  * Get OAuth2 client with refresh token set
+ * @param accountType Which Gmail account to authenticate ("admin" for leads, "hiring" for hiring)
  */
-export async function getAuthenticatedOAuth2Client() {
+export async function getAuthenticatedOAuth2Client(
+  accountType: GmailAccountType = "admin"
+) {
   const oauth2Client = getOAuth2Client(undefined);
 
-  // Try to get refresh token from Firebase config first
-  let refreshToken = functions.config().gmail?.refresh_token;
+  // Try to get refresh token from Firebase config first (only for admin account)
+  let refreshToken: string | undefined;
+  if (accountType === "admin") {
+    refreshToken = functions.config().gmail?.refresh_token;
+  }
 
   // If not in config, try Firestore
   if (!refreshToken) {
     const db = admin.firestore();
-    const tokenDoc = await db.collection("gmailTokens").doc("admin").get();
+    const tokenDoc = await db.collection("gmailTokens").doc(accountType).get();
 
     if (tokenDoc.exists) {
       refreshToken = tokenDoc.data()?.refreshToken;
@@ -88,8 +102,9 @@ export async function getAuthenticatedOAuth2Client() {
   }
 
   if (!refreshToken) {
+    const email = ACCOUNT_EMAILS[accountType];
     throw new Error(
-      "Gmail refresh token not found. Please complete OAuth setup first."
+      `Gmail refresh token not found for ${email}. Please complete OAuth setup in Settings → Integrations.`
     );
   }
 
@@ -102,14 +117,20 @@ export async function getAuthenticatedOAuth2Client() {
 
 /**
  * Generate OAuth authorization URL
+ * @param origin The origin URL for redirect
+ * @param accountType Which account is being connected
  */
-export function generateAuthUrl(origin?: string): string {
+export function generateAuthUrl(
+  origin?: string,
+  accountType: GmailAccountType = "admin"
+): string {
   const oauth2Client = getOAuth2Client(origin);
 
   const authUrl = oauth2Client.generateAuthUrl({
     access_type: "offline",
     scope: SCOPES,
     prompt: "consent", // Force consent screen to get refresh token
+    state: JSON.stringify({accountType}),
   });
 
   return authUrl;
@@ -117,9 +138,16 @@ export function generateAuthUrl(origin?: string): string {
 
 /**
  * Exchange authorization code for tokens
+ * @param code The authorization code from Google
+ * @param origin The origin URL
+ * @param accountType Which account is being connected
  */
-export async function exchangeCodeForTokens(code: string, origin?: string) {
-  console.log("🔍 [OAuth] Starting token exchange...");
+export async function exchangeCodeForTokens(
+  code: string,
+  origin?: string,
+  accountType: GmailAccountType = "admin"
+) {
+  console.log(`🔍 [OAuth] Starting token exchange for account: ${accountType}`);
   console.log("🔍 [OAuth] Code received:", code?.substring(0, 20) + "...");
 
   const oauth2Client = getOAuth2Client(origin);
@@ -139,47 +167,48 @@ export async function exchangeCodeForTokens(code: string, origin?: string) {
 
   // Store tokens in Firestore
   const db = admin.firestore();
-  console.log("🔍 [OAuth] Firestore instance:", !!db);
-  console.log("🔍 [OAuth] FieldValue:", !!FieldValue);
-  console.log("🔍 [OAuth] serverTimestamp:", !!FieldValue.serverTimestamp);
 
   const tokenData = {
     refreshToken: tokens.refresh_token,
     accessToken: tokens.access_token,
     expiresAt: tokens.expiry_date ? new Date(tokens.expiry_date) : null,
-    email: functions.config().gmail?.inbox_email || "mostafaainews@gmail.com",
+    email: ACCOUNT_EMAILS[accountType],
+    accountType,
     createdAt: FieldValue.serverTimestamp(),
   };
 
   console.log("🔍 [OAuth] Token data prepared:", Object.keys(tokenData));
 
-  await db.collection("gmailTokens").doc("admin").set(tokenData);
+  await db.collection("gmailTokens").doc(accountType).set(tokenData);
 
-  console.log("✅ [OAuth] Tokens stored in Firestore successfully");
+  console.log(`✅ [OAuth] Tokens stored for ${accountType} account`);
 
   return {
     refreshToken: tokens.refresh_token,
-    message: "OAuth tokens successfully saved. Gmail is now connected!",
+    message: `OAuth tokens successfully saved. ${ACCOUNT_EMAILS[accountType]} is now connected!`,
   };
 }
 
 /**
  * Check if Gmail is connected (has refresh token)
+ * @param accountType Which Gmail account to check
  */
-export async function isGmailConnected(): Promise<boolean> {
+export async function isGmailConnected(
+  accountType: GmailAccountType = "admin"
+): Promise<boolean> {
   try {
-    // Check Firebase config
-    if (functions.config().gmail?.refresh_token) {
+    // Check Firebase config (only for admin account)
+    if (accountType === "admin" && functions.config().gmail?.refresh_token) {
       return true;
     }
 
     // Check Firestore
     const db = admin.firestore();
-    const tokenDoc = await db.collection("gmailTokens").doc("admin").get();
+    const tokenDoc = await db.collection("gmailTokens").doc(accountType).get();
 
     return tokenDoc.exists && !!tokenDoc.data()?.refreshToken;
   } catch (error) {
-    console.error("Error checking Gmail connection:", error);
+    console.error(`Error checking Gmail connection for ${accountType}:`, error);
     return false;
   }
 }

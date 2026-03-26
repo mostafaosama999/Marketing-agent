@@ -20,6 +20,15 @@ export interface Applicant {
   submittedAt: Date;
   createdAt: Date;
   updatedAt: Date;
+  outreach?: {
+    email?: {
+      status: string;
+      draftCreatedAt?: Date;
+      draftId?: string;
+      draftUrl?: string;
+      subject?: string;
+    };
+  };
 }
 
 export interface ApplicantFormData {
@@ -46,7 +55,7 @@ export const HIRING_STAGES: HiringStage[] = [
   { id: 'applied', label: 'Applied', icon: '\u{1F4CB}', color: '#3b82f6', headerColor: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)' },
   { id: 'shortlisted', label: 'Shortlisted', icon: '\u2B50', color: '#f59e0b', headerColor: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' },
   { id: 'test_task', label: 'Test Task', icon: '\u{1F4DD}', color: '#f97316', headerColor: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)' },
-  { id: 'offer', label: 'Offer', icon: '\u{1F91D}', color: '#06b6d4', headerColor: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)' },
+  { id: 'offer', label: 'Interview', icon: '\u{1F91D}', color: '#06b6d4', headerColor: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)' },
   { id: 'hired', label: 'Hired', icon: '\u2705', color: '#10b981', headerColor: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' },
   { id: 'rejected', label: 'Rejected', icon: '\u274C', color: '#ef4444', headerColor: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' },
 ];

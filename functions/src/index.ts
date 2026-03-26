@@ -111,6 +111,7 @@ export {exchangeGmailOAuthCode} from "./gmail/exchangeOAuthCode";
 export {checkGmailConnectionStatus} from "./gmail/checkGmailConnection";
 export {createGmailDraftCloud} from "./gmail/createDraft";
 export {createFollowUpDraftCloud} from "./gmail/createFollowUpDraft";
+export {createHiringDraftCloud} from "./gmail/createHiringDraft";
 
 // Export competitor content tracking functions
 export {extractCompetitorPosts} from "./competitors/extractCompetitorPosts";

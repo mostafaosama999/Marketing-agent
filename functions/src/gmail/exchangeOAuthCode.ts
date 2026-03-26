@@ -6,10 +6,12 @@
 import * as functions from "firebase-functions";
 import {HttpsError} from "firebase-functions/v1/auth";
 import {exchangeCodeForTokens} from "./oauthService";
+import type {GmailAccountType} from "./oauthService";
 
 interface ExchangeCodeRequest {
   code: string;
   origin?: string;
+  accountType?: GmailAccountType;
 }
 
 interface ExchangeCodeResponse {
@@ -30,7 +32,8 @@ export const exchangeGmailOAuthCode = functions.https.onCall(
       );
     }
 
-    console.log(`OAuth code exchange requested by user: ${context.auth.uid}`);
+    const accountType = data.accountType || "admin";
+    console.log(`OAuth code exchange requested by user: ${context.auth.uid} for account: ${accountType}`);
     console.log(`Origin: ${data?.origin || "not provided"}`);
 
     if (!data.code) {
@@ -41,9 +44,9 @@ export const exchangeGmailOAuthCode = functions.https.onCall(
     }
 
     try {
-      const result = await exchangeCodeForTokens(data.code, data.origin);
+      const result = await exchangeCodeForTokens(data.code, data.origin, accountType);
 
-      console.log("✅ OAuth tokens successfully exchanged and stored");
+      console.log(`✅ OAuth tokens successfully exchanged and stored for ${accountType}`);
 
       return {
         success: true,

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Box, Typography, Button, Chip, Snackbar, Alert, CircularProgress } from '@mui/material';
+import { Box, Typography, Button, Snackbar, Alert, CircularProgress, Select, MenuItem, FormControl } from '@mui/material';
 import { Upload as UploadIcon, FilterList as FilterIcon } from '@mui/icons-material';
 import { Applicant, ApplicantStatus, HIRING_STAGES } from '../../../types/applicant';
 import { subscribeToApplicants, updateApplicantStatus, subscribeToViewedApplicantIds, markApplicantViewed } from '../../../services/api/applicants';
@@ -19,6 +19,8 @@ const HiringBoard: React.FC = () => {
   const [detailOpen, setDetailOpen] = useState(false);
   const [csvOpen, setCsvOpen] = useState(false);
   const [universityFilter, setUniversityFilter] = useState<string | null>(null);
+  const [genderFilter, setGenderFilter] = useState<string | null>(null);
+  const [scoreFilter, setScoreFilter] = useState<string | null>(null);
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false,
     message: '',
@@ -43,7 +45,7 @@ const HiringBoard: React.FC = () => {
     return () => unsubscribe();
   }, []);
 
-  // University filter data
+  // Filter option data with counts
   const universityCounts = useMemo(() => {
     const counts: Record<string, number> = {};
     for (const a of applicants) {
@@ -54,10 +56,40 @@ const HiringBoard: React.FC = () => {
     return Object.entries(counts).sort((a, b) => b[1] - a[1]);
   }, [applicants]);
 
+  const genderCounts = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const a of applicants) {
+      const g = a.sex || 'Unknown';
+      counts[g] = (counts[g] || 0) + 1;
+    }
+    return Object.entries(counts).sort((a, b) => b[1] - a[1]);
+  }, [applicants]);
+
+  const scoreCounts = useMemo(() => {
+    let notScored = 0, low = 0, medium = 0, high = 0;
+    for (const a of applicants) {
+      if (a.score === null || a.score === undefined) notScored++;
+      else if (a.score >= 1 && a.score <= 4) low++;
+      else if (a.score >= 5 && a.score <= 7) medium++;
+      else if (a.score >= 8 && a.score <= 10) high++;
+      else notScored++;
+    }
+    return { not_scored: notScored, low, medium, high };
+  }, [applicants]);
+
   const filteredApplicants = useMemo(() => {
-    if (!universityFilter) return applicants;
-    return applicants.filter((a) => a.education === universityFilter);
-  }, [applicants, universityFilter]);
+    return applicants.filter((a) => {
+      if (universityFilter && a.education !== universityFilter) return false;
+      if (genderFilter && (a.sex || 'Unknown') !== genderFilter) return false;
+      if (scoreFilter) {
+        if (scoreFilter === 'not_scored' && a.score !== null && a.score !== undefined) return false;
+        if (scoreFilter === 'low' && !(a.score !== null && a.score >= 1 && a.score <= 4)) return false;
+        if (scoreFilter === 'medium' && !(a.score !== null && a.score >= 5 && a.score <= 7)) return false;
+        if (scoreFilter === 'high' && !(a.score !== null && a.score >= 8 && a.score <= 10)) return false;
+      }
+      return true;
+    });
+  }, [applicants, universityFilter, genderFilter, scoreFilter]);
 
   const getApplicantsForStage = useCallback(
     (stageId: ApplicantStatus) => {
@@ -173,7 +205,7 @@ const HiringBoard: React.FC = () => {
             Hiring Pipeline
           </Typography>
           <Typography variant="body2" sx={{ color: '#64748b' }}>
-            {universityFilter ? `${filteredApplicants.length} of ${applicants.length}` : applicants.length} applicant{applicants.length !== 1 ? 's' : ''}
+            {(universityFilter || genderFilter || scoreFilter) ? `${filteredApplicants.length} of ${applicants.length}` : applicants.length} applicant{applicants.length !== 1 ? 's' : ''}
           </Typography>
         </Box>
         <Button
@@ -196,49 +228,111 @@ const HiringBoard: React.FC = () => {
         </Button>
       </Box>
 
-      {/* University Filter */}
-      {universityCounts.length > 0 && (
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1,
-            px: 4,
-            pb: 2,
-            flexShrink: 0,
-            flexWrap: 'wrap',
-          }}
-        >
-          <FilterIcon sx={{ fontSize: 16, color: '#94a3b8' }} />
-          <Chip
-            label={`All (${applicants.length})`}
-            size="small"
-            onClick={() => setUniversityFilter(null)}
+      {/* Filter Bar */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+          px: 4,
+          pb: 2,
+          flexShrink: 0,
+          flexWrap: 'wrap',
+        }}
+      >
+        <FilterIcon sx={{ fontSize: 18, color: '#94a3b8' }} />
+
+        {/* University Filter */}
+        <FormControl size="small" sx={{ minWidth: 220 }}>
+          <Select
+            value={universityFilter || ''}
+            onChange={(e) => setUniversityFilter(e.target.value || null)}
+            displayEmpty
             sx={{
-              fontWeight: 600,
-              fontSize: '11px',
-              background: !universityFilter ? '#667eea' : '#f1f5f9',
-              color: !universityFilter ? 'white' : '#64748b',
-              '&:hover': { background: !universityFilter ? '#5a6fd6' : '#e2e8f0' },
+              fontSize: '13px',
+              borderRadius: 2,
+              background: 'white',
+              '& .MuiOutlinedInput-notchedOutline': {
+                borderColor: universityFilter ? '#667eea' : '#e2e8f0',
+              },
+              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#667eea' },
+              '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#667eea' },
             }}
-          />
-          {universityCounts.map(([uni, count]) => (
-            <Chip
-              key={uni}
-              label={`${uni} (${count})`}
-              size="small"
-              onClick={() => setUniversityFilter(universityFilter === uni ? null : uni)}
-              sx={{
-                fontWeight: 600,
-                fontSize: '11px',
-                background: universityFilter === uni ? '#667eea' : '#f1f5f9',
-                color: universityFilter === uni ? 'white' : '#64748b',
-                '&:hover': { background: universityFilter === uni ? '#5a6fd6' : '#e2e8f0' },
-              }}
-            />
-          ))}
-        </Box>
-      )}
+          >
+            <MenuItem value="" sx={{ fontSize: '13px' }}>
+              All Universities ({applicants.length})
+            </MenuItem>
+            {universityCounts.map(([uni, count]) => (
+              <MenuItem key={uni} value={uni} sx={{ fontSize: '13px' }}>
+                {uni} ({count})
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        {/* Gender Filter */}
+        <FormControl size="small" sx={{ minWidth: 160 }}>
+          <Select
+            value={genderFilter || ''}
+            onChange={(e) => setGenderFilter(e.target.value || null)}
+            displayEmpty
+            sx={{
+              fontSize: '13px',
+              borderRadius: 2,
+              background: 'white',
+              '& .MuiOutlinedInput-notchedOutline': {
+                borderColor: genderFilter ? '#667eea' : '#e2e8f0',
+              },
+              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#667eea' },
+              '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#667eea' },
+            }}
+          >
+            <MenuItem value="" sx={{ fontSize: '13px' }}>
+              All Genders ({applicants.length})
+            </MenuItem>
+            {genderCounts.map(([gender, count]) => (
+              <MenuItem key={gender} value={gender} sx={{ fontSize: '13px' }}>
+                {gender} ({count})
+              </MenuItem>
+            ))}
+          </Select>
+        </FormControl>
+
+        {/* Score Filter */}
+        <FormControl size="small" sx={{ minWidth: 180 }}>
+          <Select
+            value={scoreFilter || ''}
+            onChange={(e) => setScoreFilter(e.target.value || null)}
+            displayEmpty
+            sx={{
+              fontSize: '13px',
+              borderRadius: 2,
+              background: 'white',
+              '& .MuiOutlinedInput-notchedOutline': {
+                borderColor: scoreFilter ? '#667eea' : '#e2e8f0',
+              },
+              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#667eea' },
+              '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#667eea' },
+            }}
+          >
+            <MenuItem value="" sx={{ fontSize: '13px' }}>
+              All Scores ({applicants.length})
+            </MenuItem>
+            <MenuItem value="not_scored" sx={{ fontSize: '13px' }}>
+              Not Scored ({scoreCounts.not_scored})
+            </MenuItem>
+            <MenuItem value="low" sx={{ fontSize: '13px' }}>
+              Low 1-4 ({scoreCounts.low})
+            </MenuItem>
+            <MenuItem value="medium" sx={{ fontSize: '13px' }}>
+              Medium 5-7 ({scoreCounts.medium})
+            </MenuItem>
+            <MenuItem value="high" sx={{ fontSize: '13px' }}>
+              High 8-10 ({scoreCounts.high})
+            </MenuItem>
+          </Select>
+        </FormControl>
+      </Box>
 
       {/* Kanban Board */}
       <Box
