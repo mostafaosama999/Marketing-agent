@@ -298,10 +298,9 @@ export const HiringEmailTemplatesTab: React.FC = () => {
                 <Typography
                   variant="body2"
                   color="text.secondary"
-                  sx={{ mt: 1, whiteSpace: 'pre-wrap', maxHeight: 60, overflow: 'hidden' }}
+                  sx={{ mt: 1, whiteSpace: 'pre-wrap' }}
                 >
-                  {template.body.substring(0, 150)}
-                  {template.body.length > 150 ? '...' : ''}
+                  {template.body}
                 </Typography>
               </Box>
               <Box sx={{ display: 'flex', gap: 0.5, ml: 2 }}>

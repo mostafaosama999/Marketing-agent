@@ -5,6 +5,7 @@ import { Applicant, ApplicantStatus, HIRING_STAGES } from '../../../types/applic
 import { subscribeToApplicants, updateApplicantStatus, subscribeToViewedApplicantIds, markApplicantViewed } from '../../../services/api/applicants';
 import { useAuth } from '../../../contexts/AuthContext';
 import { ApplicantColumn } from './ApplicantColumn';
+import { PipelineFunnelStrip } from './PipelineFunnelStrip';
 import { ApplicantDetailDialog } from './ApplicantDetailDialog';
 import { CSVImportDialog } from './CSVImportDialog';
 
@@ -333,6 +334,9 @@ const HiringBoard: React.FC = () => {
           </Select>
         </FormControl>
       </Box>
+
+      {/* Pipeline Funnel Stats */}
+      <PipelineFunnelStrip applicants={filteredApplicants} />
 
       {/* Kanban Board */}
       <Box
