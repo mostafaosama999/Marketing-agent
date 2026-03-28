@@ -15,6 +15,7 @@ import {
   IconButton,
   Link,
   Divider,
+  Chip,
 } from '@mui/material';
 import {
   Close as CloseIcon,
@@ -27,9 +28,10 @@ import {
   Cake as CakeIcon,
   CalendarToday as CalendarIcon,
 } from '@mui/icons-material';
-import { Applicant, ApplicantStatus, HIRING_STAGES } from '../../../types/applicant';
+import { Applicant, ApplicantStatus, HIRING_STAGES, REJECTION_STAGE_LABELS, REJECTION_STAGE_COLORS } from '../../../types/applicant';
 import { updateApplicant, deleteApplicant } from '../../../services/api/applicants';
 import { HiringEmailComposeDialog } from './HiringEmailComposeDialog';
+import { RejectionDialog } from './RejectionDialog';
 
 interface ApplicantDetailDialogProps {
   applicant: Applicant | null;
@@ -81,6 +83,7 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
+  const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
 
   useEffect(() => {
     if (applicant) {
@@ -154,7 +157,14 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
             <Select
               value={status}
               label="Status"
-              onChange={(e) => setStatus(e.target.value as ApplicantStatus)}
+              onChange={(e) => {
+                const newStatus = e.target.value as ApplicantStatus;
+                if (newStatus === 'rejected' && status !== 'rejected') {
+                  setRejectionDialogOpen(true);
+                  return;
+                }
+                setStatus(newStatus);
+              }}
             >
               {HIRING_STAGES.map((stage) => (
                 <MenuItem key={stage.id} value={stage.id}>
@@ -163,6 +173,64 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
               ))}
             </Select>
           </FormControl>
+
+          {/* Rejection Info */}
+          {applicant.status === 'rejected' && applicant.rejectionStage && (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                px: 2,
+                py: 1,
+                borderRadius: 2,
+                background: '#fef2f2',
+                border: '1px solid #fecaca',
+              }}
+            >
+              <Chip
+                label={REJECTION_STAGE_LABELS[applicant.rejectionStage]}
+                size="small"
+                sx={{
+                  fontSize: '11px',
+                  fontWeight: 600,
+                  height: 22,
+                  bgcolor: `${REJECTION_STAGE_COLORS[applicant.rejectionStage]}15`,
+                  color: REJECTION_STAGE_COLORS[applicant.rejectionStage],
+                  border: `1px solid ${REJECTION_STAGE_COLORS[applicant.rejectionStage]}40`,
+                }}
+              />
+              {applicant.rejectionNote && (
+                <Typography variant="body2" sx={{ color: '#64748b', fontSize: '12px' }}>
+                  {applicant.rejectionNote}
+                </Typography>
+              )}
+              {applicant.testTaskUrl && (
+                <Link
+                  href={applicant.testTaskUrl}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 0.5,
+                    fontSize: '11px',
+                    fontWeight: 600,
+                    color: '#4285f4',
+                    textDecoration: 'none',
+                    '&:hover': { textDecoration: 'underline' },
+                  }}
+                >
+                  Writing Test
+                </Link>
+              )}
+              {applicant.rejectedAt && (
+                <Typography variant="body2" sx={{ color: '#94a3b8', fontSize: '11px', ml: 'auto' }}>
+                  {applicant.rejectedAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short' })}
+                </Typography>
+              )}
+            </Box>
+          )}
 
           {/* Score Input */}
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
@@ -450,6 +518,17 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
           applicantEmail={applicant.email}
         />
       )}
+
+      {/* Rejection Dialog */}
+      <RejectionDialog
+        open={rejectionDialogOpen}
+        onClose={() => setRejectionDialogOpen(false)}
+        onConfirm={() => {
+          setRejectionDialogOpen(false);
+          onClose();
+        }}
+        applicant={applicant}
+      />
     </Dialog>
   );
 };

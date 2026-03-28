@@ -19,9 +19,16 @@ import {
   Close as CloseIcon,
   Email as EmailIcon,
 } from '@mui/icons-material';
+import {
+  FormControl,
+  InputLabel,
+  Select,
+  MenuItem,
+} from '@mui/material';
 import { useAuth } from '../../contexts/AuthContext';
 import { getSettings, updateSettings } from '../../services/api/settings';
 import { HiringEmailTemplate } from '../../types/settings';
+import { RejectionStage, REJECTION_STAGE_LABELS } from '../../types/applicant';
 
 export const HiringEmailTemplatesTab: React.FC = () => {
   const { user } = useAuth();
@@ -38,6 +45,7 @@ export const HiringEmailTemplatesTab: React.FC = () => {
   const [editName, setEditName] = useState('');
   const [editSubject, setEditSubject] = useState('');
   const [editBody, setEditBody] = useState('');
+  const [editRejectionStage, setEditRejectionStage] = useState<RejectionStage | ''>('');
 
   useEffect(() => {
     const load = async () => {
@@ -59,6 +67,7 @@ export const HiringEmailTemplatesTab: React.FC = () => {
     setEditName('');
     setEditSubject('');
     setEditBody('');
+    setEditRejectionStage('');
   };
 
   const handleEdit = (template: HiringEmailTemplate) => {
@@ -66,6 +75,7 @@ export const HiringEmailTemplatesTab: React.FC = () => {
     setEditName(template.name);
     setEditSubject(template.subject);
     setEditBody(template.body);
+    setEditRejectionStage(template.rejectionStage || '');
   };
 
   const handleCancel = () => {
@@ -73,6 +83,7 @@ export const HiringEmailTemplatesTab: React.FC = () => {
     setEditName('');
     setEditSubject('');
     setEditBody('');
+    setEditRejectionStage('');
   };
 
   const handleSave = async () => {
@@ -88,22 +99,20 @@ export const HiringEmailTemplatesTab: React.FC = () => {
       const existing = templates.find((t) => t.id === editingId);
       let updated: HiringEmailTemplate[];
 
+      const templateData: HiringEmailTemplate = {
+        id: editingId!,
+        name: editName.trim(),
+        subject: editSubject.trim(),
+        body: editBody.trim(),
+        ...(editRejectionStage ? { rejectionStage: editRejectionStage as RejectionStage } : {}),
+      };
+
       if (existing) {
         updated = templates.map((t) =>
-          t.id === editingId
-            ? { ...t, name: editName.trim(), subject: editSubject.trim(), body: editBody.trim() }
-            : t
+          t.id === editingId ? templateData : t
         );
       } else {
-        updated = [
-          ...templates,
-          {
-            id: editingId!,
-            name: editName.trim(),
-            subject: editSubject.trim(),
-            body: editBody.trim(),
-          },
-        ];
+        updated = [...templates, templateData];
       }
 
       await updateSettings({ hiringEmailTemplates: updated }, user?.uid || '');
@@ -215,6 +224,23 @@ export const HiringEmailTemplatesTab: React.FC = () => {
             sx={{ mb: 2 }}
           />
 
+          <FormControl fullWidth sx={{ mb: 2 }}>
+            <InputLabel>Rejection Stage (optional)</InputLabel>
+            <Select
+              value={editRejectionStage}
+              label="Rejection Stage (optional)"
+              onChange={(e) => setEditRejectionStage(e.target.value as RejectionStage | '')}
+            >
+              <MenuItem value="">None (general template)</MenuItem>
+              <MenuItem value="applied">After Screening</MenuItem>
+              <MenuItem value="shortlisted">After Shortlist</MenuItem>
+              <MenuItem value="test_task">After Writing Test</MenuItem>
+              <MenuItem value="responded">After Response</MenuItem>
+              <MenuItem value="feedback">After Feedback</MenuItem>
+              <MenuItem value="offer">After Interview</MenuItem>
+            </Select>
+          </FormControl>
+
           <TextField
             label="Subject"
             value={editSubject}
@@ -289,9 +315,24 @@ export const HiringEmailTemplatesTab: React.FC = () => {
           <Paper key={template.id} sx={{ p: 3, mb: 2 }}>
             <Box sx={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start' }}>
               <Box sx={{ flex: 1 }}>
-                <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
-                  {template.name}
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <Typography variant="subtitle1" sx={{ fontWeight: 600 }}>
+                    {template.name}
+                  </Typography>
+                  {template.rejectionStage && (
+                    <Chip
+                      label={REJECTION_STAGE_LABELS[template.rejectionStage]}
+                      size="small"
+                      sx={{
+                        fontSize: '10px',
+                        fontWeight: 600,
+                        height: 20,
+                        bgcolor: '#fee2e2',
+                        color: '#dc2626',
+                      }}
+                    />
+                  )}
+                </Box>
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                   Subject: {template.subject}
                 </Typography>

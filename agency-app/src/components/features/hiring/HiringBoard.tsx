@@ -1,8 +1,9 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Box, Typography, Button, Snackbar, Alert, CircularProgress, Select, MenuItem, FormControl } from '@mui/material';
 import { Upload as UploadIcon, FilterList as FilterIcon } from '@mui/icons-material';
-import { Applicant, ApplicantStatus, HIRING_STAGES } from '../../../types/applicant';
+import { Applicant, ApplicantStatus, RejectionStage, HIRING_STAGES } from '../../../types/applicant';
 import { subscribeToApplicants, updateApplicantStatus, subscribeToViewedApplicantIds, markApplicantViewed } from '../../../services/api/applicants';
+import { RejectionDialog } from './RejectionDialog';
 import { useAuth } from '../../../contexts/AuthContext';
 import { ApplicantColumn } from './ApplicantColumn';
 import { PipelineFunnelStrip } from './PipelineFunnelStrip';
@@ -27,6 +28,11 @@ const HiringBoard: React.FC = () => {
     message: '',
     severity: 'success',
   });
+  const [rejectionDialogOpen, setRejectionDialogOpen] = useState(false);
+  const [pendingRejection, setPendingRejection] = useState<Applicant | null>(null);
+  const [pendingRejectionStage, setPendingRejectionStage] = useState<RejectionStage | null>(null);
+  const [dragOverRejectionZone, setDragOverRejectionZone] = useState<string | null>(null);
+  const [dragOverSubSection, setDragOverSubSection] = useState<string | null>(null);
   const dragOverRef = useRef<string | null>(null);
 
   // Subscribe to viewed applicant IDs
@@ -92,6 +98,12 @@ const HiringBoard: React.FC = () => {
     });
   }, [applicants, universityFilter, genderFilter, scoreFilter]);
 
+  // Stages to show in the board (exclude 'rejected', 'responded', 'feedback' — they are sub-sections of Writing Test)
+  const visibleStages = useMemo(
+    () => HIRING_STAGES.filter((s) => s.id !== 'rejected' && s.id !== 'responded' && s.id !== 'feedback'),
+    []
+  );
+
   const getApplicantsForStage = useCallback(
     (stageId: ApplicantStatus) => {
       const filtered = filteredApplicants.filter((a) => a.status === stageId);
@@ -104,6 +116,22 @@ const HiringBoard: React.FC = () => {
         return b.submittedAt.getTime() - a.submittedAt.getTime();
       });
     },
+    [filteredApplicants]
+  );
+
+  // Get rejected applicants for a given rejection stage
+  const getRejectedForStage = useCallback(
+    (stageId: string) => {
+      return filteredApplicants.filter(
+        (a) => a.status === 'rejected' && a.rejectionStage === stageId
+      );
+    },
+    [filteredApplicants]
+  );
+
+  // Rejected applicants with no rejectionStage (legacy) — show under 'applied'
+  const legacyRejected = useMemo(
+    () => filteredApplicants.filter((a) => a.status === 'rejected' && !a.rejectionStage),
     [filteredApplicants]
   );
 
@@ -120,9 +148,19 @@ const HiringBoard: React.FC = () => {
   const handleDrop = async (e: React.DragEvent, targetStageId: string) => {
     e.preventDefault();
     setDragOverColumn(null);
+    setDragOverRejectionZone(null);
+    setDragOverSubSection(null);
     dragOverRef.current = null;
 
     if (!draggedApplicant || draggedApplicant.status === targetStageId) {
+      setDraggedApplicant(null);
+      return;
+    }
+
+    // Intercept rejection: open dialog instead of direct status change
+    if (targetStageId === 'rejected') {
+      setPendingRejection(draggedApplicant);
+      setRejectionDialogOpen(true);
       setDraggedApplicant(null);
       return;
     }
@@ -142,8 +180,60 @@ const HiringBoard: React.FC = () => {
     setDraggedApplicant(null);
   };
 
+  // Handle drop on a sub-section (e.g., Responded zone in Writing Test column)
+  const handleSubSectionDrop = async (e: React.DragEvent, targetStageId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverColumn(null);
+    setDragOverRejectionZone(null);
+    setDragOverSubSection(null);
+    dragOverRef.current = null;
+
+    if (!draggedApplicant || draggedApplicant.status === targetStageId) {
+      setDraggedApplicant(null);
+      return;
+    }
+
+    try {
+      await updateApplicantStatus(draggedApplicant.id, targetStageId as ApplicantStatus);
+      setSnackbar({
+        open: true,
+        message: `Moved ${draggedApplicant.name} to ${HIRING_STAGES.find((s) => s.id === targetStageId)?.label || targetStageId}`,
+        severity: 'success',
+      });
+    } catch (error) {
+      console.error('Error updating status:', error);
+      setSnackbar({ open: true, message: 'Failed to update status', severity: 'error' });
+    }
+
+    setDraggedApplicant(null);
+  };
+
+  // Handle drop on a rejection zone within a column
+  const handleRejectionZoneDrop = (e: React.DragEvent, stageId: string) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setDragOverColumn(null);
+    setDragOverRejectionZone(null);
+    setDragOverSubSection(null);
+    dragOverRef.current = null;
+
+    if (!draggedApplicant || draggedApplicant.status === 'rejected') {
+      setDraggedApplicant(null);
+      return;
+    }
+
+    // Open rejection dialog with the column's stage pre-selected
+    setPendingRejection(draggedApplicant);
+    setPendingRejectionStage(stageId as RejectionStage);
+    setRejectionDialogOpen(true);
+    setDraggedApplicant(null);
+  };
+
   const handleColumnDragOver = (e: React.DragEvent, stageId: string) => {
     e.preventDefault();
+    setDragOverRejectionZone(null);
+    setDragOverSubSection(null);
     if (dragOverRef.current !== stageId) {
       dragOverRef.current = stageId;
       setDragOverColumn(stageId);
@@ -356,19 +446,72 @@ const HiringBoard: React.FC = () => {
           },
         }}
       >
-        {HIRING_STAGES.map((stage) => (
-          <ApplicantColumn
-            key={stage.id}
-            stage={stage}
-            applicants={getApplicantsForStage(stage.id)}
-            viewedIds={viewedIds}
-            onDragOver={(e) => handleColumnDragOver(e, stage.id)}
-            onDrop={handleDrop}
-            onDragStart={handleDragStart}
-            onApplicantClick={handleApplicantClick}
-            isDraggedOver={dragOverColumn === stage.id}
-          />
-        ))}
+        {visibleStages.map((stage) => {
+          // Only applied, test_task, offer get rejection zones
+          const hasRejectionZone = ['applied', 'test_task', 'offer'].includes(stage.id);
+          const rejected = hasRejectionZone
+            ? [
+                ...getRejectedForStage(stage.id),
+                // Also include 'responded' and 'feedback' rejections under test_task since they are merged there
+                ...(stage.id === 'test_task' ? [...getRejectedForStage('responded'), ...getRejectedForStage('feedback')] : []),
+                ...(stage.id === 'applied' ? legacyRejected : []),
+              ]
+            : [];
+
+          // Writing Test column gets sub-sections for Responded and Feedback
+          const subSections = stage.id === 'test_task'
+            ? [
+                {
+                  label: 'Responded',
+                  icon: '\u{1F4E9}',
+                  color: '#8b5cf6',
+                  applicants: getApplicantsForStage('responded'),
+                  droppable: true,
+                  dropStageId: 'responded',
+                },
+                {
+                  label: 'Feedback',
+                  icon: '\u{1F4AC}',
+                  color: '#0ea5e9',
+                  applicants: getApplicantsForStage('feedback'),
+                  droppable: true,
+                  dropStageId: 'feedback',
+                },
+              ]
+            : [];
+
+          // No totalCount override — header shows only the primary stage's count
+          const totalCount = undefined;
+
+          return (
+            <ApplicantColumn
+              key={stage.id}
+              stage={stage}
+              applicants={getApplicantsForStage(stage.id)}
+              rejectedApplicants={rejected}
+              subSections={subSections}
+              viewedIds={viewedIds}
+              onDragOver={(e) => handleColumnDragOver(e, stage.id)}
+              onDrop={handleDrop}
+              onDragStart={handleDragStart}
+              onApplicantClick={handleApplicantClick}
+              isDraggedOver={dragOverColumn === stage.id}
+              isDraggedOverRejection={dragOverRejectionZone === stage.id}
+              isDraggedOverSubSection={dragOverSubSection}
+              totalCount={totalCount}
+              onRejectionDragOver={hasRejectionZone ? (e) => {
+                e.preventDefault();
+                setDragOverRejectionZone(stage.id);
+              } : undefined}
+              onRejectionDrop={hasRejectionZone ? (e) => handleRejectionZoneDrop(e, stage.id) : undefined}
+              onSubSectionDragOver={(e, dropStageId) => {
+                e.preventDefault();
+                setDragOverSubSection(dropStageId);
+              }}
+              onSubSectionDrop={(e, dropStageId) => handleSubSectionDrop(e, dropStageId)}
+            />
+          );
+        })}
       </Box>
 
       {/* Detail Dialog */}
@@ -376,6 +519,28 @@ const HiringBoard: React.FC = () => {
         applicant={selectedApplicant}
         open={detailOpen}
         onClose={handleDetailClose}
+      />
+
+      {/* Rejection Dialog */}
+      <RejectionDialog
+        open={rejectionDialogOpen}
+        onClose={() => {
+          setRejectionDialogOpen(false);
+          setPendingRejection(null);
+          setPendingRejectionStage(null);
+        }}
+        onConfirm={() => {
+          setRejectionDialogOpen(false);
+          setSnackbar({
+            open: true,
+            message: `Rejected ${pendingRejection?.name}`,
+            severity: 'success',
+          });
+          setPendingRejection(null);
+          setPendingRejectionStage(null);
+        }}
+        applicant={pendingRejection}
+        presetRejectionStage={pendingRejectionStage}
       />
 
       {/* CSV Import Dialog */}

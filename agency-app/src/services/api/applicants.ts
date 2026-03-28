@@ -15,7 +15,7 @@ import {
   Unsubscribe,
 } from 'firebase/firestore';
 import { db } from '../firebase/firestore';
-import { Applicant, ApplicantFormData, ApplicantStatus } from '../../types/applicant';
+import { Applicant, ApplicantFormData, ApplicantStatus, RejectionStage } from '../../types/applicant';
 
 const APPLICANTS_COLLECTION = 'applicants';
 
@@ -59,6 +59,10 @@ function convertToApplicant(id: string, data: any): Applicant {
     submittedAt: safeToDate(data.submittedAt) || safeToDate(data.createdAt) || new Date(),
     createdAt: safeToDate(data.createdAt) || new Date(),
     updatedAt: safeToDate(data.updatedAt) || new Date(),
+    rejectionStage: data.rejectionStage || undefined,
+    rejectedAt: safeToDate(data.rejectedAt) || undefined,
+    rejectionNote: data.rejectionNote || undefined,
+    testTaskUrl: data.testTaskUrl || undefined,
   };
 }
 
@@ -104,6 +108,26 @@ export async function updateApplicant(
     ...updates,
     updatedAt: serverTimestamp(),
   });
+}
+
+export async function rejectApplicant(
+  id: string,
+  rejectionStage: RejectionStage,
+  rejectionNote?: string,
+  testTaskUrl?: string
+): Promise<void> {
+  const ref = doc(db, APPLICANTS_COLLECTION, id);
+  const data: Record<string, any> = {
+    status: 'rejected',
+    rejectionStage,
+    rejectionNote: rejectionNote || '',
+    rejectedAt: serverTimestamp(),
+    updatedAt: serverTimestamp(),
+  };
+  if (testTaskUrl) {
+    data.testTaskUrl = testTaskUrl;
+  }
+  await updateDoc(ref, data);
 }
 
 export async function deleteApplicant(id: string): Promise<void> {

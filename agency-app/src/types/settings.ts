@@ -24,6 +24,7 @@ export interface HiringEmailTemplate {
   name: string;         // e.g., "Test Task", "Rejection", "Interview"
   subject: string;      // e.g., "Next Stage for the Software Engineer Role"
   body: string;         // Plain text body with {{name}} support
+  rejectionStage?: import('./applicant').RejectionStage; // Links template to a specific rejection stage for auto-suggestion
 }
 
 /**

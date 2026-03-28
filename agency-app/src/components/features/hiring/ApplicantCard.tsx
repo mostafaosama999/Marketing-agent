@@ -3,8 +3,9 @@ import { Box, Typography, Tooltip, Chip } from '@mui/material';
 import {
   LinkedIn as LinkedInIcon,
   LinkOff as LinkOffIcon,
+  Description as DocIcon,
 } from '@mui/icons-material';
-import { Applicant } from '../../../types/applicant';
+import { Applicant, REJECTION_STAGE_LABELS, REJECTION_STAGE_COLORS } from '../../../types/applicant';
 
 interface ApplicantCardProps {
   applicant: Applicant;
@@ -104,6 +105,23 @@ export const ApplicantCard: React.FC<ApplicantCardProps> = ({
         {applicant.name}
       </Typography>
 
+      {/* Rejection Stage Chip */}
+      {applicant.status === 'rejected' && applicant.rejectionStage && (
+        <Chip
+          label={REJECTION_STAGE_LABELS[applicant.rejectionStage]}
+          size="small"
+          sx={{
+            fontSize: '10px',
+            fontWeight: 600,
+            height: 18,
+            mb: 0.75,
+            bgcolor: `${REJECTION_STAGE_COLORS[applicant.rejectionStage]}15`,
+            color: REJECTION_STAGE_COLORS[applicant.rejectionStage],
+            border: `1px solid ${REJECTION_STAGE_COLORS[applicant.rejectionStage]}40`,
+          }}
+        />
+      )}
+
       {/* Age · Sex · University */}
       {infoParts.length > 0 && (
         <Typography
@@ -157,33 +175,58 @@ export const ApplicantCard: React.FC<ApplicantCardProps> = ({
         )}
       </Box>
 
-      {/* Bottom Row: LinkedIn + Source */}
+      {/* Bottom Row: LinkedIn + Google Doc + Source */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-        {hasLinkedIn ? (
-          <Tooltip title="View LinkedIn" arrow>
-            <Box
-              component="a"
-              href={applicant.linkedInUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              onClick={(e: React.MouseEvent) => e.stopPropagation()}
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'center',
-                background: 'linear-gradient(135deg, #0077b520, #0077b510)',
-                border: '1px solid #0077b540',
-                borderRadius: 1.5,
-                p: 0.75,
-                '&:hover': { background: '#0077b520' },
-              }}
-            >
-              <LinkedInIcon sx={{ fontSize: 16, color: '#0077b5' }} />
-            </Box>
-          </Tooltip>
-        ) : (
-          <Box />
-        )}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+          {hasLinkedIn ? (
+            <Tooltip title="View LinkedIn" arrow>
+              <Box
+                component="a"
+                href={applicant.linkedInUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'linear-gradient(135deg, #0077b520, #0077b510)',
+                  border: '1px solid #0077b540',
+                  borderRadius: 1.5,
+                  p: 0.75,
+                  '&:hover': { background: '#0077b520' },
+                }}
+              >
+                <LinkedInIcon sx={{ fontSize: 16, color: '#0077b5' }} />
+              </Box>
+            </Tooltip>
+          ) : (
+            <Box />
+          )}
+          {applicant.testTaskUrl && (
+            <Tooltip title="View Writing Test" arrow>
+              <Box
+                component="a"
+                href={applicant.testTaskUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  background: 'linear-gradient(135deg, #4285f420, #4285f410)',
+                  border: '1px solid #4285f440',
+                  borderRadius: 1.5,
+                  p: 0.75,
+                  '&:hover': { background: '#4285f420' },
+                }}
+              >
+                <DocIcon sx={{ fontSize: 16, color: '#4285f4' }} />
+              </Box>
+            </Tooltip>
+          )}
+        </Box>
 
         <Chip
           label={applicant.source === 'webflow' ? 'Webflow' : applicant.source === 'csv_import' ? 'CSV' : 'Manual'}

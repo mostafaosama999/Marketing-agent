@@ -1,22 +1,38 @@
 import React, { useMemo } from 'react';
 import { Box, Typography, Chip, Divider, Tooltip } from '@mui/material';
 import { ChevronRight as ChevronIcon } from '@mui/icons-material';
-import { Applicant, ApplicantStatus, HIRING_STAGES } from '../../../types/applicant';
+import { Applicant, ApplicantStatus, RejectionStage, HIRING_STAGES, REJECTION_STAGE_LABELS } from '../../../types/applicant';
 
 interface PipelineFunnelStripProps {
   applicants: Applicant[];
 }
 
-const FUNNEL_STAGES: ApplicantStatus[] = ['applied', 'shortlisted', 'test_task', 'responded', 'offer', 'hired'];
+// Responded is merged into Writing Test, so exclude from funnel
+const FUNNEL_STAGES: ApplicantStatus[] = ['applied', 'shortlisted', 'test_task', 'offer', 'hired'];
 
 export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applicants }) => {
   const stageCounts = useMemo(() => {
     const counts: Record<ApplicantStatus, number> = {
       applied: 0, shortlisted: 0, test_task: 0, responded: 0,
-      offer: 0, hired: 0, rejected: 0,
+      feedback: 0, offer: 0, hired: 0, rejected: 0,
     };
     for (const a of applicants) counts[a.status]++;
     return counts;
+  }, [applicants]);
+
+  const rejectionBreakdown = useMemo(() => {
+    const counts: Partial<Record<RejectionStage, number>> = {};
+    let unknown = 0;
+    for (const a of applicants) {
+      if (a.status === 'rejected') {
+        if (a.rejectionStage) {
+          counts[a.rejectionStage] = (counts[a.rejectionStage] || 0) + 1;
+        } else {
+          unknown++;
+        }
+      }
+    }
+    return { counts, unknown };
   }, [applicants]);
 
   const total = applicants.length;
@@ -49,8 +65,12 @@ export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applic
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flex: 1 }}>
         {FUNNEL_STAGES.map((stageId, i) => {
           const stage = getStageInfo(stageId);
-          // First step shows total (all applicants = the full top of funnel)
-          const count = i === 0 ? total : stageCounts[stageId];
+          // First step shows total; Writing Test includes responded + feedback count
+          const count = i === 0
+            ? total
+            : stageId === 'test_task'
+              ? stageCounts.test_task + stageCounts.responded + stageCounts.feedback
+              : stageCounts[stageId];
           const pct = getPercent(count);
 
           return (
@@ -91,19 +111,42 @@ export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applic
           );
         })}
 
-        {/* Rejected — separate chip */}
+        {/* Rejected — separate chip with breakdown tooltip */}
         <Box sx={{ ml: 1.5 }}>
-          <Chip
-            label={`${stageCounts.rejected} Rejected`}
-            size="small"
-            sx={{
-              bgcolor: '#fee2e2',
-              color: '#dc2626',
-              fontWeight: 700,
-              fontSize: '11px',
-              height: 24,
-            }}
-          />
+          <Tooltip
+            arrow
+            title={
+              stageCounts.rejected > 0 ? (
+                <Box sx={{ p: 0.5 }}>
+                  {(Object.entries(rejectionBreakdown.counts) as [RejectionStage, number][]).map(
+                    ([stage, count]) => (
+                      <Typography key={stage} sx={{ fontSize: '12px', mb: 0.25 }}>
+                        {count} {REJECTION_STAGE_LABELS[stage]}
+                      </Typography>
+                    )
+                  )}
+                  {rejectionBreakdown.unknown > 0 && (
+                    <Typography sx={{ fontSize: '12px', color: '#94a3b8' }}>
+                      {rejectionBreakdown.unknown} Unknown
+                    </Typography>
+                  )}
+                </Box>
+              ) : ''
+            }
+          >
+            <Chip
+              label={`${stageCounts.rejected} Rejected`}
+              size="small"
+              sx={{
+                bgcolor: '#fee2e2',
+                color: '#dc2626',
+                fontWeight: 700,
+                fontSize: '11px',
+                height: 24,
+                cursor: 'default',
+              }}
+            />
+          </Tooltip>
         </Box>
       </Box>
 
@@ -125,7 +168,7 @@ export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applic
           }}
         >
           <Typography sx={{ fontSize: '22px', fontWeight: 800, color: '#f97316', lineHeight: 1 }}>
-            {stageCounts.test_task}
+            {stageCounts.test_task + stageCounts.responded + stageCounts.feedback}
           </Typography>
           <Box>
             <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#ea580c', lineHeight: 1.2 }}>
