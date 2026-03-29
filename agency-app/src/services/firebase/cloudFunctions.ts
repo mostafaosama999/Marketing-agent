@@ -1413,3 +1413,30 @@ export async function sendOfferSlackNotification(
 
   await sendNotification({ companyName, v1Count, v2Count, v3Count, totalCost });
 }
+
+// --- Hiring: Parse Applicant Profile ---
+
+export interface ParsedApplicantProfile {
+  name: string;
+  email: string;
+  phone: string;
+  linkedInUrl: string;
+  education: string;
+  age: string;
+  sex: string;
+  availability: string;
+  bio: string;
+  formAnswers: Record<string, string>;
+}
+
+export async function parseApplicantProfile(
+  rawText: string
+): Promise<{ parsed: ParsedApplicantProfile; costInfo?: any }> {
+  const parseFn = httpsCallable<
+    { rawText: string },
+    { parsed: ParsedApplicantProfile; costInfo?: any }
+  >(functions, 'parseApplicantProfileCloud', { timeout: 30000 });
+
+  const result = await parseFn({ rawText });
+  return result.data;
+}

@@ -168,7 +168,7 @@ export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applic
           }}
         >
           <Typography sx={{ fontSize: '22px', fontWeight: 800, color: '#f97316', lineHeight: 1 }}>
-            {stageCounts.test_task + stageCounts.responded + stageCounts.feedback}
+            {stageCounts.responded + stageCounts.feedback}
           </Typography>
           <Box>
             <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#ea580c', lineHeight: 1.2 }}>

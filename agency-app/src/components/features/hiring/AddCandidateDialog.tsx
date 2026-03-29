@@ -13,10 +13,20 @@ import {
   MenuItem,
   FormControl,
   InputLabel,
+  Collapse,
+  CircularProgress,
+  Alert,
 } from '@mui/material';
-import { Close as CloseIcon } from '@mui/icons-material';
+import {
+  Close as CloseIcon,
+  AutoAwesome as AutoAwesomeIcon,
+  ExpandMore as ExpandMoreIcon,
+  ExpandLess as ExpandLessIcon,
+} from '@mui/icons-material';
 import { ApplicantFormData, ApplicantStatus } from '../../../types/applicant';
-import { createApplicant } from '../../../services/api/applicants';
+import { createApplicant, markApplicantViewed } from '../../../services/api/applicants';
+import { parseApplicantProfile } from '../../../services/firebase/cloudFunctions';
+import { useAuth } from '../../../contexts/AuthContext';
 
 interface AddCandidateDialogProps {
   open: boolean;
@@ -35,20 +45,62 @@ const INITIAL_FORM: ApplicantFormData = {
   source: 'manual',
 };
 
+type FormState = ApplicantFormData & { education: string; sex: string; age: string; availability: string };
+
+const INITIAL_FORM_STATE: FormState = {
+  ...INITIAL_FORM,
+  education: '',
+  sex: '',
+  age: '',
+  availability: '',
+};
+
 export const AddCandidateDialog: React.FC<AddCandidateDialogProps> = ({ open, onClose, onSuccess }) => {
-  const [form, setForm] = useState<ApplicantFormData & { education: string; sex: string; age: string; availability: string }>({
-    ...INITIAL_FORM,
-    education: '',
-    sex: '',
-    age: '',
-    availability: '',
-  });
+  const { user } = useAuth();
+  const [form, setForm] = useState<FormState>({ ...INITIAL_FORM_STATE });
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
+
+  // AI paste extraction state
+  const [rawText, setRawText] = useState('');
+  const [extracting, setExtracting] = useState(false);
+  const [extracted, setExtracted] = useState(false);
+  const [pasteExpanded, setPasteExpanded] = useState(true);
 
   const handleChange = (field: string) => (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     setForm((prev) => ({ ...prev, [field]: e.target.value }));
     setError('');
+  };
+
+  const handleExtract = async () => {
+    if (!rawText.trim()) return;
+
+    setExtracting(true);
+    setError('');
+    try {
+      const { parsed } = await parseApplicantProfile(rawText);
+      setForm({
+        name: parsed.name || '',
+        email: parsed.email || '',
+        phone: parsed.phone || '',
+        linkedInUrl: parsed.linkedInUrl || '',
+        bio: parsed.bio || '',
+        education: parsed.education || '',
+        age: parsed.age || '',
+        sex: parsed.sex || '',
+        availability: parsed.availability || '',
+        status: 'applied',
+        formAnswers: parsed.formAnswers || {},
+        source: 'manual',
+      });
+      setExtracted(true);
+      setPasteExpanded(false);
+    } catch (err: any) {
+      console.error('Error extracting profile:', err);
+      setError(err.message || 'Failed to extract info. Try pasting more text or fill manually.');
+    } finally {
+      setExtracting(false);
+    }
   };
 
   const handleSubmit = async () => {
@@ -59,22 +111,25 @@ export const AddCandidateDialog: React.FC<AddCandidateDialogProps> = ({ open, on
 
     setSaving(true);
     try {
-      await createApplicant({
+      const newId = await createApplicant({
         name: form.name.trim(),
         email: form.email.trim(),
         phone: form.phone.trim(),
         linkedInUrl: form.linkedInUrl.trim(),
         bio: form.bio.trim(),
         status: form.status,
-        formAnswers: {},
+        formAnswers: form.formAnswers || {},
         source: 'manual',
         submittedAt: new Date(),
-        // Pass extra fields as part of the data
         ...(form.education && { education: form.education.trim() }),
         ...(form.sex && { sex: form.sex }),
         ...(form.age && { age: form.age.trim() }),
         ...(form.availability && { availability: form.availability.trim() }),
       } as any);
+      // Auto-mark as viewed so it doesn't show NEW badge
+      if (user?.uid && newId) {
+        markApplicantViewed(user.uid, newId);
+      }
       onSuccess();
       handleReset();
     } catch (err) {
@@ -86,7 +141,10 @@ export const AddCandidateDialog: React.FC<AddCandidateDialogProps> = ({ open, on
   };
 
   const handleReset = () => {
-    setForm({ ...INITIAL_FORM, education: '', sex: '', age: '', availability: '' });
+    setForm({ ...INITIAL_FORM_STATE });
+    setRawText('');
+    setExtracted(false);
+    setPasteExpanded(true);
     setError('');
   };
 
@@ -128,6 +186,86 @@ export const AddCandidateDialog: React.FC<AddCandidateDialogProps> = ({ open, on
 
       <DialogContent sx={{ pt: 3, pb: 1 }}>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
+
+          {/* AI Paste Extraction Section */}
+          <Box
+            sx={{
+              border: '1px solid',
+              borderColor: extracted ? '#10b981' : '#e2e8f0',
+              borderRadius: 2,
+              overflow: 'hidden',
+              background: extracted ? '#f0fdf4' : '#fafbff',
+            }}
+          >
+            <Box
+              onClick={() => setPasteExpanded(!pasteExpanded)}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                px: 2,
+                py: 1.5,
+                cursor: 'pointer',
+                '&:hover': { background: 'rgba(102, 126, 234, 0.04)' },
+              }}
+            >
+              <AutoAwesomeIcon sx={{ fontSize: 18, color: extracted ? '#10b981' : '#667eea' }} />
+              <Typography variant="body2" sx={{ fontWeight: 600, color: extracted ? '#059669' : '#667eea', flex: 1 }}>
+                {extracted ? 'Info extracted — review below' : 'Paste Wuzzuf / LinkedIn profile to auto-fill'}
+              </Typography>
+              {pasteExpanded ? <ExpandLessIcon sx={{ fontSize: 18, color: '#94a3b8' }} /> : <ExpandMoreIcon sx={{ fontSize: 18, color: '#94a3b8' }} />}
+            </Box>
+
+            <Collapse in={pasteExpanded}>
+              <Box sx={{ px: 2, pb: 2 }}>
+                <TextField
+                  value={rawText}
+                  onChange={(e) => { setRawText(e.target.value); setError(''); }}
+                  placeholder="Paste the candidate's profile text here (from Wuzzuf, LinkedIn, or any source)..."
+                  fullWidth
+                  multiline
+                  rows={5}
+                  size="small"
+                  disabled={extracting}
+                  sx={{
+                    '& .MuiOutlinedInput-root': {
+                      fontSize: '13px',
+                      background: 'white',
+                    },
+                  }}
+                />
+                <Box sx={{ display: 'flex', justifyContent: 'flex-end', mt: 1 }}>
+                  <Button
+                    onClick={handleExtract}
+                    disabled={extracting || !rawText.trim()}
+                    variant="contained"
+                    size="small"
+                    startIcon={extracting ? <CircularProgress size={14} color="inherit" /> : <AutoAwesomeIcon sx={{ fontSize: 16 }} />}
+                    sx={{
+                      background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                      textTransform: 'none',
+                      fontWeight: 600,
+                      borderRadius: 1.5,
+                      fontSize: '13px',
+                      '&:hover': {
+                        background: 'linear-gradient(135deg, #5a6fd6 0%, #6a4190 100%)',
+                      },
+                    }}
+                  >
+                    {extracting ? 'Extracting...' : 'Extract Info'}
+                  </Button>
+                </Box>
+              </Box>
+            </Collapse>
+          </Box>
+
+          {error && (
+            <Alert severity="error" sx={{ py: 0.5, fontSize: '13px' }}>
+              {error}
+            </Alert>
+          )}
+
+          {/* Form Fields */}
           <TextField
             label="Full Name"
             value={form.name}
@@ -135,8 +273,6 @@ export const AddCandidateDialog: React.FC<AddCandidateDialogProps> = ({ open, on
             required
             fullWidth
             size="small"
-            error={error === 'Name is required'}
-            helperText={error === 'Name is required' ? error : ''}
           />
 
           <Box sx={{ display: 'flex', gap: 2 }}>
@@ -220,6 +356,10 @@ export const AddCandidateDialog: React.FC<AddCandidateDialogProps> = ({ open, on
               <MenuItem value="applied">Applied</MenuItem>
               <MenuItem value="shortlisted">Shortlisted</MenuItem>
               <MenuItem value="test_task">Writing Test</MenuItem>
+              <MenuItem value="responded">Responded</MenuItem>
+              <MenuItem value="feedback">Feedback</MenuItem>
+              <MenuItem value="offer">Interview</MenuItem>
+              <MenuItem value="hired">Hired</MenuItem>
             </Select>
           </FormControl>
 
@@ -232,12 +372,6 @@ export const AddCandidateDialog: React.FC<AddCandidateDialogProps> = ({ open, on
             multiline
             rows={3}
           />
-
-          {error && error !== 'Name is required' && (
-            <Typography color="error" variant="body2">
-              {error}
-            </Typography>
-          )}
         </Box>
       </DialogContent>
 

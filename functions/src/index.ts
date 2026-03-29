@@ -163,6 +163,7 @@ export {discoverCompanyWebsiteCloud} from "./search/discoverCompanyWebsite";
 // Export hiring pipeline functions
 export {webflowHiringWebhook} from "./hiring/webflowWebhook";
 export {importApplicantsCloud} from "./hiring/importApplicants";
+export {parseApplicantProfileCloud} from "./hiring/parseApplicantProfile";
 
 // Export event organizer research functions
 export {researchEventOrganizer, onEventCreatedResearchOrganizer} from "./events/researchOrganizer";
