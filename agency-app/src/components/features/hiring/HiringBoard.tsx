@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { Box, Typography, Button, Snackbar, Alert, CircularProgress, Select, MenuItem, FormControl } from '@mui/material';
-import { Upload as UploadIcon, FilterList as FilterIcon } from '@mui/icons-material';
+import { Upload as UploadIcon, FilterList as FilterIcon, PersonAdd as PersonAddIcon } from '@mui/icons-material';
 import { Applicant, ApplicantStatus, RejectionStage, HIRING_STAGES } from '../../../types/applicant';
 import { subscribeToApplicants, updateApplicantStatus, subscribeToViewedApplicantIds, markApplicantViewed } from '../../../services/api/applicants';
 import { RejectionDialog } from './RejectionDialog';
@@ -9,6 +9,7 @@ import { ApplicantColumn } from './ApplicantColumn';
 import { PipelineFunnelStrip } from './PipelineFunnelStrip';
 import { ApplicantDetailDialog } from './ApplicantDetailDialog';
 import { CSVImportDialog } from './CSVImportDialog';
+import { AddCandidateDialog } from './AddCandidateDialog';
 
 const HiringBoard: React.FC = () => {
   const { user } = useAuth();
@@ -20,6 +21,7 @@ const HiringBoard: React.FC = () => {
   const [selectedApplicant, setSelectedApplicant] = useState<Applicant | null>(null);
   const [detailOpen, setDetailOpen] = useState(false);
   const [csvOpen, setCsvOpen] = useState(false);
+  const [addCandidateOpen, setAddCandidateOpen] = useState(false);
   const [universityFilter, setUniversityFilter] = useState<string | null>(null);
   const [genderFilter, setGenderFilter] = useState<string | null>(null);
   const [scoreFilter, setScoreFilter] = useState<string | null>(null);
@@ -299,24 +301,42 @@ const HiringBoard: React.FC = () => {
             {(universityFilter || genderFilter || scoreFilter) ? `${filteredApplicants.length} of ${applicants.length}` : applicants.length} applicant{applicants.length !== 1 ? 's' : ''}
           </Typography>
         </Box>
-        <Button
-          variant="outlined"
-          startIcon={<UploadIcon />}
-          onClick={() => setCsvOpen(true)}
-          sx={{
-            borderColor: '#667eea',
-            color: '#667eea',
-            textTransform: 'none',
-            fontWeight: 600,
-            borderRadius: 2,
-            '&:hover': {
-              borderColor: '#764ba2',
-              background: '#667eea10',
-            },
-          }}
-        >
-          Import CSV
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1.5 }}>
+          <Button
+            variant="contained"
+            startIcon={<PersonAddIcon />}
+            onClick={() => setAddCandidateOpen(true)}
+            sx={{
+              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+              textTransform: 'none',
+              fontWeight: 600,
+              borderRadius: 2,
+              '&:hover': {
+                background: 'linear-gradient(135deg, #5a6fd6 0%, #6a4190 100%)',
+              },
+            }}
+          >
+            Add Candidate
+          </Button>
+          <Button
+            variant="outlined"
+            startIcon={<UploadIcon />}
+            onClick={() => setCsvOpen(true)}
+            sx={{
+              borderColor: '#667eea',
+              color: '#667eea',
+              textTransform: 'none',
+              fontWeight: 600,
+              borderRadius: 2,
+              '&:hover': {
+                borderColor: '#764ba2',
+                background: '#667eea10',
+              },
+            }}
+          >
+            Import CSV
+          </Button>
+        </Box>
       </Box>
 
       {/* Filter Bar */}
@@ -541,6 +561,16 @@ const HiringBoard: React.FC = () => {
         }}
         applicant={pendingRejection}
         presetRejectionStage={pendingRejectionStage}
+      />
+
+      {/* Add Candidate Dialog */}
+      <AddCandidateDialog
+        open={addCandidateOpen}
+        onClose={() => setAddCandidateOpen(false)}
+        onSuccess={() => {
+          setAddCandidateOpen(false);
+          setSnackbar({ open: true, message: 'Candidate added successfully', severity: 'success' });
+        }}
       />
 
       {/* CSV Import Dialog */}

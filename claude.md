@@ -8,6 +8,7 @@
 4. [Companies & Enrichment](#companies--enrichment) - Company mgmt, Apollo, blog analysis
 5. [User System](#user-system) - Roles, permissions, settings
 6. [Firebase Schema](#firebase-schema) - Collections and data structures
+7. [Content Analytics](#content-analytics) - Multi-platform content performance tracking
 
 ---
 
@@ -313,12 +314,33 @@ Each version is a separate cloud function with complete isolation:
 **leads**: archived+status+updatedAt, archived+company+updatedAt, status+updatedAt
 **companies**: archived+updatedAt, industry+updatedAt
 
+### Content Analytics Collection
+**`contentAnalytics/mostafa`**: Parent doc with cross-platform summary (platforms{}, crossPlatform{}, lastSyncAt)
+**Subcollections**: linkedin_discovery, linkedin_engagement, linkedin_posts, linkedin_followers, linkedin_demographics, tds_articles, tds_summary, medium_stories, medium_summary
+**See**: `docs/CONTENT_ANALYTICS.md` for full schema details
+
 ### Security Rules
 - All require authentication
 - Writers: no access to leads/companies
 - Analysts: read/write leads/companies, no delete
 - Managers/CEOs: full access
 - Users can only r/w own preferences/presets
+
+---
+
+## Content Analytics
+
+**Full docs**: `docs/CONTENT_ANALYTICS.md`
+
+Multi-platform content marketing analytics synced from LinkedIn (Excel), TDS (paste), and Medium (paste).
+
+**Key points:**
+- User ID is hardcoded to `'mostafa'` (not Firebase Auth UID)
+- TDS and Medium only sync 2026+ content
+- LinkedIn syncs all available data from Excel
+- Sync via Claude skill (`/sync-analytics`) or browser UI (ContentSyncDialog)
+- BDR `content-ideas` skill reads this data in Phase 0 for analytics-driven idea generation
+- Data directory: `data/linkedin/` for Excel uploads (gitignored)
 
 ---
 
@@ -329,6 +351,7 @@ Each version is a separate cloud function with complete isolation:
 | Doc | Feature |
 |-----|---------|
 | `docs/OFFER_IDEA_GENERATION.md` | V1/V2/V3 blog idea generation, AI concepts, bulk ops, costs |
+| `docs/CONTENT_ANALYTICS.md` | Multi-platform content analytics (LinkedIn, TDS, Medium), Firestore schema, sync skill, BDR integration |
 
 ---
 

@@ -125,3 +125,6 @@ scripts/
 # Local scripts and data files
 reinstall-claude
 Total marketing - Copy of 2025.csv
+
+# LinkedIn analytics Excel exports (personal data)
+data/linkedin/*.xlsx
