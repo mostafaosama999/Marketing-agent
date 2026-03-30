@@ -38,11 +38,22 @@ export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applic
   const total = applicants.length;
   const hireRate = total > 0 ? Math.round((stageCounts.hired / total) * 100) : 0;
 
+  const writingTestBreakdown = useMemo(() => {
+    const items = [
+      { label: 'Sent Test', count: stageCounts.test_task, color: '#f97316' },
+      { label: 'Responded', count: stageCounts.responded, color: '#8b5cf6' },
+      { label: 'Feedback', count: stageCounts.feedback, color: '#0ea5e9' },
+    ];
+    const wtTotal = stageCounts.test_task + stageCounts.responded + stageCounts.feedback;
+    return { items, total: wtTotal };
+  }, [stageCounts]);
+
   const getStageInfo = (id: ApplicantStatus) =>
     HIRING_STAGES.find((s) => s.id === id)!;
 
   const getPercent = (count: number) =>
     total > 0 ? Math.round((count / total) * 100) : 0;
+
 
   return (
     <Box
@@ -78,35 +89,93 @@ export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applic
               {i > 0 && (
                 <ChevronIcon sx={{ fontSize: 18, color: '#cbd5e1', flexShrink: 0 }} />
               )}
-              <Tooltip title={i === 0 ? `${total} total applications received` : `${count} of ${total} applicants (${pct}%)`} arrow>
+              {stageId === 'test_task' ? (
                 <Box
                   sx={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    alignItems: 'center',
+                    width: 240,
+                    flexShrink: 0,
+                    overflow: 'hidden',
                     px: 1.5,
                     py: 0.75,
-                    borderRadius: 1.5,
-                    borderBottom: `3px solid ${stage.color}`,
-                    minWidth: 56,
+                    borderRadius: 2,
+                    background: 'linear-gradient(135deg, rgba(249,115,22,0.06) 0%, rgba(139,92,246,0.05) 50%, rgba(14,165,233,0.05) 100%)',
+                    border: '1.5px solid rgba(249,115,22,0.2)',
                     cursor: 'default',
-                    transition: 'background 0.15s',
-                    '&:hover': { background: 'rgba(0,0,0,0.03)' },
+                    transition: 'background 0.15s, box-shadow 0.15s',
+                    '&:hover': {
+                      background: 'linear-gradient(135deg, rgba(249,115,22,0.10) 0%, rgba(139,92,246,0.08) 50%, rgba(14,165,233,0.07) 100%)',
+                      boxShadow: '0 2px 10px rgba(249,115,22,0.12)',
+                    },
                   }}
                 >
-                  <Typography sx={{ fontSize: '18px', fontWeight: 700, color: '#1e293b', lineHeight: 1 }}>
-                    {count}
-                  </Typography>
-                  <Typography sx={{ fontSize: '10px', fontWeight: 600, color: '#64748b', mt: 0.25, whiteSpace: 'nowrap' }}>
-                    {i === 0 ? 'Applied' : stage.label}
-                  </Typography>
-                  {i > 0 && (
-                    <Typography sx={{ fontSize: '9px', color: '#94a3b8', fontWeight: 600 }}>
-                      {pct}%
+                  {/* Top: count + label */}
+                  <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                    <Typography sx={{ fontSize: '18px', fontWeight: 700, color: '#1e293b', lineHeight: 1 }}>
+                      {count}
                     </Typography>
-                  )}
+                    <Typography sx={{ fontSize: '10px', fontWeight: 600, color: '#64748b', mt: 0.25, whiteSpace: 'nowrap' }}>
+                      Writing Test
+                    </Typography>
+                  </Box>
+
+                  {/* Stacked bar */}
+                  <Box sx={{ display: 'flex', height: 5, borderRadius: '3px', overflow: 'hidden', mt: 0.75, bgcolor: 'rgba(0,0,0,0.06)' }}>
+                    {writingTestBreakdown.total > 0 && writingTestBreakdown.items.filter(item => item.count > 0).map(item => (
+                      <Box key={item.label} sx={{ flex: item.count, bgcolor: item.color, transition: 'flex 0.3s ease' }} />
+                    ))}
+                  </Box>
+
+                  {/* Sub-stage legend */}
+                  <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, mt: 0.5 }}>
+                    {writingTestBreakdown.items.map((item) => (
+                      <Box key={item.label} sx={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
+                        <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: item.color, flexShrink: 0 }} />
+                        <Typography sx={{ fontSize: '10px', fontWeight: 700, color: '#1e293b', lineHeight: 1 }}>
+                          {item.count}
+                        </Typography>
+                        <Typography sx={{ fontSize: '9px', fontWeight: 500, color: '#64748b' }}>
+                          {item.label === 'Sent Test' ? 'Sent' : item.label === 'Responded' ? 'Resp' : 'Fdbk'}
+                        </Typography>
+                      </Box>
+                    ))}
+                  </Box>
+
+                  {/* Percentage at bottom */}
+                  <Typography sx={{ fontSize: '9px', color: '#94a3b8', fontWeight: 600, textAlign: 'center', mt: 0.25 }}>
+                    {pct}%
+                  </Typography>
                 </Box>
-              </Tooltip>
+              ) : (
+                <Tooltip arrow title={i === 0 ? `${total} total applications received` : `${count} of ${total} applicants (${pct}%)`}>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center',
+                      px: 1.5,
+                      py: 0.75,
+                      borderRadius: 1.5,
+                      borderBottom: `3px solid ${stage.color}`,
+                      minWidth: 56,
+                      cursor: 'default',
+                      transition: 'background 0.15s',
+                      '&:hover': { background: 'rgba(0,0,0,0.03)' },
+                    }}
+                  >
+                    <Typography sx={{ fontSize: '18px', fontWeight: 700, color: '#1e293b', lineHeight: 1 }}>
+                      {count}
+                    </Typography>
+                    <Typography sx={{ fontSize: '10px', fontWeight: 600, color: '#64748b', mt: 0.25, whiteSpace: 'nowrap' }}>
+                      {i === 0 ? 'Applied' : stage.label}
+                    </Typography>
+                    {i > 0 && (
+                      <Typography sx={{ fontSize: '9px', color: '#94a3b8', fontWeight: 600 }}>
+                        {pct}%
+                      </Typography>
+                    )}
+                  </Box>
+                </Tooltip>
+              )}
             </React.Fragment>
           );
         })}
@@ -154,32 +223,6 @@ export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applic
 
       {/* Right Zone — Spotlight */}
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexShrink: 0 }}>
-        {/* Active Test Tasks */}
-        <Box
-          sx={{
-            px: 2,
-            py: 1,
-            borderRadius: 2,
-            background: 'linear-gradient(135deg, rgba(249,115,22,0.08) 0%, rgba(234,88,12,0.04) 100%)',
-            border: '1.5px solid rgba(249, 115, 22, 0.25)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1.5,
-          }}
-        >
-          <Typography sx={{ fontSize: '22px', fontWeight: 800, color: '#f97316', lineHeight: 1 }}>
-            {stageCounts.responded + stageCounts.feedback}
-          </Typography>
-          <Box>
-            <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#ea580c', lineHeight: 1.2 }}>
-              Writing Tests
-            </Typography>
-            <Typography sx={{ fontSize: '10px', color: '#fb923c', fontWeight: 600 }}>
-              Active
-            </Typography>
-          </Box>
-        </Box>
-
         {/* Hire Rate */}
         <Box
           sx={{

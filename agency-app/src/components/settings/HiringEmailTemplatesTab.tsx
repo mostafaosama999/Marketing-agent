@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Box,
   Typography,
@@ -29,6 +29,8 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getSettings, updateSettings } from '../../services/api/settings';
 import { HiringEmailTemplate } from '../../types/settings';
 import { RejectionStage, REJECTION_STAGE_LABELS } from '../../types/applicant';
+import TiptapRichTextEditor from '../common/TiptapRichTextEditor';
+import { SafeHtmlRenderer } from '../../utils/htmlHelpers';
 
 export const HiringEmailTemplatesTab: React.FC = () => {
   const { user } = useAuth();
@@ -37,8 +39,6 @@ export const HiringEmailTemplatesTab: React.FC = () => {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
-
-  const bodyRef = useRef<HTMLTextAreaElement>(null);
 
   // Editing state
   const [editingId, setEditingId] = useState<string | null>(null);
@@ -143,20 +143,17 @@ export const HiringEmailTemplatesTab: React.FC = () => {
   };
 
   const insertVariable = (variable: string) => {
-    const textarea = bodyRef.current;
-    if (textarea) {
-      const start = textarea.selectionStart;
-      const end = textarea.selectionEnd;
-      const newBody = editBody.substring(0, start) + variable + editBody.substring(end);
-      setEditBody(newBody);
-      // Restore cursor position after the inserted variable
-      setTimeout(() => {
-        textarea.focus();
-        textarea.setSelectionRange(start + variable.length, start + variable.length);
-      }, 0);
-    } else {
-      setEditBody((prev) => prev + variable);
-    }
+    // Append the variable text to the current HTML body
+    // The rich text editor stores HTML, so we insert it at the end
+    setEditBody((prev) => {
+      if (!prev || prev === '<p></p>') return `<p>${variable}</p>`;
+      // Insert before the last closing </p> tag if possible
+      const lastPClose = prev.lastIndexOf('</p>');
+      if (lastPClose !== -1) {
+        return prev.substring(0, lastPClose) + variable + prev.substring(lastPClose);
+      }
+      return prev + variable;
+    });
   };
 
   if (loading) {
@@ -268,17 +265,17 @@ export const HiringEmailTemplatesTab: React.FC = () => {
             />
           </Box>
 
-          <TextField
-            label="Email Body"
-            value={editBody}
-            onChange={(e) => setEditBody(e.target.value)}
-            inputRef={bodyRef}
-            fullWidth
-            multiline
-            rows={8}
-            placeholder={`Hello {{name}},\n\nThank you for applying...\n\nBest regards,\nCodeContent Team`}
-            sx={{ mb: 2 }}
-          />
+          <Box sx={{ mb: 2 }}>
+            <Typography variant="caption" color="text.secondary" sx={{ mb: 0.5, display: 'block' }}>
+              Email Body
+            </Typography>
+            <TiptapRichTextEditor
+              value={editBody}
+              onChange={setEditBody}
+              placeholder="Hello {{name}}, Thank you for applying..."
+              height={200}
+            />
+          </Box>
 
           <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
             <Button onClick={handleCancel} sx={{ textTransform: 'none' }}>
@@ -336,13 +333,10 @@ export const HiringEmailTemplatesTab: React.FC = () => {
                 <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
                   Subject: {template.subject}
                 </Typography>
-                <Typography
-                  variant="body2"
-                  color="text.secondary"
-                  sx={{ mt: 1, whiteSpace: 'pre-wrap' }}
-                >
-                  {template.body}
-                </Typography>
+                <SafeHtmlRenderer
+                  html={template.body}
+                  sx={{ mt: 1, fontSize: '0.875rem', color: 'text.secondary' }}
+                />
               </Box>
               <Box sx={{ display: 'flex', gap: 0.5, ml: 2 }}>
                 <IconButton

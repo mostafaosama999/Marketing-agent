@@ -127,48 +127,6 @@ export const ApplicantColumn: React.FC<ApplicantColumnProps> = ({
           </Box>
         </Box>
 
-        {/* Sub-counts row */}
-        {(subSections.some((s) => s.applicants.length > 0) || rejectedApplicants.length > 0) && (
-          <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 1 }}>
-            {subSections.map((section) =>
-              section.applicants.length > 0 ? (
-                <Box
-                  key={section.label}
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 0.5,
-                    background: 'rgba(255,255,255,0.2)',
-                    borderRadius: '10px',
-                    px: 1,
-                    py: 0.25,
-                  }}
-                >
-                  <Typography sx={{ fontSize: '10px', fontWeight: 600 }}>
-                    {section.applicants.length} {section.label}
-                  </Typography>
-                </Box>
-              ) : null
-            )}
-            {rejectedApplicants.length > 0 && (
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: 0.5,
-                  background: 'rgba(255,255,255,0.2)',
-                  borderRadius: '10px',
-                  px: 1,
-                  py: 0.25,
-                }}
-              >
-                <Typography sx={{ fontSize: '10px', fontWeight: 600 }}>
-                  {rejectedApplicants.length} Rejected
-                </Typography>
-              </Box>
-            )}
-          </Box>
-        )}
       </Box>
 
       {/* Cards List */}

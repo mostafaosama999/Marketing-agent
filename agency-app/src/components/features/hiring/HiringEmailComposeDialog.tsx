@@ -24,6 +24,7 @@ import {
 import { createHiringDraft } from '../../../services/api/gmailService';
 import { getSettings } from '../../../services/api/settings';
 import { HiringEmailTemplate } from '../../../types/settings';
+import { SafeHtmlRenderer } from '../../../utils/htmlHelpers';
 
 interface HiringEmailComposeDialogProps {
   open: boolean;
@@ -76,7 +77,9 @@ export const HiringEmailComposeDialog: React.FC<HiringEmailComposeDialogProps> =
 
       const subject = replaceName(template.subject);
       const body = replaceName(template.body);
-      const bodyHtml = body.replace(/\n/g, '<br>');
+      // If body already contains HTML tags, use it directly; otherwise convert newlines
+      const isHtml = /<[a-z][\s\S]*>/i.test(body);
+      const bodyHtml = isHtml ? body : body.replace(/\n/g, '<br>');
 
       const result = await createHiringDraft({
         applicantId,
@@ -212,9 +215,10 @@ export const HiringEmailComposeDialog: React.FC<HiringEmailComposeDialogProps> =
                   <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
                     Body:
                   </Typography>
-                  <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', color: '#475569' }}>
-                    {t.body.replace(/\{\{name\}\}/g, applicantName).replace(/\{\{email\}\}/g, applicantEmail)}
-                  </Typography>
+                  <SafeHtmlRenderer
+                    html={t.body.replace(/\{\{name\}\}/g, applicantName).replace(/\{\{email\}\}/g, applicantEmail)}
+                    sx={{ fontSize: '0.875rem', color: '#475569' }}
+                  />
                 </Box>
               );
             })()}

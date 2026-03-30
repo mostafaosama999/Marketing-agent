@@ -113,8 +113,13 @@ export const SafeHtmlRenderer: React.FC<SafeHtmlRendererProps> = ({ html, sx = {
     const allowedTags = [
       'p', 'br', 'strong', 'b', 'em', 'i', 'u',
       'h1', 'h2', 'h3', 'h4', 'h5', 'h6',
-      'ul', 'ol', 'li', 'blockquote'
+      'ul', 'ol', 'li', 'blockquote', 'a'
     ];
+
+    // Allowed attributes per tag
+    const allowedAttributes: Record<string, string[]> = {
+      a: ['href', 'target', 'rel'],
+    };
 
     // Create a temporary div
     const temp = document.createElement('div');
@@ -134,10 +139,24 @@ export const SafeHtmlRenderer: React.FC<SafeHtmlRendererProps> = ({ html, sx = {
           return;
         }
 
-        // Remove all attributes except safe ones
+        // Remove attributes not in the allowed list for this tag
+        const safeAttrs = allowedAttributes[tagName] || [];
         Array.from(element.attributes).forEach(attr => {
-          element.removeAttribute(attr.name);
+          if (!safeAttrs.includes(attr.name)) {
+            element.removeAttribute(attr.name);
+          }
         });
+
+        // Sanitize href to prevent javascript: URLs
+        if (tagName === 'a') {
+          const href = element.getAttribute('href') || '';
+          if (href.toLowerCase().startsWith('javascript:')) {
+            element.setAttribute('href', '#');
+          }
+          // Ensure links open in new tab
+          element.setAttribute('target', '_blank');
+          element.setAttribute('rel', 'noopener noreferrer');
+        }
       }
 
       // Recursively process children
@@ -206,6 +225,11 @@ export const SafeHtmlRenderer: React.FC<SafeHtmlRendererProps> = ({ html, sx = {
         },
         '& u': {
           textDecoration: 'underline',
+        },
+        '& a': {
+          color: '#667eea',
+          textDecoration: 'underline',
+          cursor: 'pointer',
         },
         ...sx,
       }}

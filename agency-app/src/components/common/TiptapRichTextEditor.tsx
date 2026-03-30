@@ -2,6 +2,7 @@
 import React from 'react';
 import StarterKit from '@tiptap/starter-kit';
 import Placeholder from '@tiptap/extension-placeholder';
+import Link from '@tiptap/extension-link';
 import {
   RichTextEditor,
   MenuControlsContainer,
@@ -15,6 +16,9 @@ import {
   MenuButtonBlockquote,
   MenuButtonUndo,
   MenuButtonRedo,
+  MenuButtonEditLink,
+  LinkBubbleMenu,
+  LinkBubbleMenuHandler,
   type RichTextEditorRef,
 } from 'mui-tiptap';
 import { Box } from '@mui/material';
@@ -59,6 +63,11 @@ const TiptapRichTextEditor: React.FC<TiptapRichTextEditorProps> = ({
               keepAttributes: false,
             },
           }),
+          Link.configure({
+            openOnClick: false,
+            autolink: true,
+          }),
+          LinkBubbleMenuHandler,
           Placeholder.configure({
             placeholder,
             emptyEditorClass: 'is-editor-empty',
@@ -78,6 +87,8 @@ const TiptapRichTextEditor: React.FC<TiptapRichTextEditorProps> = ({
             <MenuButtonBulletedList />
             <MenuButtonOrderedList />
             <MenuButtonBlockquote />
+            <MenuDivider />
+            <MenuButtonEditLink />
             <MenuDivider />
             <MenuButtonUndo />
             <MenuButtonRedo />
@@ -156,10 +167,17 @@ const TiptapRichTextEditor: React.FC<TiptapRichTextEditorProps> = ({
               '& strong': {
                 fontWeight: 600,
               },
+              '& a': {
+                color: '#667eea',
+                textDecoration: 'underline',
+                cursor: 'pointer',
+              },
             },
           },
         }}
-      />
+      >
+        {() => <LinkBubbleMenu />}
+      </RichTextEditor>
     </Box>
   );
 };

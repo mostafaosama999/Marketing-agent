@@ -35,6 +35,7 @@ import { HiringEmailTemplate } from '../../../types/settings';
 import { getSettings } from '../../../services/api/settings';
 import { rejectApplicant } from '../../../services/api/applicants';
 import { createHiringDraft } from '../../../services/api/gmailService';
+import { SafeHtmlRenderer } from '../../../utils/htmlHelpers';
 
 interface RejectionDialogProps {
   open: boolean;
@@ -132,7 +133,8 @@ export const RejectionDialog: React.FC<RejectionDialogProps> = ({
           const body = template.body
             .replace(/\{\{name\}\}/g, applicant.name)
             .replace(/\{\{email\}\}/g, applicant.email);
-          const bodyHtml = body.replace(/\n/g, '<br>');
+          const isHtml = /<[a-z][\s\S]*>/i.test(body);
+          const bodyHtml = isHtml ? body : body.replace(/\n/g, '<br>');
 
           try {
             const result = await createHiringDraft({
@@ -336,11 +338,12 @@ export const RejectionDialog: React.FC<RejectionDialogProps> = ({
                 <Typography variant="caption" color="text.secondary" sx={{ fontWeight: 600 }}>
                   Body:
                 </Typography>
-                <Typography variant="body2" sx={{ whiteSpace: 'pre-wrap', color: '#475569', fontSize: '13px' }}>
-                  {selectedTemplate.body
+                <SafeHtmlRenderer
+                  html={selectedTemplate.body
                     .replace(/\{\{name\}\}/g, applicant.name)
                     .replace(/\{\{email\}\}/g, applicant.email)}
-                </Typography>
+                  sx={{ fontSize: '13px', color: '#475569' }}
+                />
               </Box>
             )}
 
