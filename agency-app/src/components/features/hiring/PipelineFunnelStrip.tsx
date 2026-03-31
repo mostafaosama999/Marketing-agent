@@ -39,14 +39,18 @@ export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applic
   const hireRate = total > 0 ? Math.round((stageCounts.hired / total) * 100) : 0;
 
   const writingTestBreakdown = useMemo(() => {
+    const wtRejected = applicants.filter(
+      (a) => a.status === 'rejected' && (a.rejectionStage === 'test_task' || a.rejectionStage === 'responded' || a.rejectionStage === 'feedback')
+    ).length;
     const items = [
       { label: 'Sent Test', count: stageCounts.test_task, color: '#f97316' },
       { label: 'Responded', count: stageCounts.responded, color: '#8b5cf6' },
       { label: 'Feedback', count: stageCounts.feedback, color: '#0ea5e9' },
+      { label: 'Rejected', count: wtRejected, color: '#ef4444' },
     ];
-    const wtTotal = stageCounts.test_task + stageCounts.responded + stageCounts.feedback;
+    const wtTotal = stageCounts.test_task + stageCounts.responded + stageCounts.feedback + wtRejected;
     return { items, total: wtTotal };
-  }, [stageCounts]);
+  }, [stageCounts, applicants]);
 
   const getStageInfo = (id: ApplicantStatus) =>
     HIRING_STAGES.find((s) => s.id === id)!;
@@ -76,11 +80,11 @@ export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applic
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5, flex: 1 }}>
         {FUNNEL_STAGES.map((stageId, i) => {
           const stage = getStageInfo(stageId);
-          // First step shows total; Writing Test includes responded + feedback count
+          // First step shows total; Writing Test includes responded + feedback + WT-rejected count
           const count = i === 0
             ? total
             : stageId === 'test_task'
-              ? stageCounts.test_task + stageCounts.responded + stageCounts.feedback
+              ? writingTestBreakdown.total
               : stageCounts[stageId];
           const pct = getPercent(count);
 
@@ -127,14 +131,14 @@ export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applic
 
                   {/* Sub-stage legend */}
                   <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 1, mt: 0.5 }}>
-                    {writingTestBreakdown.items.map((item) => (
+                    {writingTestBreakdown.items.filter(item => item.count > 0).map((item) => (
                       <Box key={item.label} sx={{ display: 'flex', alignItems: 'center', gap: '3px' }}>
                         <Box sx={{ width: 6, height: 6, borderRadius: '50%', bgcolor: item.color, flexShrink: 0 }} />
                         <Typography sx={{ fontSize: '10px', fontWeight: 700, color: '#1e293b', lineHeight: 1 }}>
                           {item.count}
                         </Typography>
                         <Typography sx={{ fontSize: '9px', fontWeight: 500, color: '#64748b' }}>
-                          {item.label === 'Sent Test' ? 'Sent' : item.label === 'Responded' ? 'Resp' : 'Fdbk'}
+                          {item.label === 'Sent Test' ? 'Sent' : item.label === 'Responded' ? 'Resp' : item.label === 'Feedback' ? 'Fdbk' : 'Rej'}
                         </Typography>
                       </Box>
                     ))}
