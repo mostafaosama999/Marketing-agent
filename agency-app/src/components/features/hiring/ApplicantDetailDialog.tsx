@@ -171,7 +171,15 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
               }}
             >
               {HIRING_STAGES.map((stage) => (
-                <MenuItem key={stage.id} value={stage.id}>
+                <MenuItem
+                  key={stage.id}
+                  value={stage.id}
+                  sx={
+                    stage.id === 'responded' || stage.id === 'feedback'
+                      ? { pl: 4, fontSize: '14px', color: '#64748b' }
+                      : {}
+                  }
+                >
                   {stage.icon} {stage.label}
                 </MenuItem>
               ))}
@@ -355,22 +363,7 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
         {/* Writing Test Deadline */}
         {applicant.status === 'test_task' && (() => {
           const draftDate = applicant.outreach?.email?.draftCreatedAt;
-          if (!draftDate) {
-            return (
-              <>
-                <Typography variant="subtitle2" sx={{ color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, mb: 1.5, fontSize: '11px', fontWeight: 700 }}>
-                  Writing Test
-                </Typography>
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1.5, background: '#f8fafc', border: '1px dashed #e2e8f0', borderRadius: 2, mb: 3 }}>
-                  <MailOutlineIcon sx={{ fontSize: 18, color: '#94a3b8' }} />
-                  <Box>
-                    <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#64748b' }}>Test email not sent yet</Typography>
-                    <Typography sx={{ fontSize: '12px', color: '#94a3b8' }}>Use the Compose button above to create a draft</Typography>
-                  </Box>
-                </Box>
-              </>
-            );
-          }
+          if (!draftDate) return null;
 
           const deadline = new Date(draftDate);
           deadline.setDate(deadline.getDate() + 7);

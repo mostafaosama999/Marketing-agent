@@ -181,14 +181,7 @@ export const ApplicantCard: React.FC<ApplicantCardProps> = ({
       {/* Writing Test Deadline Badge */}
       {applicant.status === 'test_task' && (() => {
         const draftDate = applicant.outreach?.email?.draftCreatedAt;
-        if (!draftDate) {
-          return (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, px: 1.25, height: 28, borderRadius: '8px', background: '#f8fafc', border: '1px dashed #cbd5e1', mb: 1.5 }}>
-              <MailOutlineIcon sx={{ fontSize: 13, color: '#94a3b8' }} />
-              <Typography sx={{ fontSize: '11px', fontWeight: 600, color: '#94a3b8' }}>Test not sent yet</Typography>
-            </Box>
-          );
-        }
+        if (!draftDate) return null;
         const deadline = new Date(draftDate);
         deadline.setDate(deadline.getDate() + 7);
         const daysLeft = Math.ceil((deadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
