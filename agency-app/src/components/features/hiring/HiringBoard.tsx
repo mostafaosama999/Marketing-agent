@@ -102,7 +102,7 @@ const HiringBoard: React.FC = () => {
 
   // Stages to show in the board (exclude 'rejected', 'responded', 'feedback' — they are sub-sections of Writing Test)
   const visibleStages = useMemo(
-    () => HIRING_STAGES.filter((s) => s.id !== 'rejected' && s.id !== 'responded' && s.id !== 'feedback'),
+    () => HIRING_STAGES.filter((s) => s.id !== 'rejected' && s.id !== 'not_responded' && s.id !== 'responded' && s.id !== 'feedback'),
     []
   );
 
@@ -473,7 +473,7 @@ const HiringBoard: React.FC = () => {
             ? [
                 ...getRejectedForStage(stage.id),
                 // Also include 'responded' and 'feedback' rejections under test_task since they are merged there
-                ...(stage.id === 'test_task' ? [...getRejectedForStage('responded'), ...getRejectedForStage('feedback')] : []),
+                ...(stage.id === 'test_task' ? [...getRejectedForStage('not_responded'), ...getRejectedForStage('responded'), ...getRejectedForStage('feedback')] : []),
                 ...(stage.id === 'applied' ? legacyRejected : []),
               ]
             : [];
@@ -481,6 +481,14 @@ const HiringBoard: React.FC = () => {
           // Writing Test column gets sub-sections for Responded and Feedback
           const subSections = stage.id === 'test_task'
             ? [
+                {
+                  label: 'Not Responded',
+                  icon: '\u{1F47B}',
+                  color: '#6b7280',
+                  applicants: getApplicantsForStage('not_responded'),
+                  droppable: true,
+                  dropStageId: 'not_responded',
+                },
                 {
                   label: 'Responded',
                   icon: '\u{1F4E9}',

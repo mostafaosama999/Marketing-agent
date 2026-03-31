@@ -175,7 +175,7 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
                   key={stage.id}
                   value={stage.id}
                   sx={
-                    stage.id === 'responded' || stage.id === 'feedback'
+                    stage.id === 'not_responded' || stage.id === 'responded' || stage.id === 'feedback'
                       ? { pl: 4, fontSize: '14px', color: '#64748b' }
                       : {}
                   }

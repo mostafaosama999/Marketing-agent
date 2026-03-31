@@ -13,8 +13,8 @@ const FUNNEL_STAGES: ApplicantStatus[] = ['applied', 'shortlisted', 'test_task',
 export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applicants }) => {
   const stageCounts = useMemo(() => {
     const counts: Record<ApplicantStatus, number> = {
-      applied: 0, shortlisted: 0, test_task: 0, responded: 0,
-      feedback: 0, offer: 0, hired: 0, rejected: 0,
+      applied: 0, shortlisted: 0, test_task: 0, not_responded: 0,
+      responded: 0, feedback: 0, offer: 0, hired: 0, rejected: 0,
     };
     for (const a of applicants) counts[a.status]++;
     return counts;
@@ -40,15 +40,16 @@ export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applic
 
   const writingTestBreakdown = useMemo(() => {
     const wtRejected = applicants.filter(
-      (a) => a.status === 'rejected' && (a.rejectionStage === 'test_task' || a.rejectionStage === 'responded' || a.rejectionStage === 'feedback')
+      (a) => a.status === 'rejected' && (a.rejectionStage === 'test_task' || a.rejectionStage === 'not_responded' || a.rejectionStage === 'responded' || a.rejectionStage === 'feedback')
     ).length;
     const items = [
       { label: 'Sent Test', count: stageCounts.test_task, color: '#f97316' },
+      { label: 'No Reply', count: stageCounts.not_responded, color: '#6b7280' },
       { label: 'Responded', count: stageCounts.responded, color: '#8b5cf6' },
       { label: 'Feedback', count: stageCounts.feedback, color: '#0ea5e9' },
       { label: 'Rejected', count: wtRejected, color: '#ef4444' },
     ];
-    const wtTotal = stageCounts.test_task + stageCounts.responded + stageCounts.feedback + wtRejected;
+    const wtTotal = stageCounts.test_task + stageCounts.not_responded + stageCounts.responded + stageCounts.feedback + wtRejected;
     return { items, total: wtTotal };
   }, [stageCounts, applicants]);
 
@@ -138,7 +139,7 @@ export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applic
                           {item.count}
                         </Typography>
                         <Typography sx={{ fontSize: '9px', fontWeight: 500, color: '#64748b' }}>
-                          {item.label === 'Sent Test' ? 'Sent' : item.label === 'Responded' ? 'Resp' : item.label === 'Feedback' ? 'Fdbk' : 'Rej'}
+                          {item.label === 'Sent Test' ? 'Sent' : item.label === 'No Reply' ? 'Ghost' : item.label === 'Responded' ? 'Resp' : item.label === 'Feedback' ? 'Fdbk' : 'Rej'}
                         </Typography>
                       </Box>
                     ))}

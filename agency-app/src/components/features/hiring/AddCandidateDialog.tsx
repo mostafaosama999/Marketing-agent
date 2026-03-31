@@ -356,6 +356,7 @@ export const AddCandidateDialog: React.FC<AddCandidateDialogProps> = ({ open, on
               <MenuItem value="applied">Applied</MenuItem>
               <MenuItem value="shortlisted">Shortlisted</MenuItem>
               <MenuItem value="test_task">Writing Test</MenuItem>
+              <MenuItem value="not_responded">Not Responded</MenuItem>
               <MenuItem value="responded">Responded</MenuItem>
               <MenuItem value="feedback">Feedback</MenuItem>
               <MenuItem value="offer">Interview</MenuItem>

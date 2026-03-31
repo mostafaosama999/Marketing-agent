@@ -164,6 +164,7 @@ export {discoverCompanyWebsiteCloud} from "./search/discoverCompanyWebsite";
 export {webflowHiringWebhook} from "./hiring/webflowWebhook";
 export {importApplicantsCloud} from "./hiring/importApplicants";
 export {parseApplicantProfileCloud} from "./hiring/parseApplicantProfile";
+export {ghostStaleWritingTests} from "./hiring/ghostWritingTests";
 
 // Export event organizer research functions
 export {researchEventOrganizer, onEventCreatedResearchOrganizer} from "./events/researchOrganizer";
