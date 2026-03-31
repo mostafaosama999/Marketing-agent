@@ -4,6 +4,9 @@ import {
   LinkedIn as LinkedInIcon,
   LinkOff as LinkOffIcon,
   Description as DocIcon,
+  AccessTime as AccessTimeIcon,
+  WarningAmber as WarningAmberIcon,
+  MailOutline as MailOutlineIcon,
 } from '@mui/icons-material';
 import { Applicant, REJECTION_STAGE_LABELS, REJECTION_STAGE_COLORS } from '../../../types/applicant';
 
@@ -174,6 +177,54 @@ export const ApplicantCard: React.FC<ApplicantCardProps> = ({
           </Tooltip>
         )}
       </Box>
+
+      {/* Writing Test Deadline Badge */}
+      {applicant.status === 'test_task' && (() => {
+        const draftDate = applicant.outreach?.email?.draftCreatedAt;
+        if (!draftDate) {
+          return (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, px: 1.25, height: 28, borderRadius: '8px', background: '#f8fafc', border: '1px dashed #cbd5e1', mb: 1.5 }}>
+              <MailOutlineIcon sx={{ fontSize: 13, color: '#94a3b8' }} />
+              <Typography sx={{ fontSize: '11px', fontWeight: 600, color: '#94a3b8' }}>Test not sent yet</Typography>
+            </Box>
+          );
+        }
+        const deadline = new Date(draftDate);
+        deadline.setDate(deadline.getDate() + 7);
+        const daysLeft = Math.ceil((deadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+        const isOverdue = daysLeft < 0;
+
+        if (isOverdue) {
+          return (
+            <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1.25, height: 28, borderRadius: '8px', background: '#fef2f2', border: '1px solid #fecaca', borderLeft: '3px solid #ef4444', mb: 1.5 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+                <WarningAmberIcon sx={{ fontSize: 13, color: '#dc2626' }} />
+                <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#dc2626' }}>Overdue · {Math.abs(daysLeft)}d ago</Typography>
+              </Box>
+              <Box sx={{ width: 8, height: 8, borderRadius: '50%', background: '#ef4444', flexShrink: 0 }} />
+            </Box>
+          );
+        }
+
+        const isUrgent = daysLeft <= 3;
+        const textColor = isUrgent ? '#c2410c' : '#15803d';
+        const fillColor = isUrgent ? '#fb923c' : '#4ade80';
+        const bg = isUrgent ? '#fff7ed' : '#f0fdf4';
+        const borderColor = isUrgent ? '#fed7aa' : '#86efac';
+        const fillWidth = Math.round((daysLeft / 7) * 48);
+
+        return (
+          <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', px: 1.25, height: 28, borderRadius: '8px', background: bg, border: `1px solid ${borderColor}`, mb: 1.5 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
+              <AccessTimeIcon sx={{ fontSize: 13, color: textColor }} />
+              <Typography sx={{ fontSize: '11px', fontWeight: 700, color: textColor }}>{daysLeft}d left</Typography>
+            </Box>
+            <Box sx={{ width: 48, height: 4, borderRadius: 2, background: '#e2e8f0', overflow: 'hidden', flexShrink: 0 }}>
+              <Box sx={{ width: fillWidth, height: '100%', background: fillColor, borderRadius: 2 }} />
+            </Box>
+          </Box>
+        );
+      })()}
 
       {/* Bottom Row: LinkedIn + Google Doc + Source */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>

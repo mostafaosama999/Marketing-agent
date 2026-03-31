@@ -27,7 +27,11 @@ import {
   Person as PersonIcon,
   Cake as CakeIcon,
   CalendarToday as CalendarIcon,
+  AccessTime as AccessTimeIcon,
+  WarningAmber as WarningAmberIcon,
+  MailOutline as MailOutlineIcon,
 } from '@mui/icons-material';
+import { Alert } from '@mui/material';
 import { Applicant, ApplicantStatus, HIRING_STAGES, REJECTION_STAGE_LABELS, REJECTION_STAGE_COLORS } from '../../../types/applicant';
 import { updateApplicant, deleteApplicant } from '../../../services/api/applicants';
 import { HiringEmailComposeDialog } from './HiringEmailComposeDialog';
@@ -347,6 +351,78 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
             )}
           </Box>
         </Box>
+
+        {/* Writing Test Deadline */}
+        {applicant.status === 'test_task' && (() => {
+          const draftDate = applicant.outreach?.email?.draftCreatedAt;
+          if (!draftDate) {
+            return (
+              <>
+                <Typography variant="subtitle2" sx={{ color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, mb: 1.5, fontSize: '11px', fontWeight: 700 }}>
+                  Writing Test
+                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, px: 2, py: 1.5, background: '#f8fafc', border: '1px dashed #e2e8f0', borderRadius: 2, mb: 3 }}>
+                  <MailOutlineIcon sx={{ fontSize: 18, color: '#94a3b8' }} />
+                  <Box>
+                    <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#64748b' }}>Test email not sent yet</Typography>
+                    <Typography sx={{ fontSize: '12px', color: '#94a3b8' }}>Use the Compose button above to create a draft</Typography>
+                  </Box>
+                </Box>
+              </>
+            );
+          }
+
+          const deadline = new Date(draftDate);
+          deadline.setDate(deadline.getDate() + 7);
+          const daysLeft = Math.ceil((deadline.getTime() - Date.now()) / (1000 * 60 * 60 * 24));
+          const isOverdue = daysLeft < 0;
+          const isUrgent = daysLeft >= 0 && daysLeft <= 3;
+          const accentColor = isOverdue ? '#ef4444' : isUrgent ? '#f97316' : '#22c55e';
+          const elapsed = Math.min(7, 7 - daysLeft);
+          const progressPct = Math.min(100, (elapsed / 7) * 100);
+
+          return (
+            <>
+              <Typography variant="subtitle2" sx={{ color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, mb: 1.5, fontSize: '11px', fontWeight: 700 }}>
+                Writing Test
+              </Typography>
+              <Box sx={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderLeft: `3px solid ${accentColor}`, borderRadius: 2, p: 2.5, mb: 3 }}>
+                <Box sx={{ display: 'grid', gridTemplateColumns: '100px 1fr', rowGap: 1, mb: 2 }}>
+                  <Typography sx={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600 }}>Test sent</Typography>
+                  <Typography sx={{ fontSize: '12px', color: '#334155', fontWeight: 600 }}>
+                    {draftDate.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </Typography>
+                  <Typography sx={{ fontSize: '12px', color: '#94a3b8', fontWeight: 600 }}>Deadline</Typography>
+                  <Typography sx={{ fontSize: '12px', color: isOverdue ? '#dc2626' : '#334155', fontWeight: 700 }}>
+                    {deadline.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
+                  </Typography>
+                </Box>
+
+                <Box sx={{ mb: 1.5 }}>
+                  <Box sx={{ height: 8, borderRadius: 4, background: '#e2e8f0', overflow: 'hidden' }}>
+                    <Box sx={{
+                      width: `${progressPct}%`,
+                      height: '100%',
+                      background: isOverdue ? '#ef4444' : isUrgent ? 'linear-gradient(90deg, #fb923c, #f97316)' : 'linear-gradient(90deg, #4ade80, #22c55e)',
+                      borderRadius: 4,
+                      transition: 'width 0.4s ease',
+                    }} />
+                  </Box>
+                </Box>
+
+                {isOverdue ? (
+                  <Alert severity="error" icon={<WarningAmberIcon fontSize="small" />} sx={{ fontSize: '12px', borderRadius: 2, py: 0.5, '& .MuiAlert-message': { py: 0 } }}>
+                    Overdue by {Math.abs(daysLeft)} day(s) — consider following up or moving to Rejected
+                  </Alert>
+                ) : (
+                  <Typography sx={{ fontSize: '12px', fontWeight: 600, color: isUrgent ? '#c2410c' : '#15803d' }}>
+                    {daysLeft === 0 ? 'Due today' : `${daysLeft} day${daysLeft !== 1 ? 's' : ''} remaining`}{isUrgent && daysLeft > 0 ? ' — respond soon' : ''}
+                  </Typography>
+                )}
+              </Box>
+            </>
+          );
+        })()}
 
         {/* Bio */}
         {applicant.bio && (
