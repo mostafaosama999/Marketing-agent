@@ -478,14 +478,28 @@ const HiringBoard: React.FC = () => {
               ]
             : [];
 
-          // Writing Test column gets sub-sections for Responded and Feedback
+          // Writing Test column gets sub-sections for all writing test states (including test_task itself)
+          const writingTestApplicants = getApplicantsForStage('test_task');
+          const notRespondedApplicants = getApplicantsForStage('not_responded');
+          const respondedApplicants = getApplicantsForStage('responded');
+          const feedbackApplicants = getApplicantsForStage('feedback');
+
           const subSections = stage.id === 'test_task'
             ? [
+                {
+                  label: 'Writing Test',
+                  icon: '\u{1F4DD}',
+                  color: '#f97316',
+                  applicants: writingTestApplicants,
+                  droppable: true,
+                  dropStageId: 'test_task',
+                  defaultExpanded: true,
+                },
                 {
                   label: 'Not Responded',
                   icon: '\u{1F47B}',
                   color: '#6b7280',
-                  applicants: getApplicantsForStage('not_responded'),
+                  applicants: notRespondedApplicants,
                   droppable: true,
                   dropStageId: 'not_responded',
                 },
@@ -493,7 +507,7 @@ const HiringBoard: React.FC = () => {
                   label: 'Responded',
                   icon: '\u{1F4E9}',
                   color: '#8b5cf6',
-                  applicants: getApplicantsForStage('responded'),
+                  applicants: respondedApplicants,
                   droppable: true,
                   dropStageId: 'responded',
                 },
@@ -501,21 +515,23 @@ const HiringBoard: React.FC = () => {
                   label: 'Feedback',
                   icon: '\u{1F4AC}',
                   color: '#0ea5e9',
-                  applicants: getApplicantsForStage('feedback'),
+                  applicants: feedbackApplicants,
                   droppable: true,
                   dropStageId: 'feedback',
                 },
               ]
             : [];
 
-          // No totalCount override — header shows only the primary stage's count
-          const totalCount = undefined;
+          // Writing Test column header shows total across all sub-states
+          const totalCount = stage.id === 'test_task'
+            ? writingTestApplicants.length + notRespondedApplicants.length + respondedApplicants.length + feedbackApplicants.length
+            : undefined;
 
           return (
             <ApplicantColumn
               key={stage.id}
               stage={stage}
-              applicants={getApplicantsForStage(stage.id)}
+              applicants={stage.id === 'test_task' ? [] : getApplicantsForStage(stage.id)}
               rejectedApplicants={rejected}
               subSections={subSections}
               viewedIds={viewedIds}

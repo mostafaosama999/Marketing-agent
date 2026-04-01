@@ -14,6 +14,7 @@ interface SubSection {
   applicants: Applicant[];
   droppable?: boolean;
   dropStageId?: string;
+  defaultExpanded?: boolean;
 }
 
 interface ApplicantColumnProps {
@@ -171,7 +172,7 @@ export const ApplicantColumn: React.FC<ApplicantColumnProps> = ({
 
         {/* Sub-Sections (e.g., Responded under Writing Test) */}
         {subSections.map((section) => {
-          const isExpanded = expandedSections[section.label] ?? (section.applicants.length > 0);
+          const isExpanded = expandedSections[section.label] ?? (section.defaultExpanded || section.applicants.length > 0);
           const isSectionDragOver = isDraggedOverSubSection === section.dropStageId;
 
           return (
@@ -216,7 +217,7 @@ export const ApplicantColumn: React.FC<ApplicantColumnProps> = ({
                     : section.applicants.length > 0
                       ? `1px solid ${section.color}30`
                       : `1px dashed ${section.color}25`,
-                  cursor: section.applicants.length > 0 ? 'pointer' : 'default',
+                  cursor: (section.applicants.length > 0 || section.defaultExpanded) ? 'pointer' : 'default',
                   transition: 'all 0.2s ease',
                 }}
               >
@@ -240,7 +241,7 @@ export const ApplicantColumn: React.FC<ApplicantColumnProps> = ({
                     />
                   )}
                 </Box>
-                {section.applicants.length > 0 && (
+                {(section.applicants.length > 0 || section.defaultExpanded) && (
                   <Box sx={{ color: section.color, display: 'flex', alignItems: 'center' }}>
                     {isExpanded ? (
                       <ExpandLessIcon sx={{ fontSize: 16 }} />
