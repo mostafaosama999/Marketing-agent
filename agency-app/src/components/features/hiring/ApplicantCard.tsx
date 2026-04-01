@@ -219,6 +219,21 @@ export const ApplicantCard: React.FC<ApplicantCardProps> = ({
         );
       })()}
 
+      {/* Writing Test Created Date */}
+      {applicant.status === 'test_task' && applicant.updatedAt && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.5 }}>
+          <AccessTimeIcon sx={{ fontSize: 13, color: '#f97316' }} />
+          <Typography sx={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }}>
+            Test assigned {(() => {
+              const d = applicant.updatedAt instanceof Date
+                ? applicant.updatedAt
+                : new Date(applicant.updatedAt as any);
+              return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            })()}
+          </Typography>
+        </Box>
+      )}
+
       {/* Email Sent Date */}
       {applicant.outreach?.email?.draftCreatedAt && (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.5 }}>
