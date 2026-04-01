@@ -15,6 +15,7 @@ import {
 import { useSearchParams } from 'react-router-dom';
 import ContentAnalyticsDashboard from '../../components/features/analytics/ContentAnalyticsDashboard';
 import CompanyWebsiteAnalytics from '../../components/features/analytics/CompanyWebsiteAnalytics';
+import WebsiteAnalytics from '../../components/features/analytics/WebsiteAnalytics';
 
 // Modern theme
 const modernTheme = createTheme({
@@ -157,6 +158,9 @@ const OutboundAnalytics: React.FC = () => {
             p: 4,
           }}>
             <ContentAnalyticsDashboard />
+            <Box sx={{ mt: 4 }}>
+              <WebsiteAnalytics />
+            </Box>
           </Box>
         </TabPanel>
 
