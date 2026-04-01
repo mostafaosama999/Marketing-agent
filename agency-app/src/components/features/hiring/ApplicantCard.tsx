@@ -219,6 +219,21 @@ export const ApplicantCard: React.FC<ApplicantCardProps> = ({
         );
       })()}
 
+      {/* Email Sent Date */}
+      {applicant.outreach?.email?.draftCreatedAt && (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75, mb: 1.5 }}>
+          <MailOutlineIcon sx={{ fontSize: 13, color: '#667eea' }} />
+          <Typography sx={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }}>
+            Sent {(() => {
+              const d = applicant.outreach.email.draftCreatedAt instanceof Date
+                ? applicant.outreach.email.draftCreatedAt
+                : new Date(applicant.outreach.email.draftCreatedAt as any);
+              return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+            })()}
+          </Typography>
+        </Box>
+      )}
+
       {/* Bottom Row: LinkedIn + Google Doc + Source */}
       <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
