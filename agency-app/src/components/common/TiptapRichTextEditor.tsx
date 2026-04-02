@@ -23,6 +23,10 @@ import {
 } from 'mui-tiptap';
 import { Box } from '@mui/material';
 
+export interface TiptapRichTextEditorHandle {
+  insertContent: (content: string) => void;
+}
+
 interface TiptapRichTextEditorProps {
   value: string;
   onChange: (value: string) => void;
@@ -30,13 +34,22 @@ interface TiptapRichTextEditorProps {
   height?: number;
 }
 
-const TiptapRichTextEditor: React.FC<TiptapRichTextEditorProps> = ({
+const TiptapRichTextEditor = React.forwardRef<TiptapRichTextEditorHandle, TiptapRichTextEditorProps>(({
   value,
   onChange,
   placeholder = "Start typing...",
   height = 200,
-}) => {
+}, ref) => {
   const rteRef = React.useRef<RichTextEditorRef>(null);
+
+  React.useImperativeHandle(ref, () => ({
+    insertContent: (content: string) => {
+      const editor = rteRef.current?.editor;
+      if (editor) {
+        editor.chain().focus().insertContent(content).run();
+      }
+    },
+  }));
 
   // Handle content changes
   const handleContentChange = React.useCallback((newContent: string) => {
@@ -180,6 +193,8 @@ const TiptapRichTextEditor: React.FC<TiptapRichTextEditorProps> = ({
       </RichTextEditor>
     </Box>
   );
-};
+});
+
+TiptapRichTextEditor.displayName = 'TiptapRichTextEditor';
 
 export default TiptapRichTextEditor;

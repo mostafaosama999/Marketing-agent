@@ -29,7 +29,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { getSettings, updateSettings } from '../../services/api/settings';
 import { HiringEmailTemplate } from '../../types/settings';
 import { RejectionStage, REJECTION_STAGE_LABELS } from '../../types/applicant';
-import TiptapRichTextEditor from '../common/TiptapRichTextEditor';
+import TiptapRichTextEditor, { type TiptapRichTextEditorHandle } from '../common/TiptapRichTextEditor';
 import { SafeHtmlRenderer } from '../../utils/htmlHelpers';
 
 export const HiringEmailTemplatesTab: React.FC = () => {
@@ -46,6 +46,7 @@ export const HiringEmailTemplatesTab: React.FC = () => {
   const [editSubject, setEditSubject] = useState('');
   const [editBody, setEditBody] = useState('');
   const [editRejectionStage, setEditRejectionStage] = useState<RejectionStage | ''>('');
+  const editorRef = React.useRef<TiptapRichTextEditorHandle>(null);
 
   useEffect(() => {
     const load = async () => {
@@ -143,17 +144,7 @@ export const HiringEmailTemplatesTab: React.FC = () => {
   };
 
   const insertVariable = (variable: string) => {
-    // Append the variable text to the current HTML body
-    // The rich text editor stores HTML, so we insert it at the end
-    setEditBody((prev) => {
-      if (!prev || prev === '<p></p>') return `<p>${variable}</p>`;
-      // Insert before the last closing </p> tag if possible
-      const lastPClose = prev.lastIndexOf('</p>');
-      if (lastPClose !== -1) {
-        return prev.substring(0, lastPClose) + variable + prev.substring(lastPClose);
-      }
-      return prev + variable;
-    });
+    editorRef.current?.insertContent(variable);
   };
 
   if (loading) {
@@ -270,6 +261,7 @@ export const HiringEmailTemplatesTab: React.FC = () => {
               Email Body
             </Typography>
             <TiptapRichTextEditor
+              ref={editorRef}
               value={editBody}
               onChange={setEditBody}
               placeholder="Hello {{name}}, Thank you for applying..."

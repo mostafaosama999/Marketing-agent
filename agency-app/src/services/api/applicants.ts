@@ -101,7 +101,7 @@ export async function updateApplicantStatus(
 
 export async function updateApplicant(
   id: string,
-  updates: Partial<Pick<Applicant, 'score' | 'notes' | 'status'>>
+  updates: Partial<Pick<Applicant, 'score' | 'notes' | 'status' | 'name' | 'email' | 'phone' | 'linkedInUrl' | 'bio' | 'education' | 'sex' | 'age' | 'availability'>>
 ): Promise<void> {
   const ref = doc(db, APPLICANTS_COLLECTION, id);
   await updateDoc(ref, {
