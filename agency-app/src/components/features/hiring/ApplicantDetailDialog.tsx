@@ -22,7 +22,7 @@ import {
   LinkedIn as LinkedInIcon,
   Email as EmailIcon,
   Phone as PhoneIcon,
-  LinkOff as LinkOffIcon,
+
   School as SchoolIcon,
   Person as PersonIcon,
   Cake as CakeIcon,
@@ -84,6 +84,15 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
   const [score, setScore] = useState<number | null>(null);
   const [notes, setNotes] = useState('');
   const [status, setStatus] = useState<ApplicantStatus>('applied');
+  const [name, setName] = useState('');
+  const [email, setEmail] = useState('');
+  const [phone, setPhone] = useState('');
+  const [linkedInUrl, setLinkedInUrl] = useState('');
+  const [bio, setBio] = useState('');
+  const [education, setEducation] = useState('');
+  const [sex, setSex] = useState('');
+  const [age, setAge] = useState('');
+  const [availability, setAvailability] = useState('');
   const [saving, setSaving] = useState(false);
   const [confirmDelete, setConfirmDelete] = useState(false);
   const [composeOpen, setComposeOpen] = useState(false);
@@ -94,6 +103,15 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
       setScore(applicant.score);
       setNotes(applicant.notes);
       setStatus(applicant.status);
+      setName(applicant.name);
+      setEmail(applicant.email);
+      setPhone(applicant.phone || '');
+      setLinkedInUrl(applicant.linkedInUrl || '');
+      setBio(applicant.bio || '');
+      setEducation(applicant.education || '');
+      setSex(applicant.sex || '');
+      setAge(applicant.age || '');
+      setAvailability(applicant.availability || '');
     }
   }, [applicant]);
 
@@ -102,7 +120,9 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
   const handleSave = async () => {
     setSaving(true);
     try {
-      await updateApplicant(applicant.id, { score, notes, status });
+      await updateApplicant(applicant.id, {
+        score, notes, status, name, email, phone, linkedInUrl, bio, education, sex, age, availability,
+      });
       onClose();
     } catch (error) {
       console.error('Error saving applicant:', error);
@@ -114,9 +134,16 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
   const hasChanges =
     score !== applicant.score ||
     notes !== applicant.notes ||
-    status !== applicant.status;
-
-  const hasLinkedIn = !!applicant.linkedInUrl;
+    status !== applicant.status ||
+    name !== applicant.name ||
+    email !== applicant.email ||
+    phone !== (applicant.phone || '') ||
+    linkedInUrl !== (applicant.linkedInUrl || '') ||
+    bio !== (applicant.bio || '') ||
+    education !== (applicant.education || '') ||
+    sex !== (applicant.sex || '') ||
+    age !== (applicant.age || '') ||
+    availability !== (applicant.availability || '');
 
   return (
     <Dialog
@@ -138,10 +165,17 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
           background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
         }}
       >
-        <Box>
-          <Typography variant="h5" sx={{ fontWeight: 700, color: '#1e293b' }}>
-            {applicant.name}
-          </Typography>
+        <Box sx={{ flex: 1 }}>
+          <TextField
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            variant="standard"
+            fullWidth
+            InputProps={{
+              disableUnderline: true,
+              sx: { fontWeight: 700, fontSize: '1.5rem', color: '#1e293b', '&:hover': { background: '#f1f5f9', borderRadius: 1 } },
+            }}
+          />
           <Typography variant="body2" sx={{ color: '#94a3b8', mt: 0.5 }}>
             Applied {applicant.submittedAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
             {' via '}
@@ -270,35 +304,51 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
           </Box>
         </Box>
 
-        {/* Key Info Summary */}
-        {(applicant.age || applicant.sex || applicant.education) && (
-          <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
-            {applicant.sex && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1, borderRadius: 2, background: '#f1f5f9', border: '1px solid #e2e8f0' }}>
-                <PersonIcon sx={{ fontSize: 16, color: '#6366f1' }} />
-                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>{applicant.sex}</Typography>
-              </Box>
-            )}
-            {applicant.age && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1, borderRadius: 2, background: '#f1f5f9', border: '1px solid #e2e8f0' }}>
-                <CakeIcon sx={{ fontSize: 16, color: '#ec4899' }} />
-                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>{applicant.age} years old</Typography>
-              </Box>
-            )}
-            {applicant.education && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1, borderRadius: 2, background: '#f1f5f9', border: '1px solid #e2e8f0' }}>
-                <SchoolIcon sx={{ fontSize: 16, color: '#f59e0b' }} />
-                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>{applicant.education}</Typography>
-              </Box>
-            )}
-            {applicant.availability && (
-              <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 1, borderRadius: 2, background: '#f1f5f9', border: '1px solid #e2e8f0' }}>
-                <CalendarIcon sx={{ fontSize: 16, color: '#0ea5e9' }} />
-                <Typography sx={{ fontSize: '13px', fontWeight: 600, color: '#334155' }}>Start: {applicant.availability}</Typography>
-              </Box>
-            )}
+        {/* Editable Key Info */}
+        <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 0.5, borderRadius: 2, background: '#f1f5f9', border: '1px solid #e2e8f0' }}>
+            <PersonIcon sx={{ fontSize: 16, color: '#6366f1' }} />
+            <TextField
+              value={sex}
+              onChange={(e) => setSex(e.target.value)}
+              variant="standard"
+              placeholder="Gender"
+              InputProps={{ disableUnderline: true, sx: { fontSize: '13px', fontWeight: 600, color: '#334155', width: 60 } }}
+            />
           </Box>
-        )}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 0.5, borderRadius: 2, background: '#f1f5f9', border: '1px solid #e2e8f0' }}>
+            <CakeIcon sx={{ fontSize: 16, color: '#ec4899' }} />
+            <TextField
+              value={age}
+              onChange={(e) => setAge(e.target.value)}
+              variant="standard"
+              placeholder="Age"
+              InputProps={{ disableUnderline: true, sx: { fontSize: '13px', fontWeight: 600, color: '#334155', width: 40 } }}
+            />
+            <Typography sx={{ fontSize: '13px', color: '#64748b' }}>years old</Typography>
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 0.5, borderRadius: 2, background: '#f1f5f9', border: '1px solid #e2e8f0' }}>
+            <SchoolIcon sx={{ fontSize: 16, color: '#f59e0b' }} />
+            <TextField
+              value={education}
+              onChange={(e) => setEducation(e.target.value)}
+              variant="standard"
+              placeholder="University"
+              InputProps={{ disableUnderline: true, sx: { fontSize: '13px', fontWeight: 600, color: '#334155', width: 180 } }}
+            />
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 0.5, borderRadius: 2, background: '#f1f5f9', border: '1px solid #e2e8f0' }}>
+            <CalendarIcon sx={{ fontSize: 16, color: '#0ea5e9' }} />
+            <Typography sx={{ fontSize: '13px', color: '#64748b' }}>Start:</Typography>
+            <TextField
+              value={availability}
+              onChange={(e) => setAvailability(e.target.value)}
+              variant="standard"
+              placeholder="Availability"
+              InputProps={{ disableUnderline: true, sx: { fontSize: '13px', fontWeight: 600, color: '#334155', width: 100 } }}
+            />
+          </Box>
+        </Box>
 
         <Divider sx={{ mb: 3 }} />
 
@@ -310,9 +360,14 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mb: 3 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
             <EmailIcon sx={{ fontSize: 18, color: '#8b5cf6' }} />
-            <Link href={`mailto:${applicant.email}`} sx={{ color: '#1e293b', fontSize: '14px' }}>
-              {applicant.email}
-            </Link>
+            <TextField
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              variant="standard"
+              placeholder="Email"
+              InputProps={{ disableUnderline: true, sx: { fontSize: '14px', color: '#1e293b', '&:hover': { background: '#f1f5f9', borderRadius: 1 } } }}
+              sx={{ flex: 1 }}
+            />
             <Button
               size="small"
               startIcon={<EmailIcon sx={{ fontSize: 14 }} />}
@@ -337,25 +392,36 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
             </Button>
           </Box>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            {hasLinkedIn ? (
-              <>
-                <LinkedInIcon sx={{ fontSize: 18, color: '#0077b5' }} />
-                <Link
-                  href={applicant.linkedInUrl}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  sx={{ color: '#1e293b', wordBreak: 'break-all', fontSize: '14px' }}
-                >
-                  {applicant.linkedInUrl.replace(/https?:\/\/(www\.)?linkedin\.com\/in\//, '').replace(/\?.*$/, '').replace(/\/$/, '')}
-                </Link>
-              </>
-            ) : (
-              <>
-                <LinkOffIcon sx={{ fontSize: 18, color: '#d97706' }} />
-                <Typography variant="body2" sx={{ color: '#d97706', fontStyle: 'italic' }}>
-                  No LinkedIn provided
-                </Typography>
-              </>
+            <PhoneIcon sx={{ fontSize: 18, color: '#10b981' }} />
+            <TextField
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              variant="standard"
+              placeholder="Phone number"
+              InputProps={{ disableUnderline: true, sx: { fontSize: '14px', color: '#1e293b', '&:hover': { background: '#f1f5f9', borderRadius: 1 } } }}
+              sx={{ flex: 1 }}
+            />
+          </Box>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <LinkedInIcon sx={{ fontSize: 18, color: '#0077b5' }} />
+            <TextField
+              value={linkedInUrl}
+              onChange={(e) => setLinkedInUrl(e.target.value)}
+              variant="standard"
+              placeholder="LinkedIn URL"
+              InputProps={{ disableUnderline: true, sx: { fontSize: '14px', color: '#1e293b', '&:hover': { background: '#f1f5f9', borderRadius: 1 } } }}
+              sx={{ flex: 1 }}
+            />
+            {linkedInUrl && (
+              <Link
+                href={linkedInUrl.startsWith('http') ? linkedInUrl : `https://${linkedInUrl}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                onClick={(e: React.MouseEvent) => e.stopPropagation()}
+                sx={{ fontSize: '12px', color: '#0077b5', whiteSpace: 'nowrap' }}
+              >
+                Open
+              </Link>
             )}
           </Box>
         </Box>
@@ -418,18 +484,28 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
         })()}
 
         {/* Bio */}
-        {applicant.bio && (
-          <>
-            <Typography variant="subtitle2" sx={{ color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, mb: 1.5, fontSize: '11px', fontWeight: 700 }}>
-              Why They're Interested
-            </Typography>
-            <Box sx={{ background: '#f8fafc', borderRadius: 2, p: 2.5, border: '1px solid #e2e8f0', mb: 3 }}>
-              <Typography variant="body2" sx={{ color: '#475569', lineHeight: 1.8, whiteSpace: 'pre-wrap' }}>
-                {renderTextWithLinks(applicant.bio)}
-              </Typography>
-            </Box>
-          </>
-        )}
+        <Typography variant="subtitle2" sx={{ color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1, mb: 1.5, fontSize: '11px', fontWeight: 700 }}>
+          Why They're Interested
+        </Typography>
+        <TextField
+          multiline
+          rows={3}
+          fullWidth
+          placeholder="Add a bio or summary..."
+          value={bio}
+          onChange={(e) => setBio(e.target.value)}
+          sx={{
+            mb: 3,
+            '& .MuiOutlinedInput-root': {
+              borderRadius: 2,
+              fontSize: '14px',
+              background: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              '& fieldset': { border: 'none' },
+              '&:hover': { background: '#f1f5f9' },
+            },
+          }}
+        />
 
         <Divider sx={{ mb: 3 }} />
 
