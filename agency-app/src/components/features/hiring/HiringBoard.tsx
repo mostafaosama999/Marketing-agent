@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Box, Typography, Button, Snackbar, Alert, CircularProgress, Select, MenuItem, FormControl } from '@mui/material';
-import { Upload as UploadIcon, FilterList as FilterIcon, PersonAdd as PersonAddIcon } from '@mui/icons-material';
+import { Box, Typography, Button, Snackbar, Alert, CircularProgress, Select, MenuItem, FormControl, TextField, InputAdornment } from '@mui/material';
+import { Upload as UploadIcon, FilterList as FilterIcon, PersonAdd as PersonAddIcon, Search as SearchIcon } from '@mui/icons-material';
 import { Applicant, ApplicantStatus, RejectionStage, HIRING_STAGES } from '../../../types/applicant';
 import { subscribeToApplicants, updateApplicantStatus, subscribeToViewedApplicantIds, markApplicantViewed } from '../../../services/api/applicants';
 import { RejectionDialog } from './RejectionDialog';
@@ -25,6 +25,7 @@ const HiringBoard: React.FC = () => {
   const [universityFilter, setUniversityFilter] = useState<string | null>(null);
   const [genderFilter, setGenderFilter] = useState<string | null>(null);
   const [scoreFilter, setScoreFilter] = useState<string | null>(null);
+  const [searchQuery, setSearchQuery] = useState('');
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false,
     message: '',
@@ -88,6 +89,7 @@ const HiringBoard: React.FC = () => {
 
   const filteredApplicants = useMemo(() => {
     return applicants.filter((a) => {
+      if (searchQuery && !a.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
       if (universityFilter && a.education !== universityFilter) return false;
       if (genderFilter && (a.sex || 'Unknown') !== genderFilter) return false;
       if (scoreFilter) {
@@ -98,7 +100,7 @@ const HiringBoard: React.FC = () => {
       }
       return true;
     });
-  }, [applicants, universityFilter, genderFilter, scoreFilter]);
+  }, [applicants, universityFilter, genderFilter, scoreFilter, searchQuery]);
 
   // Stages to show in the board (exclude 'rejected', 'responded', 'feedback' — they are sub-sections of Writing Test)
   const visibleStages = useMemo(
@@ -352,6 +354,34 @@ const HiringBoard: React.FC = () => {
         }}
       >
         <FilterIcon sx={{ fontSize: 18, color: '#94a3b8' }} />
+
+        {/* Search Bar */}
+        <TextField
+          size="small"
+          placeholder="Search candidates..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          InputProps={{
+            startAdornment: (
+              <InputAdornment position="start">
+                <SearchIcon sx={{ fontSize: 18, color: '#94a3b8' }} />
+              </InputAdornment>
+            ),
+          }}
+          sx={{
+            minWidth: 220,
+            '& .MuiOutlinedInput-root': {
+              fontSize: '13px',
+              borderRadius: 2,
+              background: 'white',
+              '& .MuiOutlinedInput-notchedOutline': {
+                borderColor: searchQuery ? '#667eea' : '#e2e8f0',
+              },
+              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#667eea' },
+              '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#667eea' },
+            },
+          }}
+        />
 
         {/* University Filter */}
         <FormControl size="small" sx={{ minWidth: 220 }}>
