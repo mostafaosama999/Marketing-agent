@@ -56,7 +56,6 @@ export const ghostStaleWritingTests = functions.pubsub
       if (now > deadline) {
         batch.update(doc.ref, {
           status: "not_responded",
-          updatedAt: now,
         });
         ghostedNames.push(data.name || data.email || doc.id);
       }
