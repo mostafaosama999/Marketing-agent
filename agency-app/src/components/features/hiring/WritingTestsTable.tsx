@@ -28,12 +28,14 @@ interface WritingTestsTableProps {
 }
 
 const WRITING_TEST_STATUSES: ApplicantStatus[] = ['test_task', 'not_responded', 'responded', 'feedback'];
+const WRITING_TEST_REJECTION_STAGES = ['test_task', 'not_responded', 'responded', 'feedback'];
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   test_task: { label: 'Sent', color: '#ea580c', bg: '#fff7ed' },
   not_responded: { label: 'Ghosted', color: '#6b7280', bg: '#f3f4f6' },
   responded: { label: 'Responded', color: '#7c3aed', bg: '#f5f3ff' },
   feedback: { label: 'Feedback', color: '#0284c7', bg: '#f0f9ff' },
+  rejected: { label: 'Rejected', color: '#dc2626', bg: '#fef2f2' },
 };
 
 function formatDate(d: Date | any): string {
@@ -66,8 +68,21 @@ const WritingTestsTable: React.FC<WritingTestsTableProps> = ({ applicants, onApp
   const [sortField, setSortField] = useState<SortField>('days_elapsed');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
 
+  // Helper to get the display status (for rejected candidates, use 'rejected')
+  const getDisplayStatus = (a: Applicant): string => {
+    if (a.status === 'rejected' && a.rejectionStage && WRITING_TEST_REJECTION_STAGES.includes(a.rejectionStage)) {
+      return 'rejected';
+    }
+    return a.status;
+  };
+
   const writingTestApplicants = useMemo(() => {
-    const filtered = applicants.filter((a) => WRITING_TEST_STATUSES.includes(a.status));
+    const filtered = applicants.filter((a) =>
+      WRITING_TEST_STATUSES.includes(a.status) ||
+      (a.status === 'rejected' && a.rejectionStage && WRITING_TEST_REJECTION_STAGES.includes(a.rejectionStage))
+    );
+
+    const allStatuses = [...WRITING_TEST_STATUSES, 'rejected' as ApplicantStatus];
 
     return filtered.sort((a, b) => {
       let cmp = 0;
@@ -79,7 +94,7 @@ const WritingTestsTable: React.FC<WritingTestsTableProps> = ({ applicants, onApp
           cmp = a.name.localeCompare(b.name);
           break;
         case 'status':
-          cmp = WRITING_TEST_STATUSES.indexOf(a.status) - WRITING_TEST_STATUSES.indexOf(b.status);
+          cmp = allStatuses.indexOf(getDisplayStatus(a) as ApplicantStatus) - allStatuses.indexOf(getDisplayStatus(b) as ApplicantStatus);
           break;
         case 'score':
           cmp = (a.score ?? -1) - (b.score ?? -1);
@@ -103,8 +118,13 @@ const WritingTestsTable: React.FC<WritingTestsTableProps> = ({ applicants, onApp
     for (const s of WRITING_TEST_STATUSES) {
       counts[s] = applicants.filter((a) => a.status === s).length;
     }
+    counts['rejected'] = applicants.filter(
+      (a) => a.status === 'rejected' && a.rejectionStage && WRITING_TEST_REJECTION_STAGES.includes(a.rejectionStage)
+    ).length;
     return counts;
   }, [applicants]);
+
+  const ALL_DISPLAY_STATUSES = [...WRITING_TEST_STATUSES, 'rejected' as ApplicantStatus];
 
   // Paid test counts
   const paidCounts = useMemo(() => {
@@ -167,7 +187,7 @@ const WritingTestsTable: React.FC<WritingTestsTableProps> = ({ applicants, onApp
               Status
             </Typography>
             <Box sx={{ display: 'flex', flexDirection: 'column', gap: '4px', mb: '8px' }}>
-              {WRITING_TEST_STATUSES.map((s) => {
+              {ALL_DISPLAY_STATUSES.map((s) => {
                 const cfg = STATUS_CONFIG[s];
                 const count = statusCounts[s];
                 const p = pct(count);
@@ -193,7 +213,7 @@ const WritingTestsTable: React.FC<WritingTestsTableProps> = ({ applicants, onApp
             </Box>
             {/* Segmented bar */}
             <Box sx={{ display: 'flex', height: 4, borderRadius: '2px', overflow: 'hidden', bgcolor: '#f1f5f9' }}>
-              {WRITING_TEST_STATUSES.filter((s) => statusCounts[s] > 0).map((s) => (
+              {ALL_DISPLAY_STATUSES.filter((s) => statusCounts[s] > 0).map((s) => (
                 <Box key={s} sx={{ flex: statusCounts[s], bgcolor: STATUS_CONFIG[s].color, transition: 'flex 0.4s ease' }} />
               ))}
             </Box>
@@ -357,7 +377,8 @@ const WritingTestsTable: React.FC<WritingTestsTableProps> = ({ applicants, onApp
               </TableRow>
             ) : (
               writingTestApplicants.map((applicant) => {
-                const cfg = STATUS_CONFIG[applicant.status];
+                const displayStatus = getDisplayStatus(applicant);
+                const cfg = STATUS_CONFIG[displayStatus] || STATUS_CONFIG['test_task'];
                 const testAssigned = applicant.updatedAt;
                 const elapsed = daysSince(testAssigned);
                 const draftDate = applicant.outreach?.email?.draftCreatedAt;
