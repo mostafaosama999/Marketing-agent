@@ -421,7 +421,7 @@ const WritingTestsTable: React.FC<WritingTestsTableProps> = ({ applicants, onApp
                           }}
                         />
                       ) : (
-                        <Typography sx={{ fontSize: '12px', color: '#cbd5e1' }}>\u2014</Typography>
+                        <Typography sx={{ fontSize: '12px', color: '#cbd5e1' }}>—</Typography>
                       )}
                     </TableCell>
 
@@ -463,7 +463,7 @@ const WritingTestsTable: React.FC<WritingTestsTableProps> = ({ applicants, onApp
                           {isOverdue ? `Overdue (${Math.abs(daysLeft!)}d)` : `${daysLeft}d left`}
                         </Typography>
                       ) : (
-                        <Typography sx={{ fontSize: '12px', color: '#cbd5e1' }}>\u2014</Typography>
+                        <Typography sx={{ fontSize: '12px', color: '#cbd5e1' }}>—</Typography>
                       )}
                     </TableCell>
 
