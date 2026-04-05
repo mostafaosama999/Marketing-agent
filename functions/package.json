@@ -48,6 +48,7 @@
     "openai": "^4.38.2",
     "papaparse": "^5.5.3",
     "puppeteer": "^24.29.1",
+    "resend": "^6.10.0",
     "rss-parser": "^3.13.0",
     "uuid": "^13.0.0"
   },

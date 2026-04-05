@@ -82,6 +82,13 @@ export const webflowHiringWebhook = functions
       const rawBody = (req as any).rawBody?.toString("utf8") || JSON.stringify(req.body);
 
       const isValid = verifyWebflowSignature(rawBody, signature, timestamp, webhookSecret);
+
+      if (!isValid) {
+        functions.logger.warn("Webflow webhook signature verification failed", {
+          hasSignature: !!signature,
+          hasTimestamp: !!timestamp,
+        });
+      }
     }
 
     try {
