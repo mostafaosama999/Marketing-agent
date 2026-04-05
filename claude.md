@@ -353,6 +353,23 @@ Multi-platform content marketing analytics synced from LinkedIn (Excel), TDS (pa
 | `docs/OFFER_IDEA_GENERATION.md` | V1/V2/V3 blog idea generation, AI concepts, bulk ops, costs |
 | `docs/CONTENT_ANALYTICS.md` | Multi-platform content analytics (LinkedIn, TDS, Medium), Firestore schema, sync skill, BDR integration |
 
+### 🚨 MANDATORY: Documentation Updates for Systems
+- **New system added**: When implementing a new system or major feature, you MUST create a corresponding `.md` file in `docs/` and link it in the table above.
+- **Existing system changed**: When modifying any system that already has documentation in `docs/`, you MUST update the relevant `.md` file to reflect the changes.
+- **Never skip this**: Documentation must stay in sync with the code at all times.
+
+### 🚨 MANDATORY: Bug Documentation
+- **Every bug fix MUST be documented** in the `bugs/` folder as a `.md` file
+- **File naming**: `bugs/YYYY-MM-DD-short-description.md` (e.g., `bugs/2026-04-05-outreach-data-not-mapped.md`)
+- **Required sections in each bug doc**:
+  1. **Summary** — One-line description of the bug
+  2. **Investigation** — Steps taken to diagnose the root cause, what was checked, what was ruled out
+  3. **Root Cause** — The actual underlying issue
+  4. **Fix** — What was changed and where (file paths, line numbers)
+  5. **Tech Debt** — Any remaining issues, shortcuts taken, or follow-up work needed
+- **Why**: Bug investigations are expensive. Documenting them prevents re-investigation of similar issues and builds institutional knowledge about fragile areas of the codebase
+- **Never skip this**: Even for small fixes — if you investigated a bug, document it
+
 ---
 
 ## Best Practices & Troubleshooting

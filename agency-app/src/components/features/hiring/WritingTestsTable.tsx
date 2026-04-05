@@ -429,8 +429,7 @@ const WritingTestsTable: React.FC<WritingTestsTableProps> = ({ applicants, onApp
                     <TableCell>
                       {paid ? (
                         <Chip
-                          icon={<PaidIcon sx={{ fontSize: 14 }} />}
-                          label="Paid"
+                          label="Yes"
                           size="small"
                           sx={{
                             fontWeight: 600,
@@ -439,7 +438,6 @@ const WritingTestsTable: React.FC<WritingTestsTableProps> = ({ applicants, onApp
                             color: '#16a34a',
                             background: '#f0fdf4',
                             border: '1px solid #bbf7d0',
-                            '& .MuiChip-icon': { color: '#16a34a' },
                           }}
                         />
                       ) : (

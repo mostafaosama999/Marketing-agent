@@ -348,8 +348,8 @@ const Navbar: React.FC = () => {
 
         {/* User Section */}
         <UserSection>
-          {/* Notification Bell - Visible to all users */}
-          <NotificationBell />
+          {/* Notification Bell - Hidden for now */}
+          {/* <NotificationBell /> */}
 
           <RoleBadge
             label={userProfile.role}
