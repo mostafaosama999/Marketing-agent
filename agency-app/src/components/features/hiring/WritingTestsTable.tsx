@@ -106,6 +106,16 @@ const WritingTestsTable: React.FC<WritingTestsTableProps> = ({ applicants, onApp
     return counts;
   }, [applicants]);
 
+  // Paid test counts
+  const paidCounts = useMemo(() => {
+    let paid = 0, unpaid = 0;
+    for (const a of writingTestApplicants) {
+      if (isPaidTest(a)) paid++;
+      else unpaid++;
+    }
+    return { paid, unpaid };
+  }, [writingTestApplicants]);
+
   // Days elapsed distribution
   const elapsedDistribution = useMemo(() => {
     let fresh = 0, moderate = 0, stale = 0, overdue = 0;
@@ -187,6 +197,77 @@ const WritingTestsTable: React.FC<WritingTestsTableProps> = ({ applicants, onApp
             .map((s) => (
               <Box key={s} sx={{ flex: statusCounts[s], bgcolor: STATUS_CONFIG[s].color, transition: 'flex 0.4s ease' }} />
             ))}
+        </Box>
+      </Box>
+
+      {/* Test Type Distribution */}
+      <Box
+        sx={{
+          mb: 1.5,
+          p: 2,
+          background: 'rgba(255, 255, 255, 0.85)',
+          backdropFilter: 'blur(20px)',
+          borderRadius: 3,
+          border: '1px solid rgba(255, 255, 255, 0.6)',
+          boxShadow: '0 4px 24px rgba(102, 126, 234, 0.08)',
+        }}
+      >
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+          <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+            Test Type
+          </Typography>
+          <Typography sx={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }}>
+            {writingTestApplicants.length} candidates
+          </Typography>
+        </Box>
+
+        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.5, mb: 1.5 }}>
+          {[
+            { label: 'Paid Test', sublabel: '1,000 EGP per test', count: paidCounts.paid, color: '#16a34a', bg: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)', border: '#bbf7d0', track: '#dcfce7' },
+            { label: 'Standard Test', sublabel: 'Unpaid', count: paidCounts.unpaid, color: '#64748b', bg: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', border: '#e2e8f0', track: '#e2e8f0' },
+          ].map((band) => {
+            const pct = writingTestApplicants.length > 0 ? Math.round((band.count / writingTestApplicants.length) * 100) : 0;
+            return (
+              <Box
+                key={band.label}
+                sx={{
+                  px: 1.75,
+                  py: 1.5,
+                  borderRadius: 2.5,
+                  background: band.bg,
+                  border: `1px solid ${band.border}`,
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 0.5,
+                }}
+              >
+                <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
+                  <Typography sx={{ fontSize: '26px', fontWeight: 800, color: band.color, lineHeight: 1 }}>
+                    {band.count}
+                  </Typography>
+                  <Typography sx={{ fontSize: '12px', fontWeight: 700, color: band.color, opacity: 0.7 }}>
+                    {pct}%
+                  </Typography>
+                </Box>
+                <Box>
+                  <Typography sx={{ fontSize: '12px', fontWeight: 700, color: band.color, lineHeight: 1.2 }}>
+                    {band.label}
+                  </Typography>
+                  <Typography sx={{ fontSize: '11px', fontWeight: 500, color: band.color, opacity: 0.65 }}>
+                    {band.sublabel}
+                  </Typography>
+                </Box>
+                <Box sx={{ height: 4, borderRadius: '2px', bgcolor: band.track, mt: 0.25, overflow: 'hidden' }}>
+                  <Box sx={{ height: '100%', width: `${pct}%`, borderRadius: '2px', bgcolor: band.color, transition: 'width 0.4s ease' }} />
+                </Box>
+              </Box>
+            );
+          })}
+        </Box>
+
+        <Box sx={{ display: 'flex', height: 6, borderRadius: '3px', overflow: 'hidden', bgcolor: '#f1f5f9' }}>
+          {paidCounts.paid > 0 && <Box sx={{ flex: paidCounts.paid, bgcolor: '#16a34a', transition: 'flex 0.4s ease' }} />}
+          {paidCounts.unpaid > 0 && <Box sx={{ flex: paidCounts.unpaid, bgcolor: '#94a3b8', transition: 'flex 0.4s ease' }} />}
         </Box>
       </Box>
 
