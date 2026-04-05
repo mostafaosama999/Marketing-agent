@@ -129,227 +129,168 @@ const WritingTestsTable: React.FC<WritingTestsTableProps> = ({ applicants, onApp
     return { fresh, moderate, stale, overdue };
   }, [writingTestApplicants]);
 
+  // Derived percentage helper — avoids division-by-zero and keeps JSX clean
+  const pct = (count: number) =>
+    writingTestApplicants.length > 0 ? Math.round((count / writingTestApplicants.length) * 100) : 0;
+
   return (
     <Box sx={{ px: 4, pb: 3, flex: 1, overflow: 'auto' }}>
-      {/* Status Distribution */}
+
+      {/* ── Compact unified stats bar ── */}
       <Box
         sx={{
-          mb: 1.5,
-          p: 2,
-          background: 'rgba(255, 255, 255, 0.85)',
+          mb: 2,
+          p: '10px 16px 12px',
+          background: 'rgba(255,255,255,0.85)',
           backdropFilter: 'blur(20px)',
           borderRadius: 3,
-          border: '1px solid rgba(255, 255, 255, 0.6)',
-          boxShadow: '0 4px 24px rgba(102, 126, 234, 0.08)',
+          border: '1px solid rgba(255,255,255,0.6)',
+          boxShadow: '0 4px 24px rgba(102,126,234,0.08)',
         }}
       >
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+        {/* Single header row */}
+        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: '10px' }}>
           <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-            Candidate Status
+            Writing Tests Overview
           </Typography>
           <Typography sx={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }}>
             {writingTestApplicants.length} candidates
           </Typography>
         </Box>
 
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1.5, mb: 1.5 }}>
-          {WRITING_TEST_STATUSES.map((s) => {
-            const cfg = STATUS_CONFIG[s];
-            const count = statusCounts[s];
-            const pct = writingTestApplicants.length > 0 ? Math.round((count / writingTestApplicants.length) * 100) : 0;
-            return (
-              <Box
-                key={s}
-                sx={{
-                  px: 1.75,
-                  py: 1.5,
-                  borderRadius: 2.5,
-                  background: cfg.bg,
-                  border: `1px solid ${cfg.color}30`,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 0.5,
-                }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-                  <Typography sx={{ fontSize: '26px', fontWeight: 800, color: cfg.color, lineHeight: 1 }}>
-                    {count}
-                  </Typography>
-                  <Typography sx={{ fontSize: '12px', fontWeight: 700, color: cfg.color, opacity: 0.7 }}>
-                    {pct}%
-                  </Typography>
-                </Box>
-                <Typography sx={{ fontSize: '12px', fontWeight: 700, color: cfg.color, lineHeight: 1.2 }}>
-                  {cfg.label}
-                </Typography>
-                <Box sx={{ height: 4, borderRadius: '2px', bgcolor: `${cfg.color}15`, mt: 0.25, overflow: 'hidden' }}>
-                  <Box sx={{ height: '100%', width: `${pct}%`, borderRadius: '2px', bgcolor: cfg.color, transition: 'width 0.4s ease' }} />
-                </Box>
-              </Box>
-            );
-          })}
-        </Box>
+        {/* Three-column layout */}
+        <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1px 1fr 1px 1fr', gap: 0, alignItems: 'start' }}>
 
-        {/* Segmented total bar */}
-        <Box sx={{ display: 'flex', height: 6, borderRadius: '3px', overflow: 'hidden', bgcolor: '#f1f5f9' }}>
-          {WRITING_TEST_STATUSES
-            .filter((s) => statusCounts[s] > 0)
-            .map((s) => (
-              <Box key={s} sx={{ flex: statusCounts[s], bgcolor: STATUS_CONFIG[s].color, transition: 'flex 0.4s ease' }} />
-            ))}
-        </Box>
-      </Box>
+          {/* ── Column 1: Candidate Status ── */}
+          <Box sx={{ pr: 2 }}>
+            <Typography sx={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', mb: '6px' }}>
+              Status
+            </Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: '4px', mb: '8px' }}>
+              {WRITING_TEST_STATUSES.map((s) => {
+                const cfg = STATUS_CONFIG[s];
+                const count = statusCounts[s];
+                const p = pct(count);
+                return (
+                  <Box key={s} sx={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    {/* Color dot */}
+                    <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: cfg.color, flexShrink: 0 }} />
+                    {/* Count */}
+                    <Typography sx={{ fontSize: '14px', fontWeight: 800, color: cfg.color, lineHeight: 1, minWidth: '20px' }}>
+                      {count}
+                    </Typography>
+                    {/* Label */}
+                    <Typography sx={{ fontSize: '11px', fontWeight: 500, color: '#64748b', flex: 1 }}>
+                      {cfg.label}
+                    </Typography>
+                    {/* Percentage */}
+                    <Typography sx={{ fontSize: '11px', fontWeight: 600, color: cfg.color, opacity: 0.75, minWidth: '30px', textAlign: 'right' }}>
+                      {p}%
+                    </Typography>
+                  </Box>
+                );
+              })}
+            </Box>
+            {/* Segmented bar */}
+            <Box sx={{ display: 'flex', height: 4, borderRadius: '2px', overflow: 'hidden', bgcolor: '#f1f5f9' }}>
+              {WRITING_TEST_STATUSES.filter((s) => statusCounts[s] > 0).map((s) => (
+                <Box key={s} sx={{ flex: statusCounts[s], bgcolor: STATUS_CONFIG[s].color, transition: 'flex 0.4s ease' }} />
+              ))}
+            </Box>
+          </Box>
 
-      {/* Test Type Distribution */}
-      <Box
-        sx={{
-          mb: 1.5,
-          p: 2,
-          background: 'rgba(255, 255, 255, 0.85)',
-          backdropFilter: 'blur(20px)',
-          borderRadius: 3,
-          border: '1px solid rgba(255, 255, 255, 0.6)',
-          boxShadow: '0 4px 24px rgba(102, 126, 234, 0.08)',
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
-          <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-            Test Type
-          </Typography>
-          <Typography sx={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }}>
-            {writingTestApplicants.length} candidates
-          </Typography>
-        </Box>
+          {/* Divider */}
+          <Box sx={{ bgcolor: '#e2e8f0', mx: 0, alignSelf: 'stretch' }} />
 
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 1.5, mb: 1.5 }}>
-          {[
-            { label: 'Paid Test', sublabel: '1,000 EGP per test', count: paidCounts.paid, color: '#16a34a', bg: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)', border: '#bbf7d0', track: '#dcfce7' },
-            { label: 'Standard Test', sublabel: 'Unpaid', count: paidCounts.unpaid, color: '#64748b', bg: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)', border: '#e2e8f0', track: '#e2e8f0' },
-          ].map((band) => {
-            const pct = writingTestApplicants.length > 0 ? Math.round((band.count / writingTestApplicants.length) * 100) : 0;
-            return (
-              <Box
-                key={band.label}
-                sx={{
-                  px: 1.75,
-                  py: 1.5,
-                  borderRadius: 2.5,
-                  background: band.bg,
-                  border: `1px solid ${band.border}`,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 0.5,
-                }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-                  <Typography sx={{ fontSize: '26px', fontWeight: 800, color: band.color, lineHeight: 1 }}>
-                    {band.count}
-                  </Typography>
-                  <Typography sx={{ fontSize: '12px', fontWeight: 700, color: band.color, opacity: 0.7 }}>
-                    {pct}%
-                  </Typography>
-                </Box>
-                <Box>
-                  <Typography sx={{ fontSize: '12px', fontWeight: 700, color: band.color, lineHeight: 1.2 }}>
-                    {band.label}
-                  </Typography>
-                  <Typography sx={{ fontSize: '11px', fontWeight: 500, color: band.color, opacity: 0.65 }}>
-                    {band.sublabel}
-                  </Typography>
-                </Box>
-                <Box sx={{ height: 4, borderRadius: '2px', bgcolor: band.track, mt: 0.25, overflow: 'hidden' }}>
-                  <Box sx={{ height: '100%', width: `${pct}%`, borderRadius: '2px', bgcolor: band.color, transition: 'width 0.4s ease' }} />
-                </Box>
-              </Box>
-            );
-          })}
-        </Box>
+          {/* ── Column 2: Test Type ── */}
+          <Box sx={{ px: 2 }}>
+            <Typography sx={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', mb: '6px' }}>
+              Test Type
+            </Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: '4px', mb: '8px' }}>
+              {[
+                { label: 'Paid', sublabel: '1,000 EGP', count: paidCounts.paid, color: '#16a34a' },
+                { label: 'Standard', sublabel: 'Unpaid', count: paidCounts.unpaid, color: '#64748b' },
+              ].map((band) => {
+                const p = pct(band.count);
+                return (
+                  <Box key={band.label} sx={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: band.color, flexShrink: 0 }} />
+                    <Typography sx={{ fontSize: '14px', fontWeight: 800, color: band.color, lineHeight: 1, minWidth: '20px' }}>
+                      {band.count}
+                    </Typography>
+                    <Box sx={{ flex: 1 }}>
+                      <Typography sx={{ fontSize: '11px', fontWeight: 500, color: '#64748b', lineHeight: 1.2 }}>
+                        {band.label}
+                      </Typography>
+                      <Typography sx={{ fontSize: '10px', fontWeight: 400, color: '#94a3b8', lineHeight: 1 }}>
+                        {band.sublabel}
+                      </Typography>
+                    </Box>
+                    <Typography sx={{ fontSize: '11px', fontWeight: 600, color: band.color, opacity: 0.75, minWidth: '30px', textAlign: 'right' }}>
+                      {p}%
+                    </Typography>
+                  </Box>
+                );
+              })}
+            </Box>
+            {/* Segmented bar */}
+            <Box sx={{ display: 'flex', height: 4, borderRadius: '2px', overflow: 'hidden', bgcolor: '#f1f5f9' }}>
+              {paidCounts.paid > 0 && <Box sx={{ flex: paidCounts.paid, bgcolor: '#16a34a', transition: 'flex 0.4s ease' }} />}
+              {paidCounts.unpaid > 0 && <Box sx={{ flex: paidCounts.unpaid, bgcolor: '#94a3b8', transition: 'flex 0.4s ease' }} />}
+            </Box>
+          </Box>
 
-        <Box sx={{ display: 'flex', height: 6, borderRadius: '3px', overflow: 'hidden', bgcolor: '#f1f5f9' }}>
-          {paidCounts.paid > 0 && <Box sx={{ flex: paidCounts.paid, bgcolor: '#16a34a', transition: 'flex 0.4s ease' }} />}
-          {paidCounts.unpaid > 0 && <Box sx={{ flex: paidCounts.unpaid, bgcolor: '#94a3b8', transition: 'flex 0.4s ease' }} />}
-        </Box>
-      </Box>
+          {/* Divider */}
+          <Box sx={{ bgcolor: '#e2e8f0', mx: 0, alignSelf: 'stretch' }} />
 
-      {/* Days Elapsed Distribution */}
-      <Box
-        sx={{
-          mb: 3,
-          p: 2,
-          background: 'rgba(255, 255, 255, 0.85)',
-          backdropFilter: 'blur(20px)',
-          borderRadius: 3,
-          border: '1px solid rgba(255, 255, 255, 0.6)',
-          boxShadow: '0 4px 24px rgba(102, 126, 234, 0.08)',
-        }}
-      >
-        <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
-          <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
-            Days Elapsed Since Test Sent
-          </Typography>
-          <Typography sx={{ fontSize: '11px', fontWeight: 600, color: '#64748b' }}>
-            {writingTestApplicants.length} candidates
-          </Typography>
-        </Box>
+          {/* ── Column 3: Days Elapsed ── */}
+          <Box sx={{ pl: 2 }}>
+            <Typography sx={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.06em', mb: '6px' }}>
+              Days Elapsed
+            </Typography>
+            <Box sx={{ display: 'flex', flexDirection: 'column', gap: '4px', mb: '8px' }}>
+              {[
+                { label: '0 – 2d', sublabel: 'Fresh', count: elapsedDistribution.fresh, color: '#16a34a' },
+                { label: '3 – 4d', sublabel: 'Moderate', count: elapsedDistribution.moderate, color: '#d97706' },
+                { label: '5 – 7d', sublabel: 'Stale', count: elapsedDistribution.stale, color: '#ea580c' },
+                { label: '8d+', sublabel: 'Overdue', count: elapsedDistribution.overdue, color: '#dc2626' },
+              ].map((band) => {
+                const p = pct(band.count);
+                return (
+                  <Box key={band.label} sx={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                    <Box sx={{ width: 7, height: 7, borderRadius: '50%', bgcolor: band.color, flexShrink: 0 }} />
+                    <Typography sx={{ fontSize: '14px', fontWeight: 800, color: band.color, lineHeight: 1, minWidth: '20px' }}>
+                      {band.count}
+                    </Typography>
+                    <Box sx={{ flex: 1 }}>
+                      <Typography sx={{ fontSize: '11px', fontWeight: 500, color: '#64748b', lineHeight: 1.2 }}>
+                        {band.label}
+                      </Typography>
+                      <Typography sx={{ fontSize: '10px', fontWeight: 400, color: '#94a3b8', lineHeight: 1 }}>
+                        {band.sublabel}
+                      </Typography>
+                    </Box>
+                    <Typography sx={{ fontSize: '11px', fontWeight: 600, color: band.color, opacity: 0.75, minWidth: '30px', textAlign: 'right' }}>
+                      {p}%
+                    </Typography>
+                  </Box>
+                );
+              })}
+            </Box>
+            {/* Segmented bar */}
+            <Box sx={{ display: 'flex', height: 4, borderRadius: '2px', overflow: 'hidden', bgcolor: '#f1f5f9' }}>
+              {[
+                { count: elapsedDistribution.fresh, color: '#16a34a' },
+                { count: elapsedDistribution.moderate, color: '#d97706' },
+                { count: elapsedDistribution.stale, color: '#ea580c' },
+                { count: elapsedDistribution.overdue, color: '#dc2626' },
+              ].filter((seg) => seg.count > 0).map((seg, i) => (
+                <Box key={i} sx={{ flex: seg.count, bgcolor: seg.color, transition: 'flex 0.4s ease' }} />
+              ))}
+            </Box>
+          </Box>
 
-        <Box sx={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 1.5, mb: 1.5 }}>
-          {[
-            { label: '0 \u2013 2 days', sublabel: 'Fresh', count: elapsedDistribution.fresh, color: '#16a34a', bg: 'linear-gradient(135deg, #f0fdf4 0%, #dcfce7 100%)', border: '#bbf7d0', track: '#dcfce7' },
-            { label: '3 \u2013 4 days', sublabel: 'Moderate', count: elapsedDistribution.moderate, color: '#d97706', bg: 'linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%)', border: '#fde68a', track: '#fef3c7' },
-            { label: '5 \u2013 7 days', sublabel: 'Getting stale', count: elapsedDistribution.stale, color: '#ea580c', bg: 'linear-gradient(135deg, #fff7ed 0%, #ffedd5 100%)', border: '#fed7aa', track: '#ffedd5' },
-            { label: '8+ days', sublabel: 'Likely ghosted', count: elapsedDistribution.overdue, color: '#dc2626', bg: 'linear-gradient(135deg, #fef2f2 0%, #fee2e2 100%)', border: '#fecaca', track: '#fee2e2' },
-          ].map((band) => {
-            const pct = writingTestApplicants.length > 0 ? Math.round((band.count / writingTestApplicants.length) * 100) : 0;
-            return (
-              <Box
-                key={band.label}
-                sx={{
-                  px: 1.75,
-                  py: 1.5,
-                  borderRadius: 2.5,
-                  background: band.bg,
-                  border: `1px solid ${band.border}`,
-                  display: 'flex',
-                  flexDirection: 'column',
-                  gap: 0.5,
-                }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between' }}>
-                  <Typography sx={{ fontSize: '26px', fontWeight: 800, color: band.color, lineHeight: 1 }}>
-                    {band.count}
-                  </Typography>
-                  <Typography sx={{ fontSize: '12px', fontWeight: 700, color: band.color, opacity: 0.7 }}>
-                    {pct}%
-                  </Typography>
-                </Box>
-                <Box>
-                  <Typography sx={{ fontSize: '12px', fontWeight: 700, color: band.color, lineHeight: 1.2 }}>
-                    {band.label}
-                  </Typography>
-                  <Typography sx={{ fontSize: '11px', fontWeight: 500, color: band.color, opacity: 0.65 }}>
-                    {band.sublabel}
-                  </Typography>
-                </Box>
-                <Box sx={{ height: 4, borderRadius: '2px', bgcolor: band.track, mt: 0.25, overflow: 'hidden' }}>
-                  <Box sx={{ height: '100%', width: `${pct}%`, borderRadius: '2px', bgcolor: band.color, transition: 'width 0.4s ease' }} />
-                </Box>
-              </Box>
-            );
-          })}
-        </Box>
-
-        {/* Segmented total bar */}
-        <Box sx={{ display: 'flex', height: 6, borderRadius: '3px', overflow: 'hidden', bgcolor: '#f1f5f9' }}>
-          {[
-            { count: elapsedDistribution.fresh, color: '#16a34a' },
-            { count: elapsedDistribution.moderate, color: '#d97706' },
-            { count: elapsedDistribution.stale, color: '#ea580c' },
-            { count: elapsedDistribution.overdue, color: '#dc2626' },
-          ]
-            .filter((seg) => seg.count > 0)
-            .map((seg, i) => (
-              <Box key={i} sx={{ flex: seg.count, bgcolor: seg.color, transition: 'flex 0.4s ease' }} />
-            ))}
         </Box>
       </Box>
 
