@@ -1,5 +1,6 @@
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions";
+import {sendHiringSlackMessage} from "../utils/slackUtils";
 
 const GHOST_AFTER_DAYS = 4;
 
@@ -32,15 +33,33 @@ export const ghostStaleWritingTests = functions.pubsub
 
     const batch = db.batch();
     const now = new Date();
+    const ghostedNames: string[] = [];
 
     snapshot.docs.forEach((doc) => {
       batch.update(doc.ref, {
         status: "not_responded",
         updatedAt: now,
       });
+      const data = doc.data();
+      ghostedNames.push(data.name || data.email || doc.id);
     });
 
     await batch.commit();
+
+    const message = [
+      `👻 *${snapshot.size} candidate(s) ghosted* (no writing test response after ${GHOST_AFTER_DAYS} days)`,
+      "",
+      ...ghostedNames.map((name) => `• ${name}`),
+      "",
+      "Status changed: `test_task` → `not_responded`",
+    ].join("\n");
+
+    try {
+      await sendHiringSlackMessage(message);
+    } catch (err) {
+      functions.logger.warn("Failed to send Slack notification for ghosted candidates:", err);
+    }
+
     functions.logger.info(
       `Moved ${snapshot.size} applicant(s) from test_task to not_responded (ghosted after ${GHOST_AFTER_DAYS} days)`
     );

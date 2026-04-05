@@ -181,6 +181,7 @@ export interface CreateHiringDraftRequest {
   to: string;
   subject: string;
   bodyHtml: string;
+  templateName?: string;
 }
 
 export interface CreateHiringDraftResponse {

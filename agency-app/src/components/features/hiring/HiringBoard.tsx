@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
-import { Box, Typography, Button, Snackbar, Alert, CircularProgress, Select, MenuItem, FormControl, TextField, InputAdornment } from '@mui/material';
-import { Upload as UploadIcon, FilterList as FilterIcon, PersonAdd as PersonAddIcon, Search as SearchIcon } from '@mui/icons-material';
+import { useLocation, useNavigate } from 'react-router-dom';
+import { Box, Typography, Button, Snackbar, Alert, CircularProgress, Select, MenuItem, FormControl, TextField, InputAdornment, ToggleButtonGroup, ToggleButton } from '@mui/material';
+import { Upload as UploadIcon, FilterList as FilterIcon, PersonAdd as PersonAddIcon, Search as SearchIcon, ViewKanban as ViewKanbanIcon, TableChart as TableChartIcon } from '@mui/icons-material';
 import { Applicant, ApplicantStatus, RejectionStage, HIRING_STAGES } from '../../../types/applicant';
 import { subscribeToApplicants, updateApplicantStatus, subscribeToViewedApplicantIds, markApplicantViewed } from '../../../services/api/applicants';
 import { RejectionDialog } from './RejectionDialog';
@@ -10,9 +11,15 @@ import { PipelineFunnelStrip } from './PipelineFunnelStrip';
 import { ApplicantDetailDialog } from './ApplicantDetailDialog';
 import { CSVImportDialog } from './CSVImportDialog';
 import { AddCandidateDialog } from './AddCandidateDialog';
+import WritingTestsTable from './WritingTestsTable';
+
+type HiringView = 'board' | 'writing_tests';
 
 const HiringBoard: React.FC = () => {
   const { user } = useAuth();
+  const location = useLocation();
+  const navigate = useNavigate();
+  const activeView: HiringView = location.pathname === '/hiring/writing-tests' ? 'writing_tests' : 'board';
   const [applicants, setApplicants] = useState<Applicant[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewedIds, setViewedIds] = useState<Set<string>>(new Set());
@@ -303,7 +310,42 @@ const HiringBoard: React.FC = () => {
             {(universityFilter || genderFilter || scoreFilter) ? `${filteredApplicants.length} of ${applicants.length}` : applicants.length} applicant{applicants.length !== 1 ? 's' : ''}
           </Typography>
         </Box>
-        <Box sx={{ display: 'flex', gap: 1.5 }}>
+        <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+          <ToggleButtonGroup
+            value={activeView}
+            exclusive
+            onChange={(_, v) => v && navigate(v === 'writing_tests' ? '/hiring/writing-tests' : '/hiring')}
+            size="small"
+            sx={{
+              mr: 1,
+              '& .MuiToggleButton-root': {
+                textTransform: 'none',
+                fontWeight: 600,
+                fontSize: '13px',
+                px: 2,
+                py: 0.75,
+                borderColor: '#e2e8f0',
+                color: '#64748b',
+                '&.Mui-selected': {
+                  background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
+                  color: '#fff',
+                  borderColor: '#667eea',
+                  '&:hover': {
+                    background: 'linear-gradient(135deg, #5a6fd6 0%, #6a4190 100%)',
+                  },
+                },
+              },
+            }}
+          >
+            <ToggleButton value="board">
+              <ViewKanbanIcon sx={{ fontSize: 18, mr: 0.75 }} />
+              Board
+            </ToggleButton>
+            <ToggleButton value="writing_tests">
+              <TableChartIcon sx={{ fontSize: 18, mr: 0.75 }} />
+              Writing Tests
+            </ToggleButton>
+          </ToggleButtonGroup>
           <Button
             variant="contained"
             startIcon={<PersonAddIcon />}
@@ -475,10 +517,19 @@ const HiringBoard: React.FC = () => {
         </FormControl>
       </Box>
 
-      {/* Pipeline Funnel Stats */}
-      <PipelineFunnelStrip applicants={filteredApplicants} />
+      {/* Pipeline Funnel Stats — hidden in writing tests view */}
+      {activeView === 'board' && <PipelineFunnelStrip applicants={filteredApplicants} />}
+
+      {/* Writing Tests Table View */}
+      {activeView === 'writing_tests' && (
+        <WritingTestsTable
+          applicants={filteredApplicants}
+          onApplicantClick={handleApplicantClick}
+        />
+      )}
 
       {/* Kanban Board */}
+      {activeView === 'board' && (
       <Box
         sx={{
           flex: 1,
@@ -587,6 +638,7 @@ const HiringBoard: React.FC = () => {
           );
         })}
       </Box>
+      )}
 
       {/* Detail Dialog */}
       <ApplicantDetailDialog

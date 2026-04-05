@@ -55,6 +55,7 @@ export interface Applicant {
       draftId?: string;
       draftUrl?: string;
       subject?: string;
+      templateName?: string;
     };
   };
 }

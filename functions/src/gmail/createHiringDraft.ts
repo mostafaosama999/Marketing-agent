@@ -12,6 +12,7 @@ export interface CreateHiringDraftRequest {
   to: string;
   subject: string;
   bodyHtml: string;
+  templateName?: string;
 }
 
 export interface CreateHiringDraftResponse {
@@ -82,7 +83,7 @@ export const createHiringDraftCloud = functions.https.onCall(
       const db = admin.firestore();
       const applicantRef = db.collection("applicants").doc(data.applicantId);
 
-      await applicantRef.update({
+      const updateData: Record<string, any> = {
         "outreach.email.status": "draft_created",
         "outreach.email.draftCreatedAt":
           admin.firestore.FieldValue.serverTimestamp(),
@@ -90,7 +91,11 @@ export const createHiringDraftCloud = functions.https.onCall(
         "outreach.email.draftUrl": result.draftUrl,
         "outreach.email.subject": data.subject,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      };
+      if (data.templateName) {
+        updateData["outreach.email.templateName"] = data.templateName;
+      }
+      await applicantRef.update(updateData);
 
       console.log("✅ [HiringDraft] Applicant outreach status updated");
 

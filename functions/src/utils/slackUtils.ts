@@ -4,6 +4,7 @@ import * as functions from "firebase-functions";
 // Slack configuration from Firebase Functions config
 const SLACK_TOKEN = functions.config().slack?.bot_token;
 const SLACK_CHANNEL = functions.config().slack?.channel || "project-reports";
+const HIRING_CHANNEL = functions.config().slack?.hiring_channel || "hiring";
 
 /**
  * Initialize Slack Web API client
@@ -63,6 +64,34 @@ export async function sendSlackMessage(message: string): Promise<void> {
     // Re-throw so we can catch it in the calling function
     throw error;
   }
+}
+
+/**
+ * Send a message to a specific Slack channel
+ */
+export async function sendSlackMessageToChannel(
+  channel: string,
+  message: string,
+  username = "Marketing Report Bot",
+  iconEmoji = ":chart_with_upwards_trend:"
+): Promise<void> {
+  const slack = getSlackClient();
+  const result = await slack.chat.postMessage({
+    channel,
+    text: message,
+    username,
+    icon_emoji: iconEmoji,
+  });
+  if (!result.ok) {
+    throw new Error(`Slack API error: ${result.error}`);
+  }
+}
+
+/**
+ * Send a message to the hiring Slack channel
+ */
+export async function sendHiringSlackMessage(message: string): Promise<void> {
+  await sendSlackMessageToChannel(HIRING_CHANNEL, message, "Hiring Bot", ":briefcase:");
 }
 
 /**

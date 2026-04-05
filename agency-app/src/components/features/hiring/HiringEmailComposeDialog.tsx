@@ -86,6 +86,7 @@ export const HiringEmailComposeDialog: React.FC<HiringEmailComposeDialogProps> =
         to: applicantEmail,
         subject,
         bodyHtml,
+        templateName: template.name,
       });
 
       if (result.success) {

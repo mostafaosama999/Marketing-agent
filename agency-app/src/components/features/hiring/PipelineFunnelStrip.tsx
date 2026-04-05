@@ -97,9 +97,8 @@ export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applic
               {stageId === 'test_task' ? (
                 <Box
                   sx={{
-                    width: 240,
+                    minWidth: 260,
                     flexShrink: 0,
-                    overflow: 'hidden',
                     px: 1.5,
                     py: 0.75,
                     borderRadius: 2,

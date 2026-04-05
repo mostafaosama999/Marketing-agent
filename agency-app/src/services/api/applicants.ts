@@ -63,6 +63,20 @@ function convertToApplicant(id: string, data: any): Applicant {
     rejectedAt: safeToDate(data.rejectedAt) || undefined,
     rejectionNote: data.rejectionNote || undefined,
     testTaskUrl: data.testTaskUrl || undefined,
+    outreach: data.outreach
+      ? {
+          email: data.outreach.email
+            ? {
+                status: data.outreach.email.status || '',
+                draftCreatedAt: safeToDate(data.outreach.email.draftCreatedAt),
+                draftId: data.outreach.email.draftId,
+                draftUrl: data.outreach.email.draftUrl,
+                subject: data.outreach.email.subject,
+                templateName: data.outreach.email.templateName,
+              }
+            : undefined,
+        }
+      : undefined,
   };
 }
 
