@@ -4,14 +4,17 @@ import {sendHiringSlackMessage} from "../utils/slackUtils";
 
 const DEADLINE_DAYS = 7;
 
+// Statuses that should be ghosted if the 7-day deadline passes
+const GHOSTABLE_STATUSES = ["test_task", "responded", "feedback"];
+
 /**
  * Scheduled function that runs daily at 8 AM UTC.
- * Moves applicants in `test_task` status whose 7-day deadline has passed
- * to `not_responded` (ghosted).
+ * Moves applicants in writing-test-related statuses (test_task, responded, feedback)
+ * whose 7-day deadline has passed to `not_responded` (ghosted).
  *
- * The deadline is 7 days from whichever is earlier:
+ * The deadline is 7 days from whichever is available:
  *   - outreach.email.draftCreatedAt (when the test email was sent)
- *   - updatedAt (when they were moved into test_task)
+ *   - updatedAt (fallback)
  */
 export const ghostStaleWritingTests = functions.pubsub
   .schedule("0 8 * * *")
@@ -20,15 +23,14 @@ export const ghostStaleWritingTests = functions.pubsub
     const db = admin.firestore();
     const now = new Date();
 
-    // Query all test_task applicants — we check deadline in code
-    // since the deadline base field varies per applicant
+    // Query all writing-test-related applicants
     const snapshot = await db
       .collection("applicants")
-      .where("status", "==", "test_task")
+      .where("status", "in", GHOSTABLE_STATUSES)
       .get();
 
     if (snapshot.empty) {
-      functions.logger.info("No applicants in test_task status");
+      functions.logger.info("No applicants in writing test statuses");
       return;
     }
 
@@ -72,7 +74,7 @@ export const ghostStaleWritingTests = functions.pubsub
       "",
       ...ghostedNames.map((name) => `• ${name}`),
       "",
-      "Status changed: `test_task` → `not_responded`",
+      "Status changed: → `not_responded`",
     ].join("\n");
 
     try {
