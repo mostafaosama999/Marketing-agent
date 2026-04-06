@@ -56,6 +56,7 @@ function convertToApplicant(id: string, data: any): Applicant {
     notes: data.notes || '',
     formAnswers: data.formAnswers || {},
     source: data.source || 'manual',
+    recruiterSourced: data.recruiterSourced === true,
     jobPost: data.jobPost || undefined,
     submittedAt: safeToDate(data.submittedAt) || safeToDate(data.createdAt) || new Date(),
     createdAt: safeToDate(data.createdAt) || new Date(),

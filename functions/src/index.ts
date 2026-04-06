@@ -168,6 +168,7 @@ export {importApplicantsCloud} from "./hiring/importApplicants";
 export {parseApplicantProfileCloud} from "./hiring/parseApplicantProfile";
 export {ghostStaleWritingTests} from "./hiring/ghostWritingTests";
 export {backfillJobPostCloud} from "./hiring/backfillJobPost";
+export {backfillRecruiterAttributionCloud, syncRecruiterAttributionScheduled} from "./hiring/recruiterAttribution";
 
 // Export event organizer research functions
 export {researchEventOrganizer, onEventCreatedResearchOrganizer} from "./events/researchOrganizer";

@@ -339,17 +339,32 @@ export const ApplicantCard: React.FC<ApplicantCardProps> = ({
           )}
         </Box>
 
-        <Chip
-          label={applicant.source === 'webflow' ? 'Webflow' : applicant.source === 'tally' ? 'Tally' : applicant.source === 'csv_import' ? 'CSV' : 'Manual'}
-          size="small"
-          sx={{
-            fontSize: '10px',
-            fontWeight: 600,
-            height: 20,
-            background: applicant.source === 'webflow' ? '#dbeafe' : applicant.source === 'tally' ? '#fef3c7' : '#f1f5f9',
-            color: applicant.source === 'webflow' ? '#2563eb' : applicant.source === 'tally' ? '#d97706' : '#64748b',
-          }}
-        />
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+          {applicant.recruiterSourced && (
+            <Chip
+              label="Recruiter"
+              size="small"
+              sx={{
+                fontSize: '10px',
+                fontWeight: 700,
+                height: 20,
+                background: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                color: 'white',
+              }}
+            />
+          )}
+          <Chip
+            label={applicant.source === 'webflow' ? 'Careers Page' : applicant.source === 'tally' ? 'Tally' : applicant.source === 'csv_import' ? 'CSV' : 'Wuzzuf'}
+            size="small"
+            sx={{
+              fontSize: '10px',
+              fontWeight: 600,
+              height: 20,
+              background: applicant.source === 'webflow' ? '#dbeafe' : applicant.source === 'tally' ? '#fef3c7' : '#f1f5f9',
+              color: applicant.source === 'webflow' ? '#2563eb' : applicant.source === 'tally' ? '#d97706' : '#64748b',
+            }}
+          />
+        </Box>
       </Box>
     </Box>
   );

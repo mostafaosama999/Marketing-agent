@@ -6,6 +6,7 @@ const HIRING_CONFIG_DOC = 'hiringConfig/default';
 
 export interface HiringConfig {
   currentJobPost: string;
+  recruiterOutreachCount?: number;
 }
 
 export async function getHiringConfig(): Promise<HiringConfig> {

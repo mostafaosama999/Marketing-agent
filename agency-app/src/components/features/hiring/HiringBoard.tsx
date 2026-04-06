@@ -1,9 +1,10 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Box, Typography, Button, Snackbar, Alert, CircularProgress, Select, MenuItem, FormControl, TextField, InputAdornment, ToggleButtonGroup, ToggleButton } from '@mui/material';
-import { Upload as UploadIcon, FilterList as FilterIcon, PersonAdd as PersonAddIcon, Search as SearchIcon, ViewKanban as ViewKanbanIcon, TableChart as TableChartIcon } from '@mui/icons-material';
+import { Upload as UploadIcon, FilterList as FilterIcon, PersonAdd as PersonAddIcon, Search as SearchIcon, ViewKanban as ViewKanbanIcon, TableChart as TableChartIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon } from '@mui/icons-material';
 import { Applicant, ApplicantStatus, RejectionStage, HIRING_STAGES } from '../../../types/applicant';
 import { subscribeToApplicants, updateApplicantStatus, subscribeToViewedApplicantIds, markApplicantViewed } from '../../../services/api/applicants';
+import { getHiringConfig } from '../../../services/api/hiringConfig';
 import { RejectionDialog } from './RejectionDialog';
 import { useAuth } from '../../../contexts/AuthContext';
 import { ApplicantColumn } from './ApplicantColumn';
@@ -43,7 +44,15 @@ const HiringBoard: React.FC = () => {
   const [pendingRejectionStage, setPendingRejectionStage] = useState<RejectionStage | null>(null);
   const [dragOverRejectionZone, setDragOverRejectionZone] = useState<string | null>(null);
   const [dragOverSubSection, setDragOverSubSection] = useState<string | null>(null);
+  const [recruiterOutreachCount, setRecruiterOutreachCount] = useState<number | undefined>(undefined);
   const dragOverRef = useRef<string | null>(null);
+
+  // Fetch recruiter outreach count from hiring config
+  useEffect(() => {
+    getHiringConfig().then((config) => {
+      if (config.recruiterOutreachCount) setRecruiterOutreachCount(config.recruiterOutreachCount);
+    });
+  }, []);
 
   // Subscribe to viewed applicant IDs
   useEffect(() => {
@@ -518,7 +527,7 @@ const HiringBoard: React.FC = () => {
       </Box>
 
       {/* Pipeline Funnel Stats — hidden in writing tests view */}
-      {activeView === 'board' && <PipelineFunnelStrip applicants={filteredApplicants} />}
+      {activeView === 'board' && <PipelineFunnelStrip applicants={filteredApplicants} recruiterOutreachCount={recruiterOutreachCount} />}
 
       {/* Writing Tests Table View */}
       {activeView === 'writing_tests' && (

@@ -179,7 +179,7 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
           <Typography variant="body2" sx={{ color: '#94a3b8', mt: 0.5 }}>
             Applied {applicant.submittedAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })}
             {' via '}
-            {applicant.source === 'webflow' ? 'Webflow' : applicant.source === 'tally' ? 'Tally' : applicant.source === 'csv_import' ? 'CSV Import' : 'Manual'}
+            {applicant.source === 'webflow' ? 'Careers Page' : applicant.source === 'tally' ? 'Tally' : applicant.source === 'csv_import' ? 'CSV Import' : 'Wuzzuf'}
             {applicant.jobPost && ` · Job Post: ${applicant.jobPost}`}
           </Typography>
         </Box>

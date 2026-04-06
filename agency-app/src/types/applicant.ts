@@ -41,6 +41,7 @@ export interface Applicant {
   notes: string;
   formAnswers: Record<string, string>;
   source: 'webflow' | 'tally' | 'csv_import' | 'manual';
+  recruiterSourced?: boolean;
   jobPost?: string;
   submittedAt: Date;
   createdAt: Date;

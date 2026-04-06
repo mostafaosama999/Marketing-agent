@@ -3,6 +3,7 @@ import { Applicant } from '../types/applicant';
 const EGP_TO_USD = 50.5;
 
 export type CostCategory = 'platforms' | 'hr' | 'writing-tests';
+export type CostChannelStatus = 'closed' | 'recurring' | 'per-event';
 
 export interface CostChannel {
   name: string;
@@ -10,6 +11,9 @@ export interface CostChannel {
   amountUSD: number;
   detail: string;
   unitRate: string;
+  status: CostChannelStatus;
+  elapsed?: string;
+  eventCount?: number;
 }
 
 export interface HiringCostBreakdown {
@@ -58,6 +62,7 @@ export function calculateHiringCosts(applicants: Applicant[]): HiringCostBreakdo
     amountUSD: linkedinV1USD,
     detail: `One-off (closed)`,
     unitRate: formatUSD(linkedinV1USD),
+    status: 'closed',
   });
 
   // Wuzzuf — $270/month, started March 28, 2026
@@ -70,6 +75,8 @@ export function calculateHiringCosts(applicants: Applicant[]): HiringCostBreakdo
     amountUSD: wuzzufUSD,
     detail: `${wuzzufMonths} month${wuzzufMonths !== 1 ? 's' : ''} × $270/mo`,
     unitRate: '$270/mo',
+    status: 'recurring',
+    elapsed: `${wuzzufMonths} mo`,
   });
 
   // LinkedIn Job Post V2 — 1,000 EGP/day, started April 1, 2026
@@ -82,6 +89,8 @@ export function calculateHiringCosts(applicants: Applicant[]): HiringCostBreakdo
     amountUSD: linkedinV2USD,
     detail: `${linkedinV2Days} days × ${formatUSD(1000 / EGP_TO_USD)}/day`,
     unitRate: `${formatUSD(1000 / EGP_TO_USD)}/day`,
+    status: 'recurring',
+    elapsed: `${linkedinV2Days}d`,
   });
 
   // Human Resources
@@ -95,6 +104,8 @@ export function calculateHiringCosts(applicants: Applicant[]): HiringCostBreakdo
     amountUSD: upworkUSD,
     detail: `${upworkWeeks} weeks × $100/wk`,
     unitRate: '$100/wk',
+    status: 'recurring',
+    elapsed: `${upworkWeeks} wks`,
   });
 
   // Writing Tests
@@ -107,6 +118,8 @@ export function calculateHiringCosts(applicants: Applicant[]): HiringCostBreakdo
     amountUSD: paidTestsUSD,
     detail: `${paidTestCount} test${paidTestCount !== 1 ? 's' : ''} × ${formatUSD(1000 / EGP_TO_USD)}/test`,
     unitRate: `${formatUSD(1000 / EGP_TO_USD)}/test`,
+    status: 'per-event',
+    eventCount: paidTestCount,
   });
 
   const totalUSD = channels.reduce((s, c) => s + c.amountUSD, 0);
