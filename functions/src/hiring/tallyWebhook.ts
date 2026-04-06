@@ -202,6 +202,10 @@ export const tallyHiringWebhook = functions
         ? new Date(data.createdAt)
         : admin.firestore.FieldValue.serverTimestamp();
 
+      // Read current job post from hiring config
+      const configSnap = await db.doc("hiringConfig/default").get();
+      const currentJobPost = configSnap.exists ? (configSnap.data()?.currentJobPost || null) : null;
+
       const applicant = {
         name,
         email,
@@ -217,6 +221,7 @@ export const tallyHiringWebhook = functions
         notes: "",
         formAnswers,
         source: "tally",
+        jobPost: currentJobPost,
         tallyFormId: data.formId || null,
         tallySubmissionId: submissionId,
         submittedAt,

@@ -21,6 +21,7 @@ import { GmailIntegrationTab } from '../../components/settings/GmailIntegrationT
 import { FollowUpTemplateTab } from '../../components/settings/FollowUpTemplateTab';
 import { OfferTemplateTab } from '../../components/settings/OfferTemplateTab';
 import { HiringEmailTemplatesTab } from '../../components/settings/HiringEmailTemplatesTab';
+import { HiringConfigSection } from '../../components/settings/HiringConfigSection';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -337,7 +338,10 @@ export const SettingsPage: React.FC = () => {
 
           {/* Hiring Templates Tab */}
           <TabPanel value={tabValue} index={6}>
-            <HiringEmailTemplatesTab />
+            <HiringConfigSection />
+            <Box sx={{ mt: 4 }}>
+              <HiringEmailTemplatesTab />
+            </Box>
           </TabPanel>
         </Box>
       </Box>

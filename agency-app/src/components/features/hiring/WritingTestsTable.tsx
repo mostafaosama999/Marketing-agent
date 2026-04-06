@@ -57,8 +57,9 @@ function isPaidTest(applicant: Applicant): boolean {
 
 function sourceLabel(source: string): string {
   if (source === 'webflow') return 'Webflow';
+  if (source === 'tally') return 'Tally';
   if (source === 'csv_import') return 'CSV';
-  return 'Wuzzuf';
+  return 'Manual';
 }
 
 type SortField = 'days_elapsed' | 'name' | 'status' | 'score';

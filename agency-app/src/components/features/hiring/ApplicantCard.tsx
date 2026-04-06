@@ -125,6 +125,23 @@ export const ApplicantCard: React.FC<ApplicantCardProps> = ({
         />
       )}
 
+      {/* Job Post Chip */}
+      {applicant.jobPost && (
+        <Chip
+          label={applicant.jobPost}
+          size="small"
+          sx={{
+            fontSize: '10px',
+            fontWeight: 700,
+            height: 18,
+            mb: 0.75,
+            bgcolor: '#ecfdf5',
+            color: '#059669',
+            border: '1px solid #a7f3d0',
+          }}
+        />
+      )}
+
       {/* Age · Sex · University */}
       {infoParts.length > 0 && (
         <Typography
@@ -138,6 +155,26 @@ export const ApplicantCard: React.FC<ApplicantCardProps> = ({
           }}
         >
           {infoParts.join(' · ')}
+        </Typography>
+      )}
+
+      {/* Notice Period / Availability */}
+      {applicant.availability && (
+        <Typography
+          sx={{
+            fontSize: '11px',
+            fontWeight: 600,
+            color: '#8b5cf6',
+            mb: 0.75,
+            px: 1,
+            py: 0.25,
+            borderRadius: 1,
+            background: '#f5f3ff',
+            border: '1px solid #ede9fe',
+            display: 'inline-block',
+          }}
+        >
+          {applicant.availability}
         </Typography>
       )}
 
@@ -303,14 +340,14 @@ export const ApplicantCard: React.FC<ApplicantCardProps> = ({
         </Box>
 
         <Chip
-          label={applicant.source === 'webflow' ? 'Webflow' : applicant.source === 'csv_import' ? 'CSV' : 'Manual'}
+          label={applicant.source === 'webflow' ? 'Webflow' : applicant.source === 'tally' ? 'Tally' : applicant.source === 'csv_import' ? 'CSV' : 'Manual'}
           size="small"
           sx={{
             fontSize: '10px',
             fontWeight: 600,
             height: 20,
-            background: applicant.source === 'webflow' ? '#dbeafe' : '#f1f5f9',
-            color: applicant.source === 'webflow' ? '#2563eb' : '#64748b',
+            background: applicant.source === 'webflow' ? '#dbeafe' : applicant.source === 'tally' ? '#fef3c7' : '#f1f5f9',
+            color: applicant.source === 'webflow' ? '#2563eb' : applicant.source === 'tally' ? '#d97706' : '#64748b',
           }}
         />
       </Box>

@@ -157,6 +157,10 @@ export const webflowHiringWebhook = functions
         ? new Date(payload.submittedAt)
         : admin.firestore.FieldValue.serverTimestamp();
 
+      // Read current job post from hiring config
+      const configSnap = await db.doc("hiringConfig/default").get();
+      const currentJobPost = configSnap.exists ? (configSnap.data()?.currentJobPost || null) : null;
+
       const applicant = {
         name,
         email,
@@ -172,6 +176,7 @@ export const webflowHiringWebhook = functions
         notes: "",
         formAnswers,
         source: "webflow",
+        jobPost: currentJobPost,
         webflowFormId: payload.formId || null,
         webflowSubmissionId: payload.id || null,
         submittedAt,

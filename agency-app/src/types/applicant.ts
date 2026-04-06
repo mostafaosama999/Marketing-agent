@@ -40,7 +40,8 @@ export interface Applicant {
   score: number | null;
   notes: string;
   formAnswers: Record<string, string>;
-  source: 'webflow' | 'csv_import' | 'manual';
+  source: 'webflow' | 'tally' | 'csv_import' | 'manual';
+  jobPost?: string;
   submittedAt: Date;
   createdAt: Date;
   updatedAt: Date;
@@ -68,7 +69,8 @@ export interface ApplicantFormData {
   bio: string;
   status: ApplicantStatus;
   formAnswers: Record<string, string>;
-  source: 'webflow' | 'csv_import' | 'manual';
+  source: 'webflow' | 'tally' | 'csv_import' | 'manual';
+  jobPost?: string;
   submittedAt?: Date;
 }
 

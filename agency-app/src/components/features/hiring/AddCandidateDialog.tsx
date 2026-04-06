@@ -45,7 +45,7 @@ const INITIAL_FORM: ApplicantFormData = {
   source: 'manual',
 };
 
-type FormState = ApplicantFormData & { education: string; sex: string; age: string; availability: string };
+type FormState = ApplicantFormData & { education: string; sex: string; age: string; availability: string; jobPost: string };
 
 const INITIAL_FORM_STATE: FormState = {
   ...INITIAL_FORM,
@@ -53,6 +53,7 @@ const INITIAL_FORM_STATE: FormState = {
   sex: '',
   age: '',
   availability: '',
+  jobPost: '',
 };
 
 export const AddCandidateDialog: React.FC<AddCandidateDialogProps> = ({ open, onClose, onSuccess }) => {
@@ -89,6 +90,7 @@ export const AddCandidateDialog: React.FC<AddCandidateDialogProps> = ({ open, on
         age: parsed.age || '',
         sex: parsed.sex || '',
         availability: parsed.availability || '',
+        jobPost: '',
         status: 'applied',
         formAnswers: parsed.formAnswers || {},
         source: 'manual',
@@ -125,6 +127,7 @@ export const AddCandidateDialog: React.FC<AddCandidateDialogProps> = ({ open, on
         ...(form.sex && { sex: form.sex }),
         ...(form.age && { age: form.age.trim() }),
         ...(form.availability && { availability: form.availability.trim() }),
+        ...(form.jobPost && { jobPost: form.jobPost.trim() }),
       } as any);
       // Auto-mark as viewed so it doesn't show NEW badge
       if (user?.uid && newId) {
@@ -344,25 +347,35 @@ export const AddCandidateDialog: React.FC<AddCandidateDialogProps> = ({ open, on
             />
           </Box>
 
-          <FormControl size="small">
-            <InputLabel>Initial Stage</InputLabel>
-            <Select
-              value={form.status}
-              label="Initial Stage"
-              onChange={(e) => {
-                setForm((prev) => ({ ...prev, status: e.target.value as ApplicantStatus }));
-              }}
-            >
-              <MenuItem value="applied">Applied</MenuItem>
-              <MenuItem value="shortlisted">Shortlisted</MenuItem>
-              <MenuItem value="test_task">Writing Test</MenuItem>
-              <MenuItem value="not_responded">Not Responded</MenuItem>
-              <MenuItem value="responded">Responded</MenuItem>
-              <MenuItem value="feedback">Feedback</MenuItem>
-              <MenuItem value="offer">Interview</MenuItem>
-              <MenuItem value="hired">Hired</MenuItem>
-            </Select>
-          </FormControl>
+          <Box sx={{ display: 'flex', gap: 2 }}>
+            <FormControl size="small" sx={{ flex: 1 }}>
+              <InputLabel>Initial Stage</InputLabel>
+              <Select
+                value={form.status}
+                label="Initial Stage"
+                onChange={(e) => {
+                  setForm((prev) => ({ ...prev, status: e.target.value as ApplicantStatus }));
+                }}
+              >
+                <MenuItem value="applied">Applied</MenuItem>
+                <MenuItem value="shortlisted">Shortlisted</MenuItem>
+                <MenuItem value="test_task">Writing Test</MenuItem>
+                <MenuItem value="not_responded">Not Responded</MenuItem>
+                <MenuItem value="responded">Responded</MenuItem>
+                <MenuItem value="feedback">Feedback</MenuItem>
+                <MenuItem value="offer">Interview</MenuItem>
+                <MenuItem value="hired">Hired</MenuItem>
+              </Select>
+            </FormControl>
+            <TextField
+              label="Job Post"
+              value={form.jobPost}
+              onChange={handleChange('jobPost')}
+              size="small"
+              sx={{ flex: 1 }}
+              placeholder="e.g., 30-40k"
+            />
+          </Box>
 
           <TextField
             label="Bio / Notes"
