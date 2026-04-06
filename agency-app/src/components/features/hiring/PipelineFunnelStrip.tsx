@@ -108,39 +108,37 @@ export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applic
 
         <Divider orientation="vertical" flexItem sx={{ mx: 2.5, my: 0.5 }} />
 
-        {/* Channel clusters grouped by category */}
-        {COST_GROUPS.map((group, gi) => {
-          const channels = costs.channels.filter((c) => c.category === group.categoryKey);
-          if (!channels.length) return null;
-          return (
-            <React.Fragment key={group.categoryKey}>
-              {gi > 0 && (
-                <Divider orientation="vertical" flexItem sx={{ mx: 2, my: 0.5, borderColor: 'rgba(0,0,0,0.06)' }} />
-              )}
-              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
-                <Typography sx={{ fontSize: '10px', fontWeight: 700, color: group.color, textTransform: 'uppercase', letterSpacing: '0.07em', pl: 1 }}>
-                  {group.label}
-                </Typography>
-                <Box sx={{ display: 'flex', gap: 1.25 }}>
-                  {channels.map((ch) => (
-                    <Tooltip key={ch.name} arrow title={ch.detail} placement="bottom">
-                      <Box
-                        sx={{
-                          display: 'flex',
-                          alignItems: 'center',
-                          gap: 1.5,
-                          px: 1.5,
-                          py: 0.75,
-                          borderRadius: 1.5,
-                          borderLeft: `3px solid ${group.color}`,
-                          background: 'rgba(0,0,0,0.025)',
-                          cursor: 'default',
-                          transition: 'background 0.15s',
-                          '&:hover': { background: group.bgHover },
-                        }}
-                      >
-                        {/* Left: calculated amount */}
-                        <Box sx={{ display: 'flex', flexDirection: 'column' }}>
+        {/* Left side: calculated amounts grouped by category */}
+        <Box sx={{ display: 'flex', alignItems: 'center', flex: 1 }}>
+          {COST_GROUPS.map((group, gi) => {
+            const channels = costs.channels.filter((c) => c.category === group.categoryKey);
+            if (!channels.length) return null;
+            return (
+              <React.Fragment key={group.categoryKey}>
+                {gi > 0 && (
+                  <Divider orientation="vertical" flexItem sx={{ mx: 2, my: 0.5, borderColor: 'rgba(0,0,0,0.06)' }} />
+                )}
+                <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+                  <Typography sx={{ fontSize: '10px', fontWeight: 700, color: group.color, textTransform: 'uppercase', letterSpacing: '0.07em', pl: 1 }}>
+                    {group.label}
+                  </Typography>
+                  <Box sx={{ display: 'flex', gap: 1.25 }}>
+                    {channels.map((ch) => (
+                      <Tooltip key={ch.name} arrow title={ch.detail} placement="bottom">
+                        <Box
+                          sx={{
+                            display: 'flex',
+                            flexDirection: 'column',
+                            px: 1.5,
+                            py: 0.75,
+                            borderRadius: 1.5,
+                            borderLeft: `3px solid ${group.color}`,
+                            background: 'rgba(0,0,0,0.025)',
+                            cursor: 'default',
+                            transition: 'background 0.15s',
+                            '&:hover': { background: group.bgHover },
+                          }}
+                        >
                           <Typography sx={{ fontSize: '15px', fontWeight: 700, color: '#1e293b', lineHeight: 1, whiteSpace: 'nowrap' }}>
                             {formatUSD(ch.amountUSD)}
                           </Typography>
@@ -149,18 +147,35 @@ export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applic
                             {ch.category === 'writing-tests' && costs.paidTestCount > 0 ? ` · ${costs.paidTestCount}` : ''}
                           </Typography>
                         </Box>
-                        {/* Right: unit rate */}
-                        <Typography sx={{ fontSize: '9px', fontWeight: 600, color: '#94a3b8', whiteSpace: 'nowrap' }}>
-                          {ch.unitRate}
-                        </Typography>
-                      </Box>
-                    </Tooltip>
-                  ))}
+                      </Tooltip>
+                    ))}
+                  </Box>
                 </Box>
+              </React.Fragment>
+            );
+          })}
+        </Box>
+
+        <Divider orientation="vertical" flexItem sx={{ mx: 2.5, my: 0.5 }} />
+
+        {/* Right side: unit rates / constants */}
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.5, flexShrink: 0 }}>
+          <Typography sx={{ fontSize: '10px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.07em' }}>
+            Rates
+          </Typography>
+          <Box sx={{ display: 'flex', gap: 1.5 }}>
+            {costs.channels.map((ch) => (
+              <Box key={ch.name} sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+                <Typography sx={{ fontSize: '12px', fontWeight: 700, color: '#475569', lineHeight: 1, whiteSpace: 'nowrap' }}>
+                  {ch.unitRate}
+                </Typography>
+                <Typography sx={{ fontSize: '9px', fontWeight: 500, color: '#94a3b8', mt: 0.25, whiteSpace: 'nowrap' }}>
+                  {abbreviateChannelName(ch.name)}
+                </Typography>
               </Box>
-            </React.Fragment>
-          );
-        })}
+            ))}
+          </Box>
+        </Box>
       </Box>
 
       {/* Pipeline Funnel Strip */}
@@ -349,8 +364,8 @@ export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applic
 
 function abbreviateChannelName(name: string): string {
   const map: Record<string, string> = {
-    'LinkedIn Job Post V1': 'LI Post V1',
-    'LinkedIn Job Post V2': 'LI Post V2',
+    'LinkedIn Job Post V1': 'LinkedIn V1',
+    'LinkedIn Job Post V2': 'LinkedIn V2',
     'Upwork Recruiter': 'Upwork',
     'Paid Writing Tests': 'Paid Tests',
   };
