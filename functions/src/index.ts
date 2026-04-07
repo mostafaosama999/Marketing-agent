@@ -162,8 +162,6 @@ export {discoverCompanyWebsiteCloud} from "./search/discoverCompanyWebsite";
 
 // Export hiring pipeline functions
 export {webflowHiringWebhook} from "./hiring/webflowWebhook";
-export {tallyHiringWebhook} from "./hiring/tallyWebhook";
-export {tallyContactWebhook} from "./hiring/tallyContactWebhook";
 export {importApplicantsCloud} from "./hiring/importApplicants";
 export {parseApplicantProfileCloud} from "./hiring/parseApplicantProfile";
 export {ghostStaleWritingTests} from "./hiring/ghostWritingTests";
