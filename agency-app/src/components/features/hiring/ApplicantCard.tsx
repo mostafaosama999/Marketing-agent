@@ -8,7 +8,7 @@ import {
   WarningAmber as WarningAmberIcon,
   MailOutline as MailOutlineIcon,
 } from '@mui/icons-material';
-import { Applicant, REJECTION_STAGE_LABELS, REJECTION_STAGE_COLORS } from '../../../types/applicant';
+import { Applicant, REJECTION_STAGE_LABELS, REJECTION_STAGE_COLORS, AiScore } from '../../../types/applicant';
 
 interface ApplicantCardProps {
   applicant: Applicant;
@@ -178,15 +178,67 @@ export const ApplicantCard: React.FC<ApplicantCardProps> = ({
         </Typography>
       )}
 
-      {/* Score + Answer Count */}
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, mb: 1.5 }}>
+      {/* Score + AI Score + Answer Count */}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5, flexWrap: 'wrap' }}>
+        {/* AI Score */}
+        {applicant.aiScore ? (() => {
+          const ai = applicant.aiScore as AiScore;
+          const tierColors: Record<string, { bg: string; color: string; border: string }> = {
+            ADVANCE: { bg: '#dcfce7', color: '#16a34a', border: '#86efac' },
+            REVIEW: { bg: '#fef3c7', color: '#d97706', border: '#fde68a' },
+            HOLD: { bg: '#f1f5f9', color: '#64748b', border: '#cbd5e1' },
+            REJECT: { bg: '#fee2e2', color: '#dc2626', border: '#fecaca' },
+          };
+          const tc = tierColors[ai.tier] || tierColors.REJECT;
+          return (
+            <Tooltip title={`AI: ${ai.reasoning}`} arrow>
+              <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'baseline',
+                    gap: 0.25,
+                    px: 1,
+                    py: 0.25,
+                    borderRadius: 1.5,
+                    background: tc.bg,
+                    border: `1px solid ${tc.border}`,
+                  }}
+                >
+                  <Typography sx={{ fontSize: '9px', fontWeight: 700, color: tc.color, mr: 0.25 }}>AI</Typography>
+                  <Typography sx={{ fontSize: '13px', fontWeight: 700, color: tc.color }}>{ai.total}</Typography>
+                  <Typography sx={{ fontSize: '9px', color: '#94a3b8' }}>/10</Typography>
+                </Box>
+                <Chip
+                  label={ai.tier}
+                  size="small"
+                  sx={{
+                    fontSize: '8px',
+                    fontWeight: 800,
+                    height: 16,
+                    bgcolor: tc.bg,
+                    color: tc.color,
+                    border: `1px solid ${tc.border}`,
+                    '& .MuiChip-label': { px: 0.75 },
+                  }}
+                />
+              </Box>
+            </Tooltip>
+          );
+        })() : (
+          <Typography sx={{ fontSize: '10px', color: '#cbd5e1', fontStyle: 'italic' }}>
+            AI scoring...
+          </Typography>
+        )}
+
+        {/* Manual Score */}
         {applicant.score !== null ? (
           <Box
             sx={{
               display: 'flex',
               alignItems: 'baseline',
               gap: 0.25,
-              px: 1.5,
+              px: 1,
               py: 0.25,
               borderRadius: 1.5,
               background: applicant.score >= 8 ? '#dcfce7' : applicant.score >= 5 ? '#fef3c7' : '#fee2e2',
@@ -194,15 +246,15 @@ export const ApplicantCard: React.FC<ApplicantCardProps> = ({
               borderColor: applicant.score >= 8 ? '#86efac' : applicant.score >= 5 ? '#fde68a' : '#fecaca',
             }}
           >
-            <Typography sx={{ fontSize: '14px', fontWeight: 700, color: applicant.score >= 8 ? '#16a34a' : applicant.score >= 5 ? '#d97706' : '#dc2626' }}>
+            <Typography sx={{ fontSize: '13px', fontWeight: 700, color: applicant.score >= 8 ? '#16a34a' : applicant.score >= 5 ? '#d97706' : '#dc2626' }}>
               {applicant.score}
             </Typography>
-            <Typography sx={{ fontSize: '10px', color: '#94a3b8' }}>
+            <Typography sx={{ fontSize: '9px', color: '#94a3b8' }}>
               /10
             </Typography>
           </Box>
         ) : (
-          <Typography sx={{ fontSize: '11px', color: '#cbd5e1', fontStyle: 'italic' }}>
+          <Typography sx={{ fontSize: '10px', color: '#cbd5e1', fontStyle: 'italic' }}>
             Not scored
           </Typography>
         )}

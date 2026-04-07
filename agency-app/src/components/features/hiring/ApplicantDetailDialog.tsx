@@ -32,7 +32,7 @@ import {
   MailOutline as MailOutlineIcon,
 } from '@mui/icons-material';
 import { Alert } from '@mui/material';
-import { Applicant, ApplicantStatus, HIRING_STAGES, REJECTION_STAGE_LABELS, REJECTION_STAGE_COLORS } from '../../../types/applicant';
+import { Applicant, ApplicantStatus, HIRING_STAGES, REJECTION_STAGE_LABELS, REJECTION_STAGE_COLORS, AiScore } from '../../../types/applicant';
 import { updateApplicant, deleteApplicant } from '../../../services/api/applicants';
 import { HiringEmailComposeDialog } from './HiringEmailComposeDialog';
 import { RejectionDialog } from './RejectionDialog';
@@ -304,6 +304,90 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
             <Typography sx={{ fontSize: '14px', color: '#94a3b8', fontWeight: 600 }}>/10</Typography>
           </Box>
         </Box>
+
+        {/* AI Score Breakdown */}
+        {applicant.aiScore && (() => {
+          const ai = applicant.aiScore as AiScore;
+          const tierColors: Record<string, { bg: string; color: string; border: string }> = {
+            ADVANCE: { bg: '#dcfce7', color: '#16a34a', border: '#86efac' },
+            REVIEW: { bg: '#fef3c7', color: '#d97706', border: '#fde68a' },
+            HOLD: { bg: '#f1f5f9', color: '#64748b', border: '#cbd5e1' },
+            REJECT: { bg: '#fee2e2', color: '#dc2626', border: '#fecaca' },
+          };
+          const tc = tierColors[ai.tier] || tierColors.REJECT;
+          const dimensions = [
+            { label: 'Location & University', score: ai.dimensions.locationUniversityFit, max: 2 },
+            { label: 'Engineering Experience', score: ai.dimensions.engineeringExperience, max: 3 },
+            { label: 'Answer Quality', score: ai.dimensions.answerQuality, max: 2 },
+            { label: 'Writing & Communication', score: ai.dimensions.writingCommunication, max: 1.5 },
+            { label: 'Authenticity & Role Fit', score: ai.dimensions.authenticityRoleFit, max: 1.5 },
+            { label: 'Bonus Signals', score: ai.dimensions.bonusSignals, max: 1 },
+          ];
+
+          return (
+            <Box sx={{ mb: 3, p: 2.5, borderRadius: 2, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 2 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+                  <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1 }}>
+                    AI Score
+                  </Typography>
+                  <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 0.5, px: 1.5, py: 0.25, borderRadius: 1.5, background: tc.bg, border: `1px solid ${tc.border}` }}>
+                    <Typography sx={{ fontSize: '18px', fontWeight: 800, color: tc.color }}>{ai.total}</Typography>
+                    <Typography sx={{ fontSize: '12px', color: '#94a3b8' }}>/10</Typography>
+                  </Box>
+                  <Chip label={ai.tier} size="small" sx={{ fontSize: '10px', fontWeight: 800, height: 22, bgcolor: tc.bg, color: tc.color, border: `1px solid ${tc.border}` }} />
+                  {ai.overQualified && <Chip label="Over-qualified" size="small" sx={{ fontSize: '10px', fontWeight: 700, height: 22, bgcolor: '#fef3c7', color: '#d97706', border: '1px solid #fde68a' }} />}
+                  {ai.instantReject && <Chip label="Instant Reject" size="small" sx={{ fontSize: '10px', fontWeight: 700, height: 22, bgcolor: '#fee2e2', color: '#dc2626', border: '1px solid #fecaca' }} />}
+                </Box>
+                {ai.scoredAt && (
+                  <Typography sx={{ fontSize: '10px', color: '#94a3b8' }}>
+                    {ai.scoredAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </Typography>
+                )}
+              </Box>
+
+              {/* Dimension Breakdown */}
+              <Box sx={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 1, mb: 2 }}>
+                {dimensions.map((d) => (
+                  <Box key={d.label} sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <Typography sx={{ fontSize: '11px', color: '#64748b', minWidth: 150 }}>{d.label}</Typography>
+                    <Box sx={{ flex: 1, height: 6, borderRadius: 3, background: '#e2e8f0', overflow: 'hidden' }}>
+                      <Box sx={{ width: `${(d.score / d.max) * 100}%`, height: '100%', borderRadius: 3, background: d.score / d.max >= 0.7 ? '#4ade80' : d.score / d.max >= 0.4 ? '#fbbf24' : '#f87171' }} />
+                    </Box>
+                    <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#334155', minWidth: 35, textAlign: 'right' }}>{d.score}/{d.max}</Typography>
+                  </Box>
+                ))}
+              </Box>
+
+              {/* Reasoning */}
+              {ai.reasoning && (
+                <Typography sx={{ fontSize: '12px', color: '#475569', lineHeight: 1.6, mb: 1.5, whiteSpace: 'pre-wrap' }}>
+                  {ai.reasoning}
+                </Typography>
+              )}
+
+              {/* Strengths + Red Flags */}
+              <Box sx={{ display: 'flex', gap: 2 }}>
+                {ai.strengths.length > 0 && (
+                  <Box sx={{ flex: 1 }}>
+                    <Typography sx={{ fontSize: '10px', fontWeight: 700, color: '#16a34a', textTransform: 'uppercase', letterSpacing: 0.5, mb: 0.5 }}>Strengths</Typography>
+                    {ai.strengths.map((s, i) => (
+                      <Typography key={i} sx={{ fontSize: '11px', color: '#15803d', lineHeight: 1.6 }}>• {s}</Typography>
+                    ))}
+                  </Box>
+                )}
+                {ai.redFlags.length > 0 && (
+                  <Box sx={{ flex: 1 }}>
+                    <Typography sx={{ fontSize: '10px', fontWeight: 700, color: '#dc2626', textTransform: 'uppercase', letterSpacing: 0.5, mb: 0.5 }}>Red Flags</Typography>
+                    {ai.redFlags.map((f, i) => (
+                      <Typography key={i} sx={{ fontSize: '11px', color: '#b91c1c', lineHeight: 1.6 }}>• {f}</Typography>
+                    ))}
+                  </Box>
+                )}
+              </Box>
+            </Box>
+          );
+        })()}
 
         {/* Editable Key Info */}
         <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>

@@ -1,5 +1,26 @@
 // Hiring applicant types
 
+export interface AiScoreDimensions {
+  locationUniversityFit: number;     // 0-2
+  engineeringExperience: number;     // 0-3
+  answerQuality: number;             // 0-2
+  writingCommunication: number;      // 0-1.5
+  authenticityRoleFit: number;       // 0-1.5
+  bonusSignals: number;              // 0-1
+}
+
+export interface AiScore {
+  total: number;                     // 0-10
+  dimensions: AiScoreDimensions;
+  tier: 'ADVANCE' | 'REVIEW' | 'HOLD' | 'REJECT';
+  reasoning: string;
+  redFlags: string[];
+  strengths: string[];
+  overQualified: boolean;
+  instantReject: boolean;
+  scoredAt: Date;
+}
+
 export type ApplicantStatus = 'applied' | 'shortlisted' | 'test_task' | 'not_responded' | 'responded' | 'feedback' | 'interview' | 'hired' | 'rejected';
 
 // The stage an applicant was in when they were rejected (excludes 'rejected' and 'hired')
@@ -38,6 +59,7 @@ export interface Applicant {
   availability: string;
   status: ApplicantStatus;
   score: number | null;
+  aiScore?: AiScore | null;
   notes: string;
   formAnswers: Record<string, string>;
   source: 'webflow' | 'tally' | 'csv_import' | 'manual';
