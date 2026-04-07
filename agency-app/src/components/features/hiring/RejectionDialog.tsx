@@ -45,7 +45,7 @@ interface RejectionDialogProps {
   presetRejectionStage?: RejectionStage | null;
 }
 
-const REJECTION_STAGES: RejectionStage[] = ['applied', 'shortlisted', 'test_task', 'not_responded', 'responded', 'feedback', 'offer'];
+const REJECTION_STAGES: RejectionStage[] = ['applied', 'shortlisted', 'test_task', 'not_responded', 'responded', 'feedback', 'interview'];
 
 export const RejectionDialog: React.FC<RejectionDialogProps> = ({
   open,

@@ -558,7 +558,7 @@ const HiringBoard: React.FC = () => {
       >
         {visibleStages.map((stage) => {
           // Only applied, test_task, offer get rejection zones
-          const hasRejectionZone = ['applied', 'test_task', 'offer'].includes(stage.id);
+          const hasRejectionZone = ['applied', 'test_task', 'interview'].includes(stage.id);
           const rejected = hasRejectionZone
             ? [
                 ...getRejectedForStage(stage.id),

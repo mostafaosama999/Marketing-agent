@@ -225,7 +225,7 @@ export const HiringEmailTemplatesTab: React.FC = () => {
               <MenuItem value="test_task">After Writing Test</MenuItem>
               <MenuItem value="responded">After Response</MenuItem>
               <MenuItem value="feedback">After Feedback</MenuItem>
-              <MenuItem value="offer">After Interview</MenuItem>
+              <MenuItem value="interview">After Interview</MenuItem>
             </Select>
           </FormControl>
 

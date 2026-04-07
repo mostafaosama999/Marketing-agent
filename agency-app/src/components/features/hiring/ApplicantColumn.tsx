@@ -5,7 +5,7 @@ import { Applicant, HiringStage } from '../../../types/applicant';
 import { ApplicantCard } from './ApplicantCard';
 
 // Columns that get a rejection zone at the bottom
-const REJECTION_ZONE_STAGES = new Set(['applied', 'test_task', 'offer']);
+const REJECTION_ZONE_STAGES = new Set(['applied', 'test_task', 'interview']);
 
 interface SubSection {
   label: string;

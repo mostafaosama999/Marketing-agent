@@ -1,9 +1,9 @@
 // Hiring applicant types
 
-export type ApplicantStatus = 'applied' | 'shortlisted' | 'test_task' | 'not_responded' | 'responded' | 'feedback' | 'offer' | 'hired' | 'rejected';
+export type ApplicantStatus = 'applied' | 'shortlisted' | 'test_task' | 'not_responded' | 'responded' | 'feedback' | 'interview' | 'hired' | 'rejected';
 
 // The stage an applicant was in when they were rejected (excludes 'rejected' and 'hired')
-export type RejectionStage = 'applied' | 'shortlisted' | 'test_task' | 'not_responded' | 'responded' | 'feedback' | 'offer';
+export type RejectionStage = 'applied' | 'shortlisted' | 'test_task' | 'not_responded' | 'responded' | 'feedback' | 'interview';
 
 export const REJECTION_STAGE_LABELS: Record<RejectionStage, string> = {
   applied: 'After Screening',
@@ -12,7 +12,7 @@ export const REJECTION_STAGE_LABELS: Record<RejectionStage, string> = {
   not_responded: 'Ghosted / No Response',
   responded: 'After Response',
   feedback: 'After Feedback',
-  offer: 'After Interview',
+  interview: 'After Interview',
 };
 
 export const REJECTION_STAGE_COLORS: Record<RejectionStage, string> = {
@@ -22,7 +22,7 @@ export const REJECTION_STAGE_COLORS: Record<RejectionStage, string> = {
   not_responded: '#6b7280',
   responded: '#8b5cf6',
   feedback: '#0ea5e9',
-  offer: '#06b6d4',
+  interview: '#06b6d4',
 };
 
 export interface Applicant {
@@ -90,7 +90,7 @@ export const HIRING_STAGES: HiringStage[] = [
   { id: 'not_responded', label: 'Not Responded', icon: '\u{1F47B}', color: '#6b7280', headerColor: 'linear-gradient(135deg, #6b7280 0%, #4b5563 100%)' },
   { id: 'responded', label: 'Responded', icon: '\u{1F4E9}', color: '#8b5cf6', headerColor: 'linear-gradient(135deg, #8b5cf6 0%, #7c3aed 100%)' },
   { id: 'feedback', label: 'Feedback', icon: '\u{1F4AC}', color: '#0ea5e9', headerColor: 'linear-gradient(135deg, #0ea5e9 0%, #0284c7 100%)' },
-  { id: 'offer', label: 'Interview', icon: '\u{1F91D}', color: '#06b6d4', headerColor: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)' },
+  { id: 'interview', label: 'Interview', icon: '\u{1F91D}', color: '#06b6d4', headerColor: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)' },
   { id: 'hired', label: 'Hired', icon: '\u2705', color: '#10b981', headerColor: 'linear-gradient(135deg, #10b981 0%, #059669 100%)' },
   { id: 'rejected', label: 'Rejected', icon: '\u274C', color: '#ef4444', headerColor: 'linear-gradient(135deg, #ef4444 0%, #dc2626 100%)' },
 ];

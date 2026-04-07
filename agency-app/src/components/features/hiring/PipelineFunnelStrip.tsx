@@ -10,13 +10,13 @@ interface PipelineFunnelStripProps {
 }
 
 // Responded is merged into Writing Test, so exclude from funnel
-const FUNNEL_STAGES: ApplicantStatus[] = ['applied', 'shortlisted', 'test_task', 'offer', 'hired'];
+const FUNNEL_STAGES: ApplicantStatus[] = ['applied', 'shortlisted', 'test_task', 'interview', 'hired'];
 
 export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applicants, recruiterOutreachCount }) => {
   const stageCounts = useMemo(() => {
     const counts: Record<ApplicantStatus, number> = {
       applied: 0, shortlisted: 0, test_task: 0, not_responded: 0,
-      responded: 0, feedback: 0, offer: 0, hired: 0, rejected: 0,
+      responded: 0, feedback: 0, interview: 0, hired: 0, rejected: 0,
     };
     for (const a of applicants) counts[a.status]++;
     return counts;
@@ -67,9 +67,9 @@ export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applic
     const stageCount = (statuses: ApplicantStatus[]) =>
       sourced.filter((a) => statuses.includes(a.status)).length;
     const applied = sourcedTotal; // those who actually applied from outreach
-    const shortlisted = stageCount(['shortlisted', 'test_task', 'not_responded', 'responded', 'feedback', 'offer', 'hired']);
-    const writingTest = stageCount(['test_task', 'not_responded', 'responded', 'feedback', 'offer', 'hired']);
-    const interview = stageCount(['offer', 'hired']);
+    const shortlisted = stageCount(['shortlisted', 'test_task', 'not_responded', 'responded', 'feedback', 'interview', 'hired']);
+    const writingTest = stageCount(['test_task', 'not_responded', 'responded', 'feedback', 'interview', 'hired']);
+    const interview = stageCount(['interview', 'hired']);
     const hired = stageCount(['hired']);
     // Writing test sub-breakdown for recruiter-sourced
     const wtSent = sourced.filter((a) => a.status === 'test_task').length;
