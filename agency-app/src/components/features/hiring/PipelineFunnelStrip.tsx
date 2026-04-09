@@ -15,7 +15,7 @@ const FUNNEL_STAGES: ApplicantStatus[] = ['applied', 'shortlisted', 'test_task',
 export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applicants, recruiterOutreachCount }) => {
   const stageCounts = useMemo(() => {
     const counts: Record<ApplicantStatus, number> = {
-      applied: 0, shortlisted: 0, test_task: 0, not_responded: 0,
+      backlog: 0, applied: 0, shortlisted: 0, test_task: 0, not_responded: 0,
       responded: 0, feedback: 0, interview: 0, hired: 0, rejected: 0,
     };
     for (const a of applicants) counts[a.status]++;
