@@ -200,6 +200,7 @@ export const EventsTable: React.FC<EventsTableProps> = ({ events, category = 'cl
   const columns = useMemo((): { field: SortField; label: string; width?: string }[] => {
     if (category === 'educational') {
       return [
+        { field: 'discoveredAt', label: 'Date Added', width: '8%' },
         { field: 'name', label: 'Name', width: '20%' },
         { field: 'startDate', label: 'Date', width: '13%' },
         { field: 'location', label: 'Location', width: '11%' },
@@ -208,11 +209,11 @@ export const EventsTable: React.FC<EventsTableProps> = ({ events, category = 'cl
         { field: 'tier', label: 'Tier', width: '8%' },
         { field: 'organiser', label: 'Organiser', width: '11%' },
         { field: 'status', label: 'Status', width: '8%' },
-        { field: 'discoveredAt', label: 'Date Added', width: '8%' },
         { field: 'price', label: 'Price', width: '6%' },
       ];
     }
     return [
+      { field: 'discoveredAt', label: 'Date Added', width: '10%' },
       { field: 'name', label: 'Name', width: '22%' },
       { field: 'startDate', label: 'Date', width: '14%' },
       { field: 'location', label: 'Location', width: '12%' },
@@ -220,7 +221,6 @@ export const EventsTable: React.FC<EventsTableProps> = ({ events, category = 'cl
       { field: 'eventScore', label: 'Score', width: '7%' },
       { field: 'status', label: 'Status', width: '9%' },
       { field: 'icpCompanies', label: 'ICP Companies', width: '9%' },
-      { field: 'discoveredAt', label: 'Date Added', width: '10%' },
       { field: 'price', label: 'Price', width: '8%' },
     ];
   }, [category]);
