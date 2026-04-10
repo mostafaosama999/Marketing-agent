@@ -34,6 +34,7 @@ const HiringBoard: React.FC = () => {
   const [genderFilter, setGenderFilter] = useState<string | null>(null);
   const [scoreFilter, setScoreFilter] = useState<string | null>(null);
   const [writingTestStatusFilter, setWritingTestStatusFilter] = useState<string | null>(null);
+  const [paidTestFilter, setPaidTestFilter] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false,
@@ -122,6 +123,26 @@ const HiringBoard: React.FC = () => {
   }, [applicants]);
   const totalWritingTestCandidates = Object.values(writingTestStatusCounts).reduce((a, b) => a + b, 0);
 
+  // Paid test helper — matches logic in WritingTestsTable
+  const isPaidTest = (a: Applicant): boolean => {
+    const templateName = a.outreach?.email?.templateName || '';
+    return templateName.toLowerCase().includes('paid');
+  };
+
+  // Paid test filter counts (across all writing-test-stage applicants)
+  const paidTestCounts = useMemo(() => {
+    let paid = 0, unpaid = 0;
+    for (const a of applicants) {
+      const inWritingTest = WRITING_TEST_STATUSES.includes(a.status) ||
+        (a.status === 'rejected' && a.rejectionStage && WRITING_TEST_REJECTION_STAGES.includes(a.rejectionStage));
+      if (inWritingTest) {
+        if (isPaidTest(a)) paid++;
+        else unpaid++;
+      }
+    }
+    return { paid, unpaid, total: paid + unpaid };
+  }, [applicants]);
+
   const filteredApplicants = useMemo(() => {
     return applicants.filter((a) => {
       if (searchQuery && !a.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
@@ -140,9 +161,13 @@ const HiringBoard: React.FC = () => {
           if (a.status !== writingTestStatusFilter) return false;
         }
       }
+      if (paidTestFilter) {
+        if (paidTestFilter === 'paid' && !isPaidTest(a)) return false;
+        if (paidTestFilter === 'unpaid' && isPaidTest(a)) return false;
+      }
       return true;
     });
-  }, [applicants, universityFilter, genderFilter, scoreFilter, writingTestStatusFilter, searchQuery]);
+  }, [applicants, universityFilter, genderFilter, scoreFilter, writingTestStatusFilter, paidTestFilter, searchQuery]);
 
   // Stages to show in the board (exclude 'rejected', 'responded', 'feedback' — they are sub-sections of Writing Test)
   const visibleStages = useMemo(
@@ -342,7 +367,7 @@ const HiringBoard: React.FC = () => {
             Hiring Pipeline
           </Typography>
           <Typography variant="body2" sx={{ color: '#64748b' }}>
-            {(universityFilter || genderFilter || scoreFilter || writingTestStatusFilter) ? `${filteredApplicants.length} of ${applicants.length}` : applicants.length} applicant{applicants.length !== 1 ? 's' : ''}
+            {(universityFilter || genderFilter || scoreFilter || writingTestStatusFilter || paidTestFilter) ? `${filteredApplicants.length} of ${applicants.length}` : applicants.length} applicant{applicants.length !== 1 ? 's' : ''}
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
@@ -585,6 +610,35 @@ const HiringBoard: React.FC = () => {
             </MenuItem>
             <MenuItem value="wt_rejected" sx={{ fontSize: '13px', color: '#dc2626' }}>
               Rejected ({writingTestStatusCounts.wt_rejected})
+            </MenuItem>
+          </Select>
+        </FormControl>
+
+        {/* Paid Test Filter */}
+        <FormControl size="small" sx={{ minWidth: 160 }}>
+          <Select
+            value={paidTestFilter || ''}
+            onChange={(e) => setPaidTestFilter(e.target.value || null)}
+            displayEmpty
+            sx={{
+              fontSize: '13px',
+              borderRadius: 2,
+              background: 'white',
+              '& .MuiOutlinedInput-notchedOutline': {
+                borderColor: paidTestFilter ? '#667eea' : '#e2e8f0',
+              },
+              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#667eea' },
+              '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#667eea' },
+            }}
+          >
+            <MenuItem value="" sx={{ fontSize: '13px' }}>
+              All Tests ({paidTestCounts.total})
+            </MenuItem>
+            <MenuItem value="paid" sx={{ fontSize: '13px', color: '#16a34a' }}>
+              Paid ({paidTestCounts.paid})
+            </MenuItem>
+            <MenuItem value="unpaid" sx={{ fontSize: '13px', color: '#64748b' }}>
+              Unpaid ({paidTestCounts.unpaid})
             </MenuItem>
           </Select>
         </FormControl>
