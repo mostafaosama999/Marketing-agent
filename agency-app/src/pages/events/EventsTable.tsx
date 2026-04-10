@@ -38,7 +38,7 @@ interface EventsTableProps {
   onUpdatePrice?: (eventId: string, pricing: Event['pricing']) => Promise<void>;
 }
 
-type SortField = 'name' | 'startDate' | 'location' | 'eventType' | 'eventScore' | 'status' | 'icpCompanies' | 'price' | 'tier' | 'organiser';
+type SortField = 'name' | 'startDate' | 'location' | 'eventType' | 'eventScore' | 'status' | 'icpCompanies' | 'price' | 'tier' | 'organiser' | 'discoveredAt';
 type SortDirection = 'asc' | 'desc';
 
 const TIER_ORDER: Record<string, number> = {
@@ -65,6 +65,14 @@ function formatDateRange(startDate: string, endDate: string): string {
   }
 
   return `${startDay} ${startMonth} - ${endDay} ${endMonth} ${year}`;
+}
+
+function formatDiscoveredDate(dateStr: string | undefined): string {
+  if (!dateStr) return '-';
+  const date = new Date(dateStr);
+  if (isNaN(date.getTime())) return '-';
+  const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+  return `${date.getDate()} ${months[date.getMonth()]} ${date.getFullYear()}`;
 }
 
 function getScoreBadgeStyle(score: number): { bg: string; text: string } {
@@ -173,6 +181,9 @@ export const EventsTable: React.FC<EventsTableProps> = ({ events, category = 'cl
         case 'organiser':
           comparison = (a.organiser || '').localeCompare(b.organiser || '');
           break;
+        case 'discoveredAt':
+          comparison = new Date(a.discoveredAt || '').getTime() - new Date(b.discoveredAt || '').getTime();
+          break;
       }
 
       return sortDirection === 'asc' ? comparison : -comparison;
@@ -189,26 +200,28 @@ export const EventsTable: React.FC<EventsTableProps> = ({ events, category = 'cl
   const columns = useMemo((): { field: SortField; label: string; width?: string }[] => {
     if (category === 'educational') {
       return [
-        { field: 'name', label: 'Name', width: '22%' },
-        { field: 'startDate', label: 'Date', width: '14%' },
-        { field: 'location', label: 'Location', width: '12%' },
-        { field: 'eventType', label: 'Type', width: '9%' },
+        { field: 'name', label: 'Name', width: '20%' },
+        { field: 'startDate', label: 'Date', width: '13%' },
+        { field: 'location', label: 'Location', width: '11%' },
+        { field: 'eventType', label: 'Type', width: '8%' },
         { field: 'eventScore', label: 'Score', width: '7%' },
-        { field: 'tier', label: 'Tier', width: '9%' },
-        { field: 'organiser', label: 'Organiser', width: '12%' },
+        { field: 'tier', label: 'Tier', width: '8%' },
+        { field: 'organiser', label: 'Organiser', width: '11%' },
         { field: 'status', label: 'Status', width: '8%' },
-        { field: 'price', label: 'Price', width: '7%' },
+        { field: 'discoveredAt', label: 'Date Added', width: '8%' },
+        { field: 'price', label: 'Price', width: '6%' },
       ];
     }
     return [
-      { field: 'name', label: 'Name', width: '25%' },
-      { field: 'startDate', label: 'Date', width: '16%' },
-      { field: 'location', label: 'Location', width: '14%' },
-      { field: 'eventType', label: 'Type', width: '10%' },
-      { field: 'eventScore', label: 'Score', width: '8%' },
-      { field: 'status', label: 'Status', width: '10%' },
-      { field: 'icpCompanies', label: 'ICP Companies', width: '10%' },
-      { field: 'price', label: 'Price', width: '7%' },
+      { field: 'name', label: 'Name', width: '22%' },
+      { field: 'startDate', label: 'Date', width: '14%' },
+      { field: 'location', label: 'Location', width: '12%' },
+      { field: 'eventType', label: 'Type', width: '9%' },
+      { field: 'eventScore', label: 'Score', width: '7%' },
+      { field: 'status', label: 'Status', width: '9%' },
+      { field: 'icpCompanies', label: 'ICP Companies', width: '9%' },
+      { field: 'discoveredAt', label: 'Date Added', width: '10%' },
+      { field: 'price', label: 'Price', width: '8%' },
     ];
   }, [category]);
 
@@ -326,6 +339,12 @@ export const EventsTable: React.FC<EventsTableProps> = ({ events, category = 'cl
         return (
           <Typography variant="body2" sx={{ color: '#475569', fontSize: '13px' }}>
             {event.organiser || '-'}
+          </Typography>
+        );
+      case 'discoveredAt':
+        return (
+          <Typography variant="body2" sx={{ color: '#94a3b8', fontSize: '12px' }}>
+            {formatDiscoveredDate(event.discoveredAt)}
           </Typography>
         );
       case 'price':
