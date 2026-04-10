@@ -3,6 +3,50 @@ import * as admin from "firebase-admin";
 import OpenAI from "openai";
 import {logApiCost, calculateCost, extractTokenUsage} from "../utils/costTracker";
 
+// Approved universities from Notion "Narrowed down" list
+// Patterns are lowercase for case-insensitive matching
+const APPROVED_UNIVERSITY_PATTERNS = [
+  // AUC
+  "auc", "american university in cairo",
+  // Zewail City
+  "zewail",
+  // Cairo University / FCAI
+  "cairo university", "cairo uni", "ciro university",
+  // GUC
+  "guc", "german university in cairo",
+  // GIU
+  "giu", "german international university",
+  // Ain Shams
+  "ain shams", "ain-shams", "ainshams",
+  // AASTMT / Arab Academy
+  "aast", "aastmt", "arab academy",
+  // BUE
+  "bue", "british university in egypt",
+  // MSA
+  "msa university", "msa",
+  // CIC
+  "cic", "canadian international college",
+  // Nile University
+  "nile university",
+  // Alexandria University
+  "alexandria university", "alexandria uni",
+  // MUST
+  "must", "misr university for science",
+  // El Shorouk Academy
+  "el shorouk", "el-shorouk", "elshorouk", "shorouk academy", "shourk academy",
+];
+
+function isApprovedUniversity(education: string): boolean {
+  if (!education) return false;
+  const lower = education.toLowerCase();
+  return APPROVED_UNIVERSITY_PATTERNS.some((pattern) => lower.includes(pattern));
+}
+
+function isFemale(sex: string): boolean {
+  if (!sex) return false;
+  return sex.toLowerCase() === "female";
+}
+
 const SCORING_SYSTEM_PROMPT = `You are a hiring evaluator for CodeContent, a developer-first technical content agency hiring Software Engineers (Technical Content) based in Cairo, Egypt. Salary: 20,000-30,000 EGP/month.
 
 Score the applicant on a 0-10 scale using these 5 dimensions:
@@ -93,6 +137,47 @@ export const scoreApplicantOnCreate = functions
     // Skip if already scored
     if (data.aiScore) {
       console.log(`Applicant ${applicantId} already has aiScore, skipping`);
+      return;
+    }
+
+    // Pre-screen: reject if not from approved university or if female
+    const education = (data.education || "").trim();
+    const sex = (data.sex || "").trim();
+
+    if (!isApprovedUniversity(education) || isFemale(sex)) {
+      const reasons: string[] = [];
+      if (!isApprovedUniversity(education)) {
+        reasons.push(`University not in approved list: "${education || "not provided"}"`);
+      }
+      if (isFemale(sex)) {
+        reasons.push("Female candidate — not matching current hiring criteria");
+      }
+
+      const aiScore = {
+        total: 0,
+        dimensions: {
+          locationUniversityFit: 0,
+          engineeringExperience: 0,
+          answerQuality: 0,
+          writingCommunication: 0,
+          authenticityRoleFit: 0,
+          bonusSignals: 0,
+        },
+        tier: "REJECT" as const,
+        reasoning: reasons.join(". "),
+        redFlags: reasons,
+        strengths: [] as string[],
+        overQualified: false,
+        instantReject: true,
+        scoredAt: admin.firestore.FieldValue.serverTimestamp(),
+      };
+
+      await snap.ref.update({
+        aiScore,
+        updatedAt: admin.firestore.FieldValue.serverTimestamp(),
+      });
+
+      console.log(`Pre-screened applicant ${applicantId}: 0/10 (REJECT) — ${reasons.join("; ")}`);
       return;
     }
 

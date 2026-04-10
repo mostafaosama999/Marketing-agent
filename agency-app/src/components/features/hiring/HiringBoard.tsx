@@ -33,6 +33,7 @@ const HiringBoard: React.FC = () => {
   const [universityFilter, setUniversityFilter] = useState<string | null>(null);
   const [genderFilter, setGenderFilter] = useState<string | null>(null);
   const [scoreFilter, setScoreFilter] = useState<string | null>(null);
+  const [writingTestStatusFilter, setWritingTestStatusFilter] = useState<string | null>(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [snackbar, setSnackbar] = useState<{ open: boolean; message: string; severity: 'success' | 'error' }>({
     open: false,
@@ -103,6 +104,24 @@ const HiringBoard: React.FC = () => {
     return { not_scored: notScored, low, medium, high };
   }, [applicants]);
 
+  // Writing test status filter counts
+  const WRITING_TEST_STATUSES: ApplicantStatus[] = ['test_task', 'not_responded', 'responded', 'feedback'];
+  const WRITING_TEST_REJECTION_STAGES = ['test_task', 'not_responded', 'responded', 'feedback'];
+  const writingTestStatusCounts = useMemo(() => {
+    const counts: Record<string, number> = {
+      test_task: 0, not_responded: 0, responded: 0, feedback: 0, wt_rejected: 0,
+    };
+    for (const a of applicants) {
+      if (WRITING_TEST_STATUSES.includes(a.status)) {
+        counts[a.status] = (counts[a.status] || 0) + 1;
+      } else if (a.status === 'rejected' && a.rejectionStage && WRITING_TEST_REJECTION_STAGES.includes(a.rejectionStage)) {
+        counts['wt_rejected'] = (counts['wt_rejected'] || 0) + 1;
+      }
+    }
+    return counts;
+  }, [applicants]);
+  const totalWritingTestCandidates = Object.values(writingTestStatusCounts).reduce((a, b) => a + b, 0);
+
   const filteredApplicants = useMemo(() => {
     return applicants.filter((a) => {
       if (searchQuery && !a.name.toLowerCase().includes(searchQuery.toLowerCase())) return false;
@@ -114,9 +133,16 @@ const HiringBoard: React.FC = () => {
         if (scoreFilter === 'medium' && !(a.score !== null && a.score >= 5 && a.score <= 7)) return false;
         if (scoreFilter === 'high' && !(a.score !== null && a.score >= 8 && a.score <= 10)) return false;
       }
+      if (writingTestStatusFilter) {
+        if (writingTestStatusFilter === 'wt_rejected') {
+          if (!(a.status === 'rejected' && a.rejectionStage && WRITING_TEST_REJECTION_STAGES.includes(a.rejectionStage))) return false;
+        } else {
+          if (a.status !== writingTestStatusFilter) return false;
+        }
+      }
       return true;
     });
-  }, [applicants, universityFilter, genderFilter, scoreFilter, searchQuery]);
+  }, [applicants, universityFilter, genderFilter, scoreFilter, writingTestStatusFilter, searchQuery]);
 
   // Stages to show in the board (exclude 'rejected', 'responded', 'feedback' — they are sub-sections of Writing Test)
   const visibleStages = useMemo(
@@ -316,7 +342,7 @@ const HiringBoard: React.FC = () => {
             Hiring Pipeline
           </Typography>
           <Typography variant="body2" sx={{ color: '#64748b' }}>
-            {(universityFilter || genderFilter || scoreFilter) ? `${filteredApplicants.length} of ${applicants.length}` : applicants.length} applicant{applicants.length !== 1 ? 's' : ''}
+            {(universityFilter || genderFilter || scoreFilter || writingTestStatusFilter) ? `${filteredApplicants.length} of ${applicants.length}` : applicants.length} applicant{applicants.length !== 1 ? 's' : ''}
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
@@ -521,6 +547,44 @@ const HiringBoard: React.FC = () => {
             </MenuItem>
             <MenuItem value="high" sx={{ fontSize: '13px' }}>
               High 8-10 ({scoreCounts.high})
+            </MenuItem>
+          </Select>
+        </FormControl>
+
+        {/* Writing Test Status Filter */}
+        <FormControl size="small" sx={{ minWidth: 200 }}>
+          <Select
+            value={writingTestStatusFilter || ''}
+            onChange={(e) => setWritingTestStatusFilter(e.target.value || null)}
+            displayEmpty
+            sx={{
+              fontSize: '13px',
+              borderRadius: 2,
+              background: 'white',
+              '& .MuiOutlinedInput-notchedOutline': {
+                borderColor: writingTestStatusFilter ? '#667eea' : '#e2e8f0',
+              },
+              '&:hover .MuiOutlinedInput-notchedOutline': { borderColor: '#667eea' },
+              '&.Mui-focused .MuiOutlinedInput-notchedOutline': { borderColor: '#667eea' },
+            }}
+          >
+            <MenuItem value="" sx={{ fontSize: '13px' }}>
+              All Test States ({totalWritingTestCandidates})
+            </MenuItem>
+            <MenuItem value="test_task" sx={{ fontSize: '13px', color: '#ea580c' }}>
+              Sent ({writingTestStatusCounts.test_task})
+            </MenuItem>
+            <MenuItem value="not_responded" sx={{ fontSize: '13px', color: '#6b7280' }}>
+              Ghosted ({writingTestStatusCounts.not_responded})
+            </MenuItem>
+            <MenuItem value="responded" sx={{ fontSize: '13px', color: '#7c3aed' }}>
+              Responded ({writingTestStatusCounts.responded})
+            </MenuItem>
+            <MenuItem value="feedback" sx={{ fontSize: '13px', color: '#0284c7' }}>
+              Feedback ({writingTestStatusCounts.feedback})
+            </MenuItem>
+            <MenuItem value="wt_rejected" sx={{ fontSize: '13px', color: '#dc2626' }}>
+              Rejected ({writingTestStatusCounts.wt_rejected})
             </MenuItem>
           </Select>
         </FormControl>
