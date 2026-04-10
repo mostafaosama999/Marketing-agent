@@ -41,7 +41,9 @@ function convertToEvent(id: string, data: any): Event {
       strategicBonus: 0,
     },
     status: data.status || 'discovered',
-    discoveredAt: data.discoveredAt || new Date().toISOString(),
+    discoveredAt: data.discoveredAt instanceof Timestamp
+      ? data.discoveredAt.toDate().toISOString()
+      : data.discoveredAt || new Date().toISOString(),
     discoveredBy: data.discoveredBy || 'manual',
     sourceReport: data.sourceReport || null,
     icpSummary: data.icpSummary || undefined,
@@ -58,8 +60,12 @@ function convertToEvent(id: string, data: any): Event {
     collaborationPotential: data.collaborationPotential || undefined,
     tier: data.tier || undefined,
     educationalScoringBreakdown: data.educationalScoringBreakdown || undefined,
-    createdAt: data.createdAt || new Date().toISOString(),
-    updatedAt: data.updatedAt || new Date().toISOString(),
+    createdAt: data.createdAt instanceof Timestamp
+      ? data.createdAt.toDate().toISOString()
+      : data.createdAt || new Date().toISOString(),
+    updatedAt: data.updatedAt instanceof Timestamp
+      ? data.updatedAt.toDate().toISOString()
+      : data.updatedAt || new Date().toISOString(),
   };
 }
 
