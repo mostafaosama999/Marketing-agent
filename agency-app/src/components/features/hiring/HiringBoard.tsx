@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Box, Typography, Button, Snackbar, Alert, CircularProgress, Select, MenuItem, FormControl, TextField, InputAdornment, ToggleButtonGroup, ToggleButton } from '@mui/material';
-import { Upload as UploadIcon, FilterList as FilterIcon, PersonAdd as PersonAddIcon, Search as SearchIcon, ViewKanban as ViewKanbanIcon, TableChart as TableChartIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon } from '@mui/icons-material';
+import { Upload as UploadIcon, FilterList as FilterIcon, PersonAdd as PersonAddIcon, Search as SearchIcon, ViewKanban as ViewKanbanIcon, TableChart as TableChartIcon, BarChart as BarChartIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon } from '@mui/icons-material';
 import { Applicant, ApplicantStatus, RejectionStage, HIRING_STAGES } from '../../../types/applicant';
 import { subscribeToApplicants, updateApplicantStatus, subscribeToViewedApplicantIds, markApplicantViewed } from '../../../services/api/applicants';
 import { getHiringConfig } from '../../../services/api/hiringConfig';
@@ -13,14 +13,15 @@ import { ApplicantDetailDialog } from './ApplicantDetailDialog';
 import { CSVImportDialog } from './CSVImportDialog';
 import { AddCandidateDialog } from './AddCandidateDialog';
 import WritingTestsTable from './WritingTestsTable';
+import HiringAnalytics from './HiringAnalytics';
 
-type HiringView = 'board' | 'writing_tests';
+type HiringView = 'board' | 'writing_tests' | 'analytics';
 
 const HiringBoard: React.FC = () => {
   const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const activeView: HiringView = location.pathname === '/hiring/writing-tests' ? 'writing_tests' : 'board';
+  const activeView: HiringView = location.pathname === '/hiring/writing-tests' ? 'writing_tests' : location.pathname === '/hiring/analytics' ? 'analytics' : 'board';
   const [applicants, setApplicants] = useState<Applicant[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewedIds, setViewedIds] = useState<Set<string>>(new Set());
@@ -374,7 +375,7 @@ const HiringBoard: React.FC = () => {
           <ToggleButtonGroup
             value={activeView}
             exclusive
-            onChange={(_, v) => v && navigate(v === 'writing_tests' ? '/hiring/writing-tests' : '/hiring')}
+            onChange={(_, v) => v && navigate(v === 'writing_tests' ? '/hiring/writing-tests' : v === 'analytics' ? '/hiring/analytics' : '/hiring')}
             size="small"
             sx={{
               mr: 1,
@@ -404,6 +405,10 @@ const HiringBoard: React.FC = () => {
             <ToggleButton value="writing_tests">
               <TableChartIcon sx={{ fontSize: 18, mr: 0.75 }} />
               Writing Tests
+            </ToggleButton>
+            <ToggleButton value="analytics">
+              <BarChartIcon sx={{ fontSize: 18, mr: 0.75 }} />
+              Analytics
             </ToggleButton>
           </ToggleButtonGroup>
           <Button
@@ -653,6 +658,11 @@ const HiringBoard: React.FC = () => {
           applicants={filteredApplicants}
           onApplicantClick={handleApplicantClick}
         />
+      )}
+
+      {/* Analytics View */}
+      {activeView === 'analytics' && (
+        <HiringAnalytics applicants={applicants} />
       )}
 
       {/* Kanban Board */}
