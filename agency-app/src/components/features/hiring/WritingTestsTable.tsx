@@ -12,6 +12,7 @@ import {
   Chip,
   IconButton,
   Tooltip,
+  Checkbox,
 } from '@mui/material';
 import {
   LinkedIn as LinkedInIcon,
@@ -21,6 +22,7 @@ import {
   MonetizationOn as PaidIcon,
 } from '@mui/icons-material';
 import { Applicant, ApplicantStatus } from '../../../types/applicant';
+import { setApplicantPaymentConfirmed } from '../../../services/api/applicants';
 
 interface WritingTestsTableProps {
   applicants: Applicant[];
@@ -357,6 +359,7 @@ const WritingTestsTable: React.FC<WritingTestsTableProps> = ({ applicants, onApp
                 </TableSortLabel>
               </TableCell>
               <TableCell>Paid Test</TableCell>
+              <TableCell align="center">Payment Confirmed</TableCell>
               <TableCell>Test Assigned</TableCell>
               <TableCell>
                 <TableSortLabel active={sortField === 'days_elapsed'} direction={sortField === 'days_elapsed' ? sortDir : 'asc'} onClick={() => handleSort('days_elapsed')}>
@@ -372,7 +375,7 @@ const WritingTestsTable: React.FC<WritingTestsTableProps> = ({ applicants, onApp
           <TableBody>
             {writingTestApplicants.length === 0 ? (
               <TableRow>
-                <TableCell colSpan={10} align="center" sx={{ py: 6, color: '#94a3b8' }}>
+                <TableCell colSpan={11} align="center" sx={{ py: 6, color: '#94a3b8' }}>
                   <Typography variant="body2">No candidates in writing test stages</Typography>
                 </TableCell>
               </TableRow>
@@ -462,6 +465,36 @@ const WritingTestsTable: React.FC<WritingTestsTableProps> = ({ applicants, onApp
                             border: '1px solid #bbf7d0',
                           }}
                         />
+                      ) : (
+                        <Typography sx={{ fontSize: '12px', color: '#cbd5e1' }}>—</Typography>
+                      )}
+                    </TableCell>
+
+                    {/* Payment Confirmed */}
+                    <TableCell align="center" onClick={(e) => e.stopPropagation()}>
+                      {paid ? (
+                        <Tooltip
+                          title={
+                            applicant.paymentConfirmed
+                              ? `Paid${applicant.paymentConfirmedAt ? ' on ' + formatDate(applicant.paymentConfirmedAt) : ''}`
+                              : 'Mark as paid'
+                          }
+                        >
+                          <Checkbox
+                            size="small"
+                            checked={applicant.paymentConfirmed === true}
+                            onChange={(e) => {
+                              setApplicantPaymentConfirmed(applicant.id, e.target.checked).catch((err) => {
+                                console.error('Failed to update payment confirmation:', err);
+                              });
+                            }}
+                            sx={{
+                              p: 0.5,
+                              color: '#cbd5e1',
+                              '&.Mui-checked': { color: '#16a34a' },
+                            }}
+                          />
+                        </Tooltip>
                       ) : (
                         <Typography sx={{ fontSize: '12px', color: '#cbd5e1' }}>—</Typography>
                       )}

@@ -76,6 +76,8 @@ function convertToApplicant(id: string, data: any): Applicant {
     rejectedAt: safeToDate(data.rejectedAt) || undefined,
     rejectionNote: data.rejectionNote || undefined,
     testTaskUrl: data.testTaskUrl || undefined,
+    paymentConfirmed: data.paymentConfirmed === true,
+    paymentConfirmedAt: safeToDate(data.paymentConfirmedAt) || undefined,
     outreach: data.outreach
       ? {
           email: data.outreach.email
@@ -155,6 +157,18 @@ export async function rejectApplicant(
     data.testTaskUrl = testTaskUrl;
   }
   await updateDoc(ref, data);
+}
+
+export async function setApplicantPaymentConfirmed(
+  id: string,
+  confirmed: boolean
+): Promise<void> {
+  const ref = doc(db, APPLICANTS_COLLECTION, id);
+  await updateDoc(ref, {
+    paymentConfirmed: confirmed,
+    paymentConfirmedAt: confirmed ? serverTimestamp() : null,
+    updatedAt: serverTimestamp(),
+  });
 }
 
 export async function deleteApplicant(id: string): Promise<void> {

@@ -72,6 +72,8 @@ export interface Applicant {
   rejectedAt?: Date;
   rejectionNote?: string;
   testTaskUrl?: string;
+  paymentConfirmed?: boolean;
+  paymentConfirmedAt?: Date;
   outreach?: {
     email?: {
       status: string;
