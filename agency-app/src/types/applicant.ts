@@ -21,7 +21,7 @@ export interface AiScore {
   scoredAt: Date;
 }
 
-export type ApplicantStatus = 'backlog' | 'applied' | 'shortlisted' | 'test_task' | 'not_responded' | 'responded' | 'feedback' | 'interview' | 'hired' | 'rejected';
+export type ApplicantStatus = 'ai_rejected' | 'backlog' | 'applied' | 'shortlisted' | 'test_task' | 'not_responded' | 'responded' | 'feedback' | 'interview' | 'hired' | 'rejected';
 
 // The stage an applicant was in when they were rejected (excludes 'rejected' and 'hired')
 export type RejectionStage = 'applied' | 'shortlisted' | 'test_task' | 'not_responded' | 'responded' | 'feedback' | 'interview';
@@ -106,6 +106,7 @@ export interface HiringStage {
 }
 
 export const HIRING_STAGES: HiringStage[] = [
+  { id: 'ai_rejected', label: 'AI Rejected', icon: '\u{1F916}', color: '#475569', headerColor: 'linear-gradient(135deg, #64748b 0%, #334155 100%)' },
   { id: 'backlog', label: 'Backlog', icon: '\u{1F4E6}', color: '#64748b', headerColor: 'linear-gradient(135deg, #64748b 0%, #475569 100%)' },
   { id: 'applied', label: 'Applied', icon: '\u{1F4CB}', color: '#3b82f6', headerColor: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)' },
   { id: 'shortlisted', label: 'Shortlisted', icon: '\u2B50', color: '#f59e0b', headerColor: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)' },

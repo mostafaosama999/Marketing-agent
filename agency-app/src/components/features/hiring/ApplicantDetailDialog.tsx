@@ -205,7 +205,7 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
                 setStatus(newStatus);
               }}
             >
-              {HIRING_STAGES.map((stage) => (
+              {HIRING_STAGES.filter((s) => s.id !== 'ai_rejected').map((stage) => (
                 <MenuItem
                   key={stage.id}
                   value={stage.id}

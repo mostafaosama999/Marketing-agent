@@ -3,43 +3,51 @@ import * as admin from "firebase-admin";
 import OpenAI from "openai";
 import {logApiCost, calculateCost, extractTokenUsage} from "../utils/costTracker";
 
-// Approved universities from Notion "Narrowed down" list
-// Patterns are lowercase for case-insensitive matching
-const APPROVED_UNIVERSITY_PATTERNS = [
-  // AUC
-  "auc", "american university in cairo",
-  // Zewail City
-  "zewail",
-  // Cairo University / FCAI
-  "cairo university", "cairo uni", "ciro university",
-  // GUC
-  "guc", "german university in cairo",
-  // GIU
-  "giu", "german international university",
-  // Ain Shams
-  "ain shams", "ain-shams", "ainshams",
-  // AASTMT / Arab Academy
-  "aast", "aastmt", "arab academy",
-  // BUE
-  "bue", "british university in egypt",
-  // MSA
-  "msa university", "msa",
-  // CIC
-  "cic", "canadian international college",
-  // Nile University
-  "nile university",
-  // Alexandria University
-  "alexandria university", "alexandria uni",
-  // MUST
-  "must", "misr university for science",
-  // El Shorouk Academy
-  "el shorouk", "el-shorouk", "elshorouk", "shorouk academy", "shourk academy",
-];
+// Approved universities — exactly the 13 the user specified.
+// Uses ONE boundary-aware regex so short acronyms (auc, bue, aast, msa)
+// don't false-positive inside English words like "breakfast", "debug",
+// "prestigious", "I must", etc.
+const APPROVED_UNIVERSITY_REGEX = new RegExp(
+  [
+    // Short acronyms — require word boundaries
+    "\\b(auc|guc|bue|aast|aastmt|fcai)\\b",
+    // AUC / American University in Cairo
+    "american university (in|,) cairo",
+    // Zewail
+    "zewail",
+    // Cairo University / FCAI
+    "cairo univ(ersity)?",
+    "ciro university",
+    "faculty of computers and (artificial intelligence|information)",
+    // GUC
+    "german university in cairo",
+    // GIU — full name only ("giu" too collision-prone)
+    "german international university",
+    // Ain Shams
+    "ain[\\s-]?shams",
+    // AASTMT / Arab Academy
+    "arab academy( for science)?",
+    // BUE
+    "british university in egypt",
+    // MSA
+    "\\bmsa\\b",
+    "modern sciences? and arts",
+    // CIC — full name only
+    "canadian international college",
+    // Nile
+    "nile university",
+    // Alexandria
+    "alexandria univ(ersity)?",
+    // MUST — "must" alone is unsafe, require disambiguators
+    "misr university for science",
+    "\\bmust university\\b",
+  ].join("|"),
+  "i"
+);
 
 function isApprovedUniversity(education: string): boolean {
   if (!education) return false;
-  const lower = education.toLowerCase();
-  return APPROVED_UNIVERSITY_PATTERNS.some((pattern) => lower.includes(pattern));
+  return APPROVED_UNIVERSITY_REGEX.test(education);
 }
 
 function isFemale(sex: string): boolean {
@@ -54,7 +62,7 @@ Score the applicant on a 0-10 scale using these 5 dimensions:
 **Dimension 1: Location & University Fit (0-2)**
 - 0: Non-Cairo/non-Alexandria location OR no recognized university
 - 1: Cairo/Giza/Alexandria but lesser-known institution
-- 2: Cairo/Alexandria + CS/Engineering from preferred universities (Cairo University, Ain Shams, GUC, AUC, BUE, Future University, Nile University, MSA, Alexandria University, Arab Academy, El Shorouk Academy)
+- 2: Cairo/Alexandria + CS/Engineering from preferred universities (AUC, Zewail City, Cairo University / FCAI, GUC, GIU, Ain Shams, AASTMT / Arab Academy, BUE, MSA / Modern Sciences and Arts, CIC / Canadian International College, Nile University, Alexandria University, MUST / Misr University for Science and Technology)
 
 **Dimension 2: Engineering Experience & Technical Depth (0-3)**
 - 0: No engineering experience, only coursework
@@ -174,10 +182,11 @@ export const scoreApplicantOnCreate = functions
 
       await snap.ref.update({
         aiScore,
+        status: "ai_rejected",
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       });
 
-      console.log(`Pre-screened applicant ${applicantId}: 0/10 (REJECT) — ${reasons.join("; ")}`);
+      console.log(`Pre-screened applicant ${applicantId}: 0/10 (REJECT) → ai_rejected — ${reasons.join("; ")}`);
       return;
     }
 
@@ -239,6 +248,9 @@ ${formAnswersText}`;
 
       const result = JSON.parse(content);
 
+      const VALID_TIERS = ["ADVANCE", "REVIEW", "HOLD", "REJECT"] as const;
+      const safeTier = VALID_TIERS.includes(result.tier) ? result.tier : "REVIEW";
+
       const aiScore = {
         total: Math.min(10, Math.max(0, result.total)),
         dimensions: {
@@ -249,7 +261,7 @@ ${formAnswersText}`;
           authenticityRoleFit: result.dimensions?.authenticityRoleFit ?? 0,
           bonusSignals: result.dimensions?.bonusSignals ?? 0,
         },
-        tier: result.tier || "REJECT",
+        tier: safeTier,
         reasoning: result.reasoning || "",
         redFlags: result.redFlags || [],
         strengths: result.strengths || [],
@@ -258,12 +270,14 @@ ${formAnswersText}`;
         scoredAt: admin.firestore.FieldValue.serverTimestamp(),
       };
 
-      await snap.ref.update({
+      const update: Record<string, unknown> = {
         aiScore,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
-      });
+      };
+      if (safeTier === "REJECT") update.status = "ai_rejected";
+      await snap.ref.update(update);
 
-      console.log(`AI scored applicant ${applicantId}: ${aiScore.total}/10 (${aiScore.tier})`);
+      console.log(`AI scored applicant ${applicantId}: ${aiScore.total}/10 (${aiScore.tier})${safeTier === "REJECT" ? " → ai_rejected" : ""}`);
     } catch (error: any) {
       console.error(`Failed to AI-score applicant ${applicantId}:`, error.message || error);
       // Don't throw — the applicant is still created, just without AI score

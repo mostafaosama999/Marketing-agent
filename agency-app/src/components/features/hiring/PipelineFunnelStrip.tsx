@@ -15,7 +15,7 @@ const FUNNEL_STAGES: ApplicantStatus[] = ['applied', 'shortlisted', 'test_task',
 export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applicants, recruiterOutreachCount }) => {
   const stageCounts = useMemo(() => {
     const counts: Record<ApplicantStatus, number> = {
-      backlog: 0, applied: 0, shortlisted: 0, test_task: 0, not_responded: 0,
+      ai_rejected: 0, backlog: 0, applied: 0, shortlisted: 0, test_task: 0, not_responded: 0,
       responded: 0, feedback: 0, interview: 0, hired: 0, rejected: 0,
     };
     for (const a of applicants) counts[a.status]++;
@@ -37,7 +37,7 @@ export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applic
     return { counts, unknown };
   }, [applicants]);
 
-  const total = applicants.length;
+  const total = applicants.filter((a) => a.status !== 'ai_rejected').length;
   const hireRate = total > 0 ? Math.round((stageCounts.hired / total) * 100) : 0;
 
   const writingTestBreakdown = useMemo(() => {

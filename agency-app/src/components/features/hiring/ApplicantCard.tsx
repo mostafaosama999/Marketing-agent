@@ -26,6 +26,11 @@ export const ApplicantCard: React.FC<ApplicantCardProps> = ({
   const hasLinkedIn = !!applicant.linkedInUrl;
   const answerCount = Object.keys(applicant.formAnswers).length;
   const infoParts = [applicant.sex, applicant.age ? `${applicant.age}y` : '', applicant.education].filter(Boolean);
+  const isAiRejected = applicant.status === 'ai_rejected';
+  const aiReason = isAiRejected
+    ? (applicant.aiScore?.reasoning || applicant.aiScore?.redFlags?.[0] || 'Rejected by AI pre-screen')
+    : '';
+  const aiReasonTruncated = aiReason.length > 140 ? `${aiReason.slice(0, 137)}…` : aiReason;
 
   return (
     <Box
@@ -178,7 +183,38 @@ export const ApplicantCard: React.FC<ApplicantCardProps> = ({
         </Typography>
       )}
 
+      {/* AI Rejected: inline AI reason (replaces score row + writing-test blocks) */}
+      {isAiRejected && (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 0.75,
+            mb: 1.5,
+            px: 1.25,
+            py: 1,
+            borderRadius: 1.5,
+            background: '#fef2f2',
+            border: '1px solid #fecaca',
+            borderLeft: '3px solid #dc2626',
+          }}
+        >
+          <WarningAmberIcon sx={{ fontSize: 14, color: '#dc2626', mt: '2px', flexShrink: 0 }} />
+          <Typography
+            sx={{
+              fontSize: '11px',
+              fontWeight: 500,
+              color: '#991b1b',
+              lineHeight: 1.4,
+            }}
+          >
+            {aiReasonTruncated}
+          </Typography>
+        </Box>
+      )}
+
       {/* Score + AI Score + Answer Count */}
+      {!isAiRejected && (
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1.5, flexWrap: 'wrap' }}>
         {/* AI Score */}
         {applicant.aiScore ? (() => {
@@ -266,6 +302,7 @@ export const ApplicantCard: React.FC<ApplicantCardProps> = ({
           </Tooltip>
         )}
       </Box>
+      )}
 
       {/* Writing Test Deadline Badge */}
       {applicant.status === 'test_task' && (() => {

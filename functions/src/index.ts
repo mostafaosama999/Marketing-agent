@@ -169,6 +169,7 @@ export {ghostStaleWritingTests} from "./hiring/ghostWritingTests";
 export {backfillJobPostCloud} from "./hiring/backfillJobPost";
 export {backfillRecruiterAttributionCloud, syncRecruiterAttributionScheduled} from "./hiring/recruiterAttribution";
 export {scoreApplicantOnCreate} from "./hiring/scoreApplicant";
+export {backfillAiRejectedCloud} from "./hiring/backfillAiRejected";
 
 // Export event organizer research functions
 export {researchEventOrganizer, onEventCreatedResearchOrganizer} from "./events/researchOrganizer";

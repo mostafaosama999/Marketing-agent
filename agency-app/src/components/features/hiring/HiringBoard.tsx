@@ -237,6 +237,17 @@ const HiringBoard: React.FC = () => {
       return;
     }
 
+    // Block manual drops into AI Rejected — it is set automatically by the cloud function
+    if (targetStageId === 'ai_rejected') {
+      setSnackbar({
+        open: true,
+        message: 'AI Rejected is set automatically. Drag out to recover a candidate.',
+        severity: 'error',
+      });
+      setDraggedApplicant(null);
+      return;
+    }
+
     try {
       await updateApplicantStatus(draggedApplicant.id, targetStageId as ApplicantStatus);
       setSnackbar({
