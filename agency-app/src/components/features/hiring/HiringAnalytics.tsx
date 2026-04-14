@@ -17,20 +17,23 @@ const glassCardSx = {
 
 const HiringAnalytics: React.FC<HiringAnalyticsProps> = ({ applicants }) => {
   const dailyData = useMemo(() => {
-    const counts: Record<string, number> = {};
+    const counts: Record<string, { inbound: number; recruiter: number }> = {};
 
     applicants.forEach((a) => {
       const d = a.createdAt instanceof Date ? a.createdAt : new Date(a.createdAt);
       if (isNaN(d.getTime())) return;
       const key = d.toISOString().slice(0, 10); // YYYY-MM-DD
-      counts[key] = (counts[key] || 0) + 1;
+      if (!counts[key]) counts[key] = { inbound: 0, recruiter: 0 };
+      if (a.recruiterSourced) counts[key].recruiter += 1;
+      else counts[key].inbound += 1;
     });
 
     return Object.entries(counts)
       .sort(([a], [b]) => a.localeCompare(b))
-      .map(([date, count]) => ({
+      .map(([date, { inbound, recruiter }]) => ({
         date: new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' }),
-        count,
+        inbound,
+        recruiter,
       }));
   }, [applicants]);
 
@@ -84,9 +87,16 @@ const HiringAnalytics: React.FC<HiringAnalyticsProps> = ({ applicants }) => {
               yAxis={[{ label: 'Applicants' }]}
               series={[
                 {
-                  dataKey: 'count',
-                  label: 'Applicants',
+                  dataKey: 'inbound',
+                  label: 'Inbound',
                   color: '#667eea',
+                  stack: 'applicants',
+                },
+                {
+                  dataKey: 'recruiter',
+                  label: 'Recruiter',
+                  color: '#a78bfa',
+                  stack: 'applicants',
                 },
               ]}
               margin={{ left: 70, right: 20, top: 20, bottom: 60 }}
