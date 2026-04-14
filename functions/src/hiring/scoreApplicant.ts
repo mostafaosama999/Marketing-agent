@@ -36,8 +36,8 @@ const APPROVED_UNIVERSITY_REGEX = new RegExp(
     "canadian international college",
     // Nile
     "nile university",
-    // Alexandria
-    "alexandria univ(ersity)?",
+    // Alexandria (accept typo "alexandra" as well)
+    "alexandri?a univ(ersity)?",
     // MUST — "must" alone is unsafe, require disambiguators
     "misr university for science",
     "\\bmust university\\b",
