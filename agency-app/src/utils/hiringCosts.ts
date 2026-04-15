@@ -44,9 +44,7 @@ function daysSince(start: Date, now: Date): number {
 }
 
 function countPaidTests(applicants: Applicant[]): number {
-  return applicants.filter(
-    (a) => a.outreach?.email?.templateName?.toLowerCase().includes('paid')
-  ).length;
+  return applicants.filter((a) => a.paymentConfirmed === true).length;
 }
 
 export function calculateHiringCosts(applicants: Applicant[]): HiringCostBreakdown {
