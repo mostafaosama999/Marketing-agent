@@ -31,6 +31,7 @@ interface WritingTestsTableProps {
 
 const WRITING_TEST_STATUSES: ApplicantStatus[] = ['test_task', 'not_responded', 'responded', 'feedback'];
 const WRITING_TEST_REJECTION_STAGES = ['test_task', 'not_responded', 'responded', 'feedback'];
+const ADVANCED_STATUSES: ApplicantStatus[] = ['interview', 'hired'];
 
 const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }> = {
   test_task: { label: 'Sent', color: '#ea580c', bg: '#fff7ed' },
@@ -38,6 +39,8 @@ const STATUS_CONFIG: Record<string, { label: string; color: string; bg: string }
   responded: { label: 'Responded', color: '#7c3aed', bg: '#f5f3ff' },
   feedback: { label: 'Feedback', color: '#0284c7', bg: '#f0f9ff' },
   rejected: { label: 'Rejected', color: '#dc2626', bg: '#fef2f2' },
+  interview: { label: 'Interview', color: '#06b6d4', bg: '#ecfeff' },
+  hired: { label: 'Hired', color: '#10b981', bg: '#f0fdf4' },
 };
 
 function formatDate(d: Date | any): string {
@@ -82,10 +85,11 @@ const WritingTestsTable: React.FC<WritingTestsTableProps> = ({ applicants, onApp
   const writingTestApplicants = useMemo(() => {
     const filtered = applicants.filter((a) =>
       WRITING_TEST_STATUSES.includes(a.status) ||
-      (a.status === 'rejected' && a.rejectionStage && WRITING_TEST_REJECTION_STAGES.includes(a.rejectionStage))
+      (a.status === 'rejected' && a.rejectionStage && WRITING_TEST_REJECTION_STAGES.includes(a.rejectionStage)) ||
+      (ADVANCED_STATUSES.includes(a.status) && isPaidTest(a))
     );
 
-    const allStatuses = [...WRITING_TEST_STATUSES, 'rejected' as ApplicantStatus];
+    const allStatuses = [...WRITING_TEST_STATUSES, 'rejected' as ApplicantStatus, ...ADVANCED_STATUSES];
 
     return filtered.sort((a, b) => {
       let cmp = 0;
