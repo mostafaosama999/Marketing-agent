@@ -22,6 +22,7 @@ import { FollowUpTemplateTab } from '../../components/settings/FollowUpTemplateT
 import { OfferTemplateTab } from '../../components/settings/OfferTemplateTab';
 import { HiringEmailTemplatesTab } from '../../components/settings/HiringEmailTemplatesTab';
 import { HiringConfigSection } from '../../components/settings/HiringConfigSection';
+import { OutboundLinkedInTemplatesTab } from '../../components/settings/OutboundLinkedInTemplatesTab';
 
 interface TabPanelProps {
   children?: React.ReactNode;
@@ -52,6 +53,7 @@ const TAB_SLUGS = [
   'field-definitions',
   'integrations',
   'hiring-templates',
+  'outbound-linkedin-templates',
 ] as const;
 
 export const SettingsPage: React.FC = () => {
@@ -199,6 +201,7 @@ export const SettingsPage: React.FC = () => {
             <Tab label="Field Definitions" />
             <Tab label="Integrations" />
             <Tab label="Hiring Templates" />
+            <Tab label="Outbound DM Templates" />
           </Tabs>
         </Box>
 
@@ -342,6 +345,11 @@ export const SettingsPage: React.FC = () => {
             <Box sx={{ mt: 4 }}>
               <HiringEmailTemplatesTab />
             </Box>
+          </TabPanel>
+
+          {/* Outbound LinkedIn DM Templates Tab */}
+          <TabPanel value={tabValue} index={7}>
+            <OutboundLinkedInTemplatesTab />
           </TabPanel>
         </Box>
       </Box>

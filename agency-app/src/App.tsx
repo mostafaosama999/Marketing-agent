@@ -46,7 +46,7 @@ function AppContent() {
   }, [location.pathname]);
   
   // Routes that need full-height fixed layout (CRM board, Companies)
-  const fixedHeightRoutes = ['/', '/crm', '/leads', '/companies', '/hiring', '/hiring/writing-tests', '/hiring/analytics', '/events'];
+  const fixedHeightRoutes = ['/', '/crm', '/leads', '/companies', '/hiring', '/hiring/writing-tests', '/hiring/outbound', '/hiring/analytics', '/events'];
   const isFixedHeightRoute = fixedHeightRoutes.includes(location.pathname);
 
   if (isFixedHeightRoute) {
@@ -73,6 +73,7 @@ function AppContent() {
             <Route path="/events" element={<EventsPage />} />
             <Route path="/hiring" element={<HiringBoard />} />
             <Route path="/hiring/writing-tests" element={<HiringBoard />} />
+            <Route path="/hiring/outbound" element={<HiringBoard />} />
             <Route path="/hiring/analytics" element={<HiringBoard />} />
           </Routes>
         </Box>

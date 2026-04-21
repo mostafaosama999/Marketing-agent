@@ -3,6 +3,7 @@
 
 import { Lead } from '../../types/lead';
 import { Company } from '../../types/crm';
+import { SourcedCandidate } from '../../types/sourcedCandidate';
 
 export interface TemplateVariable {
   key: string;
@@ -257,6 +258,56 @@ export function replaceTemplateVariables(
       result = result.replace(/\{\{blog_audit\}\}/g, '');
     }
   }
+
+  return result;
+}
+
+// ============================================
+// OUTBOUND (SourcedCandidate) VARIABLES
+// ============================================
+
+export interface OutboundTemplateVar {
+  key: string;
+  description: string;
+  example: string;
+}
+
+export const OUTBOUND_TEMPLATE_VARS: OutboundTemplateVar[] = [
+  { key: '{{name}}', description: 'Full name', example: 'Ahmed Sameh' },
+  { key: '{{firstName}}', description: 'First name only', example: 'Ahmed' },
+  { key: '{{currentRole}}', description: 'Current job title', example: 'Software Engineer' },
+  { key: '{{currentCompany}}', description: 'Current employer', example: 'Instabug' },
+  { key: '{{university}}', description: 'University name', example: 'Cairo University' },
+  { key: '{{tier}}', description: 'Salary tier (standard or premium)', example: 'standard' },
+  { key: '{{recommendedOfferEgp}}', description: 'Recommended offer in EGP', example: '35000' },
+  { key: '{{techStack}}', description: 'Tech stack (comma-joined)', example: 'Python, React, LangChain' },
+  { key: '{{writingSignals}}', description: 'Writing/teaching signals', example: 'TA at Cairo Uni, LinkedIn JS series' },
+  { key: '{{linkedInUrl}}', description: 'LinkedIn profile URL', example: 'https://linkedin.com/in/...' },
+];
+
+export function replaceOutboundTemplateVariables(
+  template: string,
+  candidate: Partial<SourcedCandidate>
+): string {
+  let result = template;
+  const firstName = (candidate.name || '').trim().split(/\s+/)[0] || '';
+
+  result = result.replace(/\{\{name\}\}/g, candidate.name || '');
+  result = result.replace(/\{\{firstName\}\}/g, firstName);
+  result = result.replace(/\{\{currentRole\}\}/g, candidate.currentRole || '');
+  result = result.replace(/\{\{currentCompany\}\}/g, candidate.currentCompany || '');
+  result = result.replace(/\{\{university\}\}/g, candidate.university || '');
+  result = result.replace(/\{\{tier\}\}/g, candidate.tier || '');
+  result = result.replace(
+    /\{\{recommendedOfferEgp\}\}/g,
+    candidate.recommendedOfferEgp != null ? String(candidate.recommendedOfferEgp) : ''
+  );
+  result = result.replace(
+    /\{\{techStack\}\}/g,
+    Array.isArray(candidate.techStack) ? candidate.techStack.join(', ') : ''
+  );
+  result = result.replace(/\{\{writingSignals\}\}/g, candidate.writingSignals || '');
+  result = result.replace(/\{\{linkedInUrl\}\}/g, candidate.linkedInUrl || '');
 
   return result;
 }

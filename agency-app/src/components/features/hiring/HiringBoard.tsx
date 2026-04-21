@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef, useMemo } from 'react';
 import { useLocation, useNavigate } from 'react-router-dom';
 import { Box, Typography, Button, Snackbar, Alert, CircularProgress, Select, MenuItem, FormControl, TextField, InputAdornment, ToggleButtonGroup, ToggleButton } from '@mui/material';
-import { Upload as UploadIcon, FilterList as FilterIcon, PersonAdd as PersonAddIcon, Search as SearchIcon, ViewKanban as ViewKanbanIcon, TableChart as TableChartIcon, BarChart as BarChartIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon } from '@mui/icons-material';
+import { Upload as UploadIcon, FilterList as FilterIcon, PersonAdd as PersonAddIcon, Search as SearchIcon, ViewKanban as ViewKanbanIcon, TableChart as TableChartIcon, BarChart as BarChartIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Campaign as CampaignIcon } from '@mui/icons-material';
 import { Applicant, ApplicantStatus, RejectionStage, HIRING_STAGES } from '../../../types/applicant';
 import { subscribeToApplicants, updateApplicantStatus, subscribeToViewedApplicantIds, markApplicantViewed } from '../../../services/api/applicants';
 import { getHiringConfig } from '../../../services/api/hiringConfig';
@@ -14,14 +14,43 @@ import { CSVImportDialog } from './CSVImportDialog';
 import { AddCandidateDialog } from './AddCandidateDialog';
 import WritingTestsTable from './WritingTestsTable';
 import HiringAnalytics from './HiringAnalytics';
+import { OutboundBoard } from './OutboundBoard';
+import { OutboundTable } from './OutboundTable';
+import { OutboundCandidateDialog } from './OutboundCandidateDialog';
+import { OutboundFilterBar, OutboundFilters, DEFAULT_OUTBOUND_FILTERS } from './OutboundFilterBar';
+import { ArchivedSourcedCandidatesView } from './ArchivedSourcedCandidatesView';
+import { SourcedCandidate, OutboundStatus, ArchiveReason } from '../../../types/sourcedCandidate';
+import {
+  subscribeToSourcedCandidates,
+  updateSourcedCandidateStatus,
+  markSourcedCandidateSent,
+  archiveSourcedCandidate,
+  unarchiveSourcedCandidate,
+  deleteSourcedCandidate,
+  updateSourcedCandidate,
+} from '../../../services/api/sourcedCandidates';
+import {
+  subscribeToLinkedInDmTemplates,
+  getDefaultLinkedInDmTemplateId,
+  resolveDefaultTemplate,
+} from '../../../services/api/linkedinDmTemplates';
+import { LinkedInDmTemplate } from '../../../types/linkedinDmTemplate';
+import { resolveDmText } from '../../../utils/copyDm';
 
-type HiringView = 'board' | 'writing_tests' | 'analytics';
+type HiringView = 'board' | 'writing_tests' | 'outbound' | 'analytics';
+type OutboundSubView = 'board' | 'table';
 
 const HiringBoard: React.FC = () => {
   const { user } = useAuth();
   const location = useLocation();
   const navigate = useNavigate();
-  const activeView: HiringView = location.pathname === '/hiring/writing-tests' ? 'writing_tests' : location.pathname === '/hiring/analytics' ? 'analytics' : 'board';
+  const activeView: HiringView = location.pathname === '/hiring/writing-tests'
+    ? 'writing_tests'
+    : location.pathname === '/hiring/analytics'
+      ? 'analytics'
+      : location.pathname === '/hiring/outbound'
+        ? 'outbound'
+        : 'board';
   const [applicants, setApplicants] = useState<Applicant[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewedIds, setViewedIds] = useState<Set<string>>(new Set());
@@ -50,6 +79,16 @@ const HiringBoard: React.FC = () => {
   const [recruiterOutreachCount, setRecruiterOutreachCount] = useState<number | undefined>(undefined);
   const dragOverRef = useRef<string | null>(null);
 
+  // Outbound tab state
+  const [sourcedCandidates, setSourcedCandidates] = useState<SourcedCandidate[]>([]);
+  const [outboundView, setOutboundView] = useState<OutboundSubView>('board');
+  const [outboundFilters, setOutboundFilters] = useState<OutboundFilters>(DEFAULT_OUTBOUND_FILTERS);
+  const [selectedSourced, setSelectedSourced] = useState<SourcedCandidate | null>(null);
+  const [outboundDialogOpen, setOutboundDialogOpen] = useState(false);
+  const [archivedOpen, setArchivedOpen] = useState(false);
+  const [dmTemplates, setDmTemplates] = useState<LinkedInDmTemplate[]>([]);
+  const [defaultDmTemplateId, setDefaultDmTemplateId] = useState<string | null>(null);
+
   // Fetch recruiter outreach count from hiring config
   useEffect(() => {
     getHiringConfig().then((config) => {
@@ -73,6 +112,29 @@ const HiringBoard: React.FC = () => {
     });
     return () => unsubscribe();
   }, []);
+
+  // Outbound: subscribe only while tab is active (includeArchived so archived count works)
+  useEffect(() => {
+    if (activeView !== 'outbound') return;
+    const unsub = subscribeToSourcedCandidates(
+      (data) => setSourcedCandidates(data),
+      { includeArchived: true }
+    );
+    return () => unsub();
+  }, [activeView]);
+
+  // Outbound: subscribe to DM templates (small collection, load when tab active)
+  useEffect(() => {
+    if (activeView !== 'outbound') return;
+    const unsub = subscribeToLinkedInDmTemplates((list) => setDmTemplates(list));
+    return () => unsub();
+  }, [activeView]);
+
+  // Outbound: load user's default DM template pointer
+  useEffect(() => {
+    if (activeView !== 'outbound' || !user?.uid) return;
+    getDefaultLinkedInDmTemplateId(user.uid).then(setDefaultDmTemplateId);
+  }, [activeView, user?.uid]);
 
   // Filter option data with counts
   const universityCounts = useMemo(() => {
@@ -206,6 +268,129 @@ const HiringBoard: React.FC = () => {
     () => filteredApplicants.filter((a) => a.status === 'rejected' && !a.rejectionStage),
     [filteredApplicants]
   );
+
+  // Outbound derived state + handlers
+  const activeSourcedCandidates = useMemo(
+    () => sourcedCandidates.filter((c) => !c.archived),
+    [sourcedCandidates]
+  );
+  const archivedSourcedCandidates = useMemo(
+    () => sourcedCandidates.filter((c) => c.archived),
+    [sourcedCandidates]
+  );
+
+  const filteredSourcedCandidates = useMemo(() => {
+    const [minScore, maxScore] = outboundFilters.scoreRange;
+    return activeSourcedCandidates.filter((c) => {
+      if (c.score < minScore || c.score > maxScore) return false;
+      if (outboundFilters.statuses.length > 0 && !outboundFilters.statuses.includes(c.status)) return false;
+      return true;
+    });
+  }, [activeSourcedCandidates, outboundFilters]);
+
+  const effectiveDefaultTemplate = useMemo(
+    () => resolveDefaultTemplate(dmTemplates, defaultDmTemplateId),
+    [dmTemplates, defaultDmTemplateId]
+  );
+
+  const copyDisabledForCandidate = useCallback(
+    (candidate: SourcedCandidate) => {
+      return !resolveDmText(candidate, { template: effectiveDefaultTemplate });
+    },
+    [effectiveDefaultTemplate]
+  );
+
+  const handleSourcedCandidateClick = (candidate: SourcedCandidate) => {
+    setSelectedSourced(candidate);
+    setOutboundDialogOpen(true);
+  };
+
+  const handleOutboundStatusChange = async (candidate: SourcedCandidate, newStatus: OutboundStatus) => {
+    try {
+      await updateSourcedCandidateStatus(candidate.id, newStatus, {
+        sentAt: candidate.sentAt,
+        repliedAt: candidate.repliedAt,
+      });
+      setSnackbar({
+        open: true,
+        message: `Moved ${candidate.name} to ${newStatus}`,
+        severity: 'success',
+      });
+    } catch (err) {
+      console.error(err);
+      setSnackbar({ open: true, message: 'Failed to update status', severity: 'error' });
+    }
+  };
+
+  const handleCopyDmFromList = async (candidate: SourcedCandidate) => {
+    const text = resolveDmText(candidate, { template: effectiveDefaultTemplate });
+    if (!text) {
+      setSnackbar({
+        open: true,
+        message: 'No draft or default template. Set one in Settings.',
+        severity: 'error',
+      });
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(text);
+      await markSourcedCandidateSent(candidate.id, text);
+      setSnackbar({
+        open: true,
+        message: `Copied DM for ${candidate.name} and marked as sent`,
+        severity: 'success',
+      });
+    } catch (err) {
+      console.error(err);
+      setSnackbar({ open: true, message: 'Clipboard copy failed', severity: 'error' });
+    }
+  };
+
+  const handleCopyAndMarkSentFromDialog = async (candidate: SourcedCandidate, message: string) => {
+    try {
+      await markSourcedCandidateSent(candidate.id, message);
+    } catch (err) {
+      console.error(err);
+    }
+  };
+
+  const handleArchiveSourced = async (candidate: SourcedCandidate, reason: ArchiveReason) => {
+    try {
+      await archiveSourcedCandidate(candidate.id, reason);
+      setSnackbar({ open: true, message: `Archived ${candidate.name}`, severity: 'success' });
+    } catch (err) {
+      console.error(err);
+      setSnackbar({ open: true, message: 'Failed to archive', severity: 'error' });
+    }
+  };
+
+  const handleUnarchiveSourced = async (candidate: SourcedCandidate) => {
+    try {
+      await unarchiveSourcedCandidate(candidate.id);
+      setSnackbar({ open: true, message: `Unarchived ${candidate.name}`, severity: 'success' });
+    } catch (err) {
+      console.error(err);
+      setSnackbar({ open: true, message: 'Failed to unarchive', severity: 'error' });
+    }
+  };
+
+  const handleDeleteSourced = async (candidate: SourcedCandidate) => {
+    try {
+      await deleteSourcedCandidate(candidate.id);
+      setSnackbar({ open: true, message: `Deleted ${candidate.name}`, severity: 'success' });
+    } catch (err) {
+      console.error(err);
+      setSnackbar({ open: true, message: 'Failed to delete', severity: 'error' });
+    }
+  };
+
+  const handleSaveSourcedNotes = async (candidate: SourcedCandidate, notes: string) => {
+    try {
+      await updateSourcedCandidate(candidate.id, { notes });
+    } catch (err) {
+      console.error(err);
+    }
+  };
 
   const handleDragStart = (e: React.DragEvent, applicant: Applicant) => {
     setDraggedApplicant(applicant);
@@ -379,25 +564,36 @@ const HiringBoard: React.FC = () => {
             Hiring Pipeline
           </Typography>
           <Typography variant="body2" sx={{ color: '#64748b' }}>
-            {(universityFilter || genderFilter || scoreFilter || writingTestStatusFilter || paidTestFilter) ? `${filteredApplicants.length} of ${applicants.length}` : applicants.length} applicant{applicants.length !== 1 ? 's' : ''}
+            {activeView === 'outbound'
+              ? `${activeSourcedCandidates.length} sourced candidate${activeSourcedCandidates.length !== 1 ? 's' : ''}`
+              : (universityFilter || genderFilter || scoreFilter || writingTestStatusFilter || paidTestFilter)
+                ? `${filteredApplicants.length} of ${applicants.length} applicants`
+                : `${applicants.length} applicant${applicants.length !== 1 ? 's' : ''}`}
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1.5, alignItems: 'center' }}>
+          {/* Primary section toggle: Inbound vs Outbound (top-level) */}
           <ToggleButtonGroup
-            value={activeView}
+            value={activeView === 'outbound' ? 'outbound' : 'inbound'}
             exclusive
-            onChange={(_, v) => v && navigate(v === 'writing_tests' ? '/hiring/writing-tests' : v === 'analytics' ? '/hiring/analytics' : '/hiring')}
-            size="small"
+            onChange={(_, v) => {
+              if (!v) return;
+              navigate(v === 'outbound' ? '/hiring/outbound' : '/hiring');
+            }}
             sx={{
               mr: 1,
+              background: 'white',
+              borderRadius: 2.5,
+              boxShadow: '0 2px 8px rgba(102, 126, 234, 0.15)',
               '& .MuiToggleButton-root': {
                 textTransform: 'none',
-                fontWeight: 600,
-                fontSize: '13px',
-                px: 2,
-                py: 0.75,
+                fontWeight: 700,
+                fontSize: '15px',
+                letterSpacing: '0.3px',
+                px: 3,
+                py: 1.25,
                 borderColor: '#e2e8f0',
-                color: '#64748b',
+                color: '#475569',
                 '&.Mui-selected': {
                   background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
                   color: '#fff',
@@ -409,19 +605,17 @@ const HiringBoard: React.FC = () => {
               },
             }}
           >
-            <ToggleButton value="board">
-              <ViewKanbanIcon sx={{ fontSize: 18, mr: 0.75 }} />
-              Board
+            <ToggleButton value="inbound">
+              <PersonAddIcon sx={{ fontSize: 20, mr: 1 }} />
+              Inbound
             </ToggleButton>
-            <ToggleButton value="writing_tests">
-              <TableChartIcon sx={{ fontSize: 18, mr: 0.75 }} />
-              Writing Tests
-            </ToggleButton>
-            <ToggleButton value="analytics">
-              <BarChartIcon sx={{ fontSize: 18, mr: 0.75 }} />
-              Analytics
+            <ToggleButton value="outbound">
+              <CampaignIcon sx={{ fontSize: 20, mr: 1 }} />
+              Outbound
             </ToggleButton>
           </ToggleButtonGroup>
+          {activeView !== 'outbound' && (
+          <>
           <Button
             variant="contained"
             startIcon={<PersonAddIcon />}
@@ -456,10 +650,101 @@ const HiringBoard: React.FC = () => {
           >
             Import CSV
           </Button>
+          </>
+          )}
         </Box>
       </Box>
 
-      {/* Filter Bar */}
+      {/* Secondary sub-view toggle row */}
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          px: 4,
+          pb: 2,
+          flexShrink: 0,
+        }}
+      >
+        {activeView !== 'outbound' ? (
+          <ToggleButtonGroup
+            value={activeView}
+            exclusive
+            onChange={(_, v) => v && navigate(
+              v === 'writing_tests' ? '/hiring/writing-tests' :
+              v === 'analytics' ? '/hiring/analytics' :
+              '/hiring'
+            )}
+            size="small"
+            sx={{
+              '& .MuiToggleButton-root': {
+                textTransform: 'none',
+                fontWeight: 600,
+                fontSize: '12px',
+                px: 1.75,
+                py: 0.5,
+                borderColor: '#e2e8f0',
+                color: '#64748b',
+                '&.Mui-selected': {
+                  background: '#eef2ff',
+                  color: '#667eea',
+                  borderColor: '#c7d2fe',
+                  '&:hover': { background: '#e0e7ff' },
+                },
+              },
+            }}
+          >
+            <ToggleButton value="board">
+              <ViewKanbanIcon sx={{ fontSize: 15, mr: 0.5 }} />
+              Board
+            </ToggleButton>
+            <ToggleButton value="writing_tests">
+              <TableChartIcon sx={{ fontSize: 15, mr: 0.5 }} />
+              Writing Tests
+            </ToggleButton>
+            <ToggleButton value="analytics">
+              <BarChartIcon sx={{ fontSize: 15, mr: 0.5 }} />
+              Analytics
+            </ToggleButton>
+          </ToggleButtonGroup>
+        ) : (
+          <ToggleButtonGroup
+            value={outboundView}
+            exclusive
+            onChange={(_, v) => v && setOutboundView(v)}
+            size="small"
+            sx={{
+              '& .MuiToggleButton-root': {
+                textTransform: 'none',
+                fontWeight: 600,
+                fontSize: '12px',
+                px: 1.75,
+                py: 0.5,
+                borderColor: '#e2e8f0',
+                color: '#64748b',
+                '&.Mui-selected': {
+                  background: '#eef2ff',
+                  color: '#667eea',
+                  borderColor: '#c7d2fe',
+                  '&:hover': { background: '#e0e7ff' },
+                },
+              },
+            }}
+          >
+            <ToggleButton value="board">
+              <ViewKanbanIcon sx={{ fontSize: 15, mr: 0.5 }} />
+              Board
+            </ToggleButton>
+            <ToggleButton value="table">
+              <TableChartIcon sx={{ fontSize: 15, mr: 0.5 }} />
+              Table
+            </ToggleButton>
+          </ToggleButtonGroup>
+        )}
+      </Box>
+
+      {/* Filter Bar (inbound-specific; hidden on Outbound) */}
+      {activeView !== 'outbound' && (
       <Box
         sx={{
           display: 'flex',
@@ -659,6 +944,7 @@ const HiringBoard: React.FC = () => {
           </Select>
         </FormControl>
       </Box>
+      )}
 
       {/* Pipeline Funnel Stats — hidden in writing tests view */}
       {activeView === 'board' && <PipelineFunnelStrip applicants={filteredApplicants} recruiterOutreachCount={recruiterOutreachCount} />}
@@ -674,6 +960,40 @@ const HiringBoard: React.FC = () => {
       {/* Analytics View */}
       {activeView === 'analytics' && (
         <HiringAnalytics applicants={applicants} />
+      )}
+
+      {/* Outbound View */}
+      {activeView === 'outbound' && (
+        <>
+          <OutboundFilterBar
+            filters={outboundFilters}
+            onChange={setOutboundFilters}
+            onShowArchived={() => setArchivedOpen(true)}
+            archivedCount={archivedSourcedCandidates.length}
+            totalCount={filteredSourcedCandidates.length}
+          />
+          <Box sx={{ flex: 1, overflow: 'hidden', display: 'flex', flexDirection: 'column' }}>
+            {outboundView === 'board' ? (
+              <OutboundBoard
+                candidates={filteredSourcedCandidates}
+                onStatusChange={handleOutboundStatusChange}
+                onCandidateClick={handleSourcedCandidateClick}
+                onCopyDm={handleCopyDmFromList}
+                copyDisabledForCandidate={copyDisabledForCandidate}
+              />
+            ) : (
+              <OutboundTable
+                candidates={filteredSourcedCandidates}
+                onCandidateClick={handleSourcedCandidateClick}
+                onStatusChange={handleOutboundStatusChange}
+                onCopyDm={handleCopyDmFromList}
+                onArchive={handleArchiveSourced}
+                onDelete={handleDeleteSourced}
+                copyDisabledForCandidate={copyDisabledForCandidate}
+              />
+            )}
+          </Box>
+        </>
       )}
 
       {/* Kanban Board */}
@@ -832,6 +1152,29 @@ const HiringBoard: React.FC = () => {
         open={csvOpen}
         onClose={() => setCsvOpen(false)}
         onSuccess={handleImportSuccess}
+      />
+
+      {/* Outbound candidate detail dialog */}
+      <OutboundCandidateDialog
+        open={outboundDialogOpen}
+        candidate={selectedSourced}
+        defaultTemplate={effectiveDefaultTemplate}
+        onClose={() => {
+          setOutboundDialogOpen(false);
+          setSelectedSourced(null);
+        }}
+        onSaveNotes={handleSaveSourcedNotes}
+        onCopyAndMarkSent={handleCopyAndMarkSentFromDialog}
+        onArchive={handleArchiveSourced}
+        onDelete={handleDeleteSourced}
+      />
+
+      {/* Archived sourced candidates modal */}
+      <ArchivedSourcedCandidatesView
+        open={archivedOpen}
+        onClose={() => setArchivedOpen(false)}
+        archivedCandidates={archivedSourcedCandidates}
+        onUnarchive={handleUnarchiveSourced}
       />
 
       {/* Snackbar */}
