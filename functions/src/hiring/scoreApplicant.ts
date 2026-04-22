@@ -50,11 +50,6 @@ function isApprovedUniversity(education: string): boolean {
   return APPROVED_UNIVERSITY_REGEX.test(education);
 }
 
-function isFemale(sex: string): boolean {
-  if (!sex) return false;
-  return sex.toLowerCase() === "female";
-}
-
 const SCORING_SYSTEM_PROMPT = `You are a hiring evaluator for CodeContent, a developer-first technical content agency hiring Software Engineers (Technical Content) based in Cairo, Egypt. Salary: 20,000-30,000 EGP/month.
 
 Score the applicant on a 0-10 scale using these 5 dimensions:
@@ -148,18 +143,12 @@ export const scoreApplicantOnCreate = functions
       return;
     }
 
-    // Pre-screen: reject if not from approved university or if female
+    // Pre-screen: reject if not from approved university
     const education = (data.education || "").trim();
-    const sex = (data.sex || "").trim();
 
-    if (!isApprovedUniversity(education) || isFemale(sex)) {
+    if (!isApprovedUniversity(education)) {
       const reasons: string[] = [];
-      if (!isApprovedUniversity(education)) {
-        reasons.push(`University not in approved list: "${education || "not provided"}"`);
-      }
-      if (isFemale(sex)) {
-        reasons.push("Female candidate — not matching current hiring criteria");
-      }
+      reasons.push(`University not in approved list: "${education || "not provided"}"`);
 
       const aiScore = {
         total: 0,
