@@ -230,7 +230,9 @@ export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applic
                       </Typography>
                       {i > 0 && (
                         <Typography sx={{ fontSize: '9px', color: '#94a3b8', fontWeight: 600 }}>
-                          {pct}%
+                          {stageId === 'hired'
+                            ? `${total > 0 ? ((count / total) * 100).toFixed(3) : '0.000'}%`
+                            : `${pct}%`}
                         </Typography>
                       )}
                     </Box>
