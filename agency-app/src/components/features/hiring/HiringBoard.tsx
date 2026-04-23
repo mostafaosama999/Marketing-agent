@@ -4,7 +4,7 @@ import { Box, Typography, Button, Snackbar, Alert, CircularProgress, Select, Men
 import { Upload as UploadIcon, FilterList as FilterIcon, PersonAdd as PersonAddIcon, Search as SearchIcon, ViewKanban as ViewKanbanIcon, TableChart as TableChartIcon, BarChart as BarChartIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Campaign as CampaignIcon } from '@mui/icons-material';
 import { Applicant, ApplicantStatus, RejectionStage, HIRING_STAGES } from '../../../types/applicant';
 import { subscribeToApplicants, updateApplicantStatus, subscribeToViewedApplicantIds, markApplicantViewed } from '../../../services/api/applicants';
-import { getHiringConfig } from '../../../services/api/hiringConfig';
+import { getHiringConfig, updateHiringConfig } from '../../../services/api/hiringConfig';
 import { RejectionDialog } from './RejectionDialog';
 import { useAuth } from '../../../contexts/AuthContext';
 import { ApplicantColumn } from './ApplicantColumn';
@@ -77,6 +77,8 @@ const HiringBoard: React.FC = () => {
   const [dragOverRejectionZone, setDragOverRejectionZone] = useState<string | null>(null);
   const [dragOverSubSection, setDragOverSubSection] = useState<string | null>(null);
   const [recruiterOutreachCount, setRecruiterOutreachCount] = useState<number | undefined>(undefined);
+  const [hiringFeesFrozen, setHiringFeesFrozen] = useState<boolean>(false);
+  const [hiringFeesFrozenAt, setHiringFeesFrozenAt] = useState<Date | undefined>(undefined);
   const dragOverRef = useRef<string | null>(null);
 
   // Outbound tab state
@@ -93,8 +95,27 @@ const HiringBoard: React.FC = () => {
   useEffect(() => {
     getHiringConfig().then((config) => {
       if (config.recruiterOutreachCount) setRecruiterOutreachCount(config.recruiterOutreachCount);
+      setHiringFeesFrozen(config.hiringFeesFrozen ?? false);
+      setHiringFeesFrozenAt(config.hiringFeesFrozenAt);
     });
   }, []);
+
+  const handleToggleHiringFeesFrozen = useCallback(async () => {
+    const nextFrozen = !hiringFeesFrozen;
+    const prevFrozenAt = hiringFeesFrozenAt;
+    const nextFrozenAt = nextFrozen ? new Date() : prevFrozenAt;
+    setHiringFeesFrozen(nextFrozen);
+    if (nextFrozen) setHiringFeesFrozenAt(nextFrozenAt);
+    try {
+      const payload: { hiringFeesFrozen: boolean; hiringFeesFrozenAt?: Date } = { hiringFeesFrozen: nextFrozen };
+      if (nextFrozen && nextFrozenAt) payload.hiringFeesFrozenAt = nextFrozenAt;
+      await updateHiringConfig(payload);
+    } catch (err) {
+      console.error('Failed to update hiring fees freeze state', err);
+      setHiringFeesFrozen(!nextFrozen);
+      setHiringFeesFrozenAt(prevFrozenAt);
+    }
+  }, [hiringFeesFrozen, hiringFeesFrozenAt]);
 
   // Subscribe to viewed applicant IDs
   useEffect(() => {
@@ -947,7 +968,15 @@ const HiringBoard: React.FC = () => {
       )}
 
       {/* Pipeline Funnel Stats — hidden in writing tests view */}
-      {activeView === 'board' && <PipelineFunnelStrip applicants={filteredApplicants} recruiterOutreachCount={recruiterOutreachCount} />}
+      {activeView === 'board' && (
+        <PipelineFunnelStrip
+          applicants={filteredApplicants}
+          recruiterOutreachCount={recruiterOutreachCount}
+          hiringFeesFrozen={hiringFeesFrozen}
+          hiringFeesFrozenAt={hiringFeesFrozenAt}
+          onToggleHiringFeesFrozen={handleToggleHiringFeesFrozen}
+        />
+      )}
 
       {/* Writing Tests Table View */}
       {activeView === 'writing_tests' && (

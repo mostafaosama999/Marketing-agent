@@ -47,8 +47,8 @@ function countPaidTests(applicants: Applicant[]): number {
   return applicants.filter((a) => a.paymentConfirmed === true).length;
 }
 
-export function calculateHiringCosts(applicants: Applicant[]): HiringCostBreakdown {
-  const now = new Date();
+export function calculateHiringCosts(applicants: Applicant[], referenceDate?: Date): HiringCostBreakdown {
+  const now = referenceDate ?? new Date();
   const channels: CostChannel[] = [];
 
   // Recruiting Platforms

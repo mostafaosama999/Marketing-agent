@@ -1,18 +1,21 @@
 import React, { useMemo, useState } from 'react';
 import { Box, Typography, Chip, Divider, Tooltip, Collapse, IconButton } from '@mui/material';
-import { ChevronRight as ChevronIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon } from '@mui/icons-material';
+import { ChevronRight as ChevronIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, PlayArrow as PlayIcon, Pause as PauseIcon } from '@mui/icons-material';
 import { Applicant, ApplicantStatus, RejectionStage, HIRING_STAGES, REJECTION_STAGE_LABELS } from '../../../types/applicant';
 import { calculateHiringCosts, formatUSD, CostCategory } from '../../../utils/hiringCosts';
 
 interface PipelineFunnelStripProps {
   applicants: Applicant[];
   recruiterOutreachCount?: number;
+  hiringFeesFrozen?: boolean;
+  hiringFeesFrozenAt?: Date;
+  onToggleHiringFeesFrozen?: () => void;
 }
 
 // Responded is merged into Writing Test, so exclude from funnel
 const FUNNEL_STAGES: ApplicantStatus[] = ['applied', 'shortlisted', 'test_task', 'interview', 'hired'];
 
-export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applicants, recruiterOutreachCount }) => {
+export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applicants, recruiterOutreachCount, hiringFeesFrozen, hiringFeesFrozenAt, onToggleHiringFeesFrozen }) => {
   const stageCounts = useMemo(() => {
     const counts: Record<ApplicantStatus, number> = {
       ai_rejected: 0, backlog: 0, applied: 0, shortlisted: 0, test_task: 0, not_responded: 0,
@@ -55,7 +58,10 @@ export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applic
     return { items, total: wtTotal };
   }, [stageCounts, applicants]);
 
-  const costs = useMemo(() => calculateHiringCosts(applicants), [applicants]);
+  const costs = useMemo(
+    () => calculateHiringCosts(applicants, hiringFeesFrozen && hiringFeesFrozenAt ? hiringFeesFrozenAt : undefined),
+    [applicants, hiringFeesFrozen, hiringFeesFrozenAt]
+  );
 
   const recruiterStats = useMemo(() => {
     const sourced = applicants.filter((a) => a.recruiterSourced);
@@ -323,7 +329,14 @@ export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applic
       <Collapse in={statsExpanded} timeout={300}>
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1, mt: 1 }}>
           {/* Cost Breakdown Strip */}
-          <CostBreakdownStrip costs={costs} costGroups={COST_GROUPS} paidTestCount={costs.paidTestCount} />
+          <CostBreakdownStrip
+            costs={costs}
+            costGroups={COST_GROUPS}
+            paidTestCount={costs.paidTestCount}
+            hiringFeesFrozen={hiringFeesFrozen}
+            hiringFeesFrozenAt={hiringFeesFrozenAt}
+            onToggleHiringFeesFrozen={onToggleHiringFeesFrozen}
+          />
 
           {/* Recruiter ROI Strip */}
           {recruiterStats.sourcedTotal > 0 && (
@@ -346,7 +359,14 @@ function abbreviateChannelName(name: string): string {
 }
 
 /* ── Cost Breakdown Strip (extracted for Collapse) ── */
-const CostBreakdownStrip: React.FC<{ costs: any; costGroups: any[]; paidTestCount: number }> = ({ costs, costGroups, paidTestCount }) => (
+const CostBreakdownStrip: React.FC<{
+  costs: any;
+  costGroups: any[];
+  paidTestCount: number;
+  hiringFeesFrozen?: boolean;
+  hiringFeesFrozenAt?: Date;
+  onToggleHiringFeesFrozen?: () => void;
+}> = ({ costs, costGroups, paidTestCount, hiringFeesFrozen, hiringFeesFrozenAt, onToggleHiringFeesFrozen }) => (
   <Box
     sx={{
       px: 3,
@@ -366,7 +386,9 @@ const CostBreakdownStrip: React.FC<{ costs: any; costGroups: any[]; paidTestCoun
         px: 2.5,
         py: 1.25,
         borderRadius: 2,
-        background: 'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)',
+        background: hiringFeesFrozen
+          ? 'linear-gradient(135deg, #94a3b8 0%, #64748b 100%)'
+          : 'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -378,9 +400,44 @@ const CostBreakdownStrip: React.FC<{ costs: any; costGroups: any[]; paidTestCoun
         {formatUSD(costs.totalUSD)}
       </Typography>
       <Typography sx={{ fontSize: '10px', fontWeight: 600, color: 'rgba(255,255,255,0.82)', mt: 0.5, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-        Total Cost
+        {hiringFeesFrozen ? 'Frozen Total' : 'Total Cost'}
       </Typography>
     </Box>
+
+    {/* Freeze / Resume toggle */}
+    {onToggleHiringFeesFrozen && (
+      <Tooltip
+        arrow
+        title={
+          hiringFeesFrozen
+            ? `Frozen${hiringFeesFrozenAt ? ` at ${hiringFeesFrozenAt.toLocaleDateString()}` : ''} — click to resume daily accrual`
+            : 'Click to freeze hiring fees (stops daily accrual)'
+        }
+      >
+        <IconButton
+          onClick={onToggleHiringFeesFrozen}
+          size="small"
+          sx={{
+            ml: 1.5,
+            border: `1px solid ${hiringFeesFrozen ? '#10b981' : '#cbd5e1'}`,
+            borderRadius: 1.5,
+            px: 1,
+            py: 0.5,
+            color: hiringFeesFrozen ? '#10b981' : '#ef4444',
+            background: hiringFeesFrozen ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.06)',
+            transition: 'all 0.15s',
+            '&:hover': {
+              background: hiringFeesFrozen ? 'rgba(16,185,129,0.14)' : 'rgba(239,68,68,0.12)',
+            },
+          }}
+        >
+          {hiringFeesFrozen ? <PlayIcon sx={{ fontSize: 16 }} /> : <PauseIcon sx={{ fontSize: 16 }} />}
+          <Typography sx={{ fontSize: '10px', fontWeight: 700, ml: 0.5, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            {hiringFeesFrozen ? 'Resume' : 'Freeze'}
+          </Typography>
+        </IconButton>
+      </Tooltip>
+    )}
 
     <Divider orientation="vertical" flexItem sx={{ mx: 2.5, my: 0.5 }} />
 
