@@ -76,7 +76,8 @@ export type ServiceType =
   | "blog-audit"
   | "website-discovery"
   | "applicant-profile-parse"
-  | "applicant-ai-score";
+  | "applicant-ai-score"
+  | "applicant-linkedin-enrichment";
 
 export interface ApiCostRecord {
   userId: string;
@@ -136,6 +137,7 @@ const SERVICE_TO_CATEGORY: Record<string, string> = {
   "blog-audit": "blogAudit",
   "applicant-profile-parse": "hiring",
   "applicant-ai-score": "hiring",
+  "applicant-linkedin-enrichment": "hiring",
 };
 
 /**

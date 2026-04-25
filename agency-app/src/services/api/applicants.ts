@@ -92,6 +92,10 @@ function convertToApplicant(id: string, data: any): Applicant {
             : undefined,
         }
       : undefined,
+    apifyEnrichment: data.apifyEnrichment ?? null,
+    enrichmentStatus: data.enrichmentStatus ?? undefined,
+    enrichmentError: data.enrichmentError ?? null,
+    enrichmentScrapedAt: safeToDate(data.enrichmentScrapedAt) ?? null,
   };
 }
 

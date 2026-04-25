@@ -389,6 +389,129 @@ export const ApplicantDetailDialog: React.FC<ApplicantDetailDialogProps> = ({
           );
         })()}
 
+        {/* Verified LinkedIn Profile (Apify enrichment) */}
+        {(applicant.enrichmentStatus || applicant.apifyEnrichment) && (() => {
+          const status = applicant.enrichmentStatus;
+          const profile = applicant.apifyEnrichment as Record<string, any> | null | undefined;
+
+          if (status === 'skipped_no_url' || status === 'skipped_invalid_url') {
+            return (
+              <Box sx={{ mb: 3, p: 1.5, borderRadius: 2, background: '#f1f5f9', border: '1px solid #e2e8f0' }}>
+                <Typography sx={{ fontSize: '11px', color: '#64748b' }}>
+                  No valid LinkedIn URL provided — scored on form data only.
+                </Typography>
+              </Box>
+            );
+          }
+          if (status === 'skipped_no_token') {
+            return (
+              <Box sx={{ mb: 3, p: 1.5, borderRadius: 2, background: '#fef3c7', border: '1px solid #fde68a' }}>
+                <Typography sx={{ fontSize: '11px', color: '#92400e' }}>
+                  Apify token not configured — LinkedIn enrichment skipped.
+                </Typography>
+              </Box>
+            );
+          }
+          if (status === 'failed') {
+            return (
+              <Box sx={{ mb: 3, p: 1.5, borderRadius: 2, background: '#fef3c7', border: '1px solid #fde68a' }} title={applicant.enrichmentError || ''}>
+                <Typography sx={{ fontSize: '11px', color: '#92400e' }}>
+                  LinkedIn enrichment failed — scored on form data only. {applicant.enrichmentError ? `(${String(applicant.enrichmentError).slice(0, 120)})` : ''}
+                </Typography>
+              </Box>
+            );
+          }
+          if (status !== 'enriched' || !profile) return null;
+
+          const claimedEdu = (applicant.education || '').trim().toLowerCase();
+          const verifiedEdu: any[] = Array.isArray(profile.education) ? profile.education : [];
+          const eduMismatch = claimedEdu.length > 0 && verifiedEdu.length > 0 && !verifiedEdu.some((e) => {
+            const school = String(e.schoolName || e.school || '').toLowerCase();
+            if (!school) return false;
+            return school.includes(claimedEdu) || claimedEdu.includes(school);
+          });
+
+          const verifiedExp: any[] = Array.isArray(profile.experience) ? profile.experience : [];
+          const langs: any[] = Array.isArray(profile.languages) ? profile.languages : [];
+          const followers = typeof profile.followers === 'number' ? profile.followers : null;
+          const loc = profile.location?.parsed || profile.location || null;
+          const locStr = loc ? [loc.city || loc.locality, loc.country || loc.countryName].filter(Boolean).join(', ') : '';
+          const headline = profile.headline ? String(profile.headline) : '';
+
+          return (
+            <Box sx={{ mb: 3, p: 2.5, borderRadius: 2, background: '#f8fafc', border: '1px solid #e2e8f0' }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 1.5 }}>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <LinkedInIcon sx={{ fontSize: 18, color: '#0a66c2' }} />
+                  <Typography sx={{ fontSize: '11px', fontWeight: 700, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: 1 }}>
+                    Verified LinkedIn Profile
+                  </Typography>
+                  <Chip label="Apify" size="small" sx={{ fontSize: '9px', fontWeight: 700, height: 18, bgcolor: '#e0e7ff', color: '#4338ca' }} />
+                  {eduMismatch && (
+                    <Chip label="UNIVERSITY MISMATCH" size="small" sx={{ fontSize: '9px', fontWeight: 800, height: 18, bgcolor: '#fee2e2', color: '#dc2626', border: '1px solid #fecaca' }} />
+                  )}
+                </Box>
+                {applicant.enrichmentScrapedAt && (
+                  <Typography sx={{ fontSize: '10px', color: '#94a3b8' }}>
+                    {applicant.enrichmentScrapedAt.toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })}
+                  </Typography>
+                )}
+              </Box>
+
+              {headline && (
+                <Typography sx={{ fontSize: '12px', color: '#475569', mb: 1, fontStyle: 'italic' }}>
+                  {headline}
+                </Typography>
+              )}
+
+              <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 1.5 }}>
+                {locStr && <Chip label={locStr} size="small" sx={{ fontSize: '10px', height: 22, bgcolor: '#fff', border: '1px solid #cbd5e1' }} />}
+                {followers !== null && <Chip label={`${followers.toLocaleString()} followers`} size="small" sx={{ fontSize: '10px', height: 22, bgcolor: '#fff', border: '1px solid #cbd5e1' }} />}
+                {langs.slice(0, 4).map((l, i) => (
+                  <Chip key={i} label={`${l.name || l.language || ''}${l.proficiency ? ` (${l.proficiency})` : ''}`} size="small" sx={{ fontSize: '10px', height: 22, bgcolor: '#fff', border: '1px solid #cbd5e1' }} />
+                ))}
+              </Box>
+
+              {verifiedEdu.length > 0 && (
+                <Box sx={{ mb: 1.5 }}>
+                  <Typography sx={{ fontSize: '10px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, mb: 0.5 }}>Education</Typography>
+                  {verifiedEdu.slice(0, 3).map((e, i) => {
+                    const school = e.schoolName || e.school || '';
+                    const degree = e.degree || '';
+                    const field = e.fieldOfStudy || e.field || '';
+                    return (
+                      <Typography key={i} sx={{ fontSize: '11px', color: '#334155', lineHeight: 1.6 }}>
+                        • <strong>{school}</strong>{degree ? ` — ${degree}` : ''}{field ? `, ${field}` : ''}
+                      </Typography>
+                    );
+                  })}
+                  {claimedEdu && (
+                    <Typography sx={{ fontSize: '10px', color: eduMismatch ? '#dc2626' : '#16a34a', mt: 0.5 }}>
+                      Claimed on form: <strong>{applicant.education}</strong>{eduMismatch ? ' ✗' : ' ✓'}
+                    </Typography>
+                  )}
+                </Box>
+              )}
+
+              {verifiedExp.length > 0 && (
+                <Box>
+                  <Typography sx={{ fontSize: '10px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5, mb: 0.5 }}>Experience (most recent)</Typography>
+                  {verifiedExp.slice(0, 3).map((x, i) => {
+                    const title = x.title || x.position || '';
+                    const company = x.companyName || x.company || '';
+                    const duration = x.duration || [x.startDate, x.endDate || 'Present'].filter(Boolean).join(' – ');
+                    return (
+                      <Typography key={i} sx={{ fontSize: '11px', color: '#334155', lineHeight: 1.6 }}>
+                        • <strong>{title}</strong>{company ? ` @ ${company}` : ''}{duration ? ` (${duration})` : ''}
+                      </Typography>
+                    );
+                  })}
+                </Box>
+              )}
+            </Box>
+          );
+        })()}
+
         {/* Editable Key Info */}
         <Box sx={{ display: 'flex', gap: 2, mb: 3, flexWrap: 'wrap' }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, px: 2, py: 0.5, borderRadius: 2, background: '#f1f5f9', border: '1px solid #e2e8f0' }}>

@@ -84,6 +84,10 @@ export interface Applicant {
       templateName?: string;
     };
   };
+  apifyEnrichment?: Record<string, any> | null;
+  enrichmentStatus?: 'enriched' | 'skipped_no_url' | 'skipped_invalid_url' | 'skipped_no_token' | 'failed';
+  enrichmentError?: string | null;
+  enrichmentScrapedAt?: Date | null;
 }
 
 export interface ApplicantFormData {

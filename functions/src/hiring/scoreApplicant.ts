@@ -1,7 +1,8 @@
 import * as functions from "firebase-functions";
 import * as admin from "firebase-admin";
 import OpenAI from "openai";
-import {logApiCost, calculateCost, extractTokenUsage} from "../utils/costTracker";
+import {logApiCost, calculateCost, extractTokenUsage, CostInfo} from "../utils/costTracker";
+import {enrichLinkedInProfile, buildLinkedInProfileBlock} from "./enrichLinkedInProfile";
 
 // Approved universities — exactly the 13 the user specified.
 // Uses ONE boundary-aware regex so short acronyms (auc, bue, aast, msa)
@@ -101,13 +102,21 @@ Over-qualified check: 3+ years at top-tier companies (Instabug, Swvl, Vodafone, 
 - Teaching/TA/mentoring experience
 - Published technical content with links
 - Specific LLM/AI framework with implementation details
-- Active LinkedIn with technical content
+- Active LinkedIn with technical content (verified followers >= 500 OR a founder/co-founder role at an active company counts here)
 
 **Instant Reject Triggers** (cap score 0-1):
 - 3+ questions with single characters/words
 - Non-Cairo/Alexandria with no recognized university
 - Non-technical background, no engineering skills
 - Bio or Role Fit answer under 15 words
+
+**LinkedIn Cross-Check Rules** (apply ONLY when a "Verified LinkedIn Profile" block is present below):
+- If the verified \`education[].schoolName\` does NOT match the candidate's claimed Education field (case-insensitive substring match either direction is acceptable), add red flag "Claimed university does not match LinkedIn" and CAP Dimension 1 (Location & University Fit) at 0.5.
+- For Dimension 2 (Engineering Experience), trust the verified \`experience[]\` over the form claim. Multi-year tenures, founder roles, and named recognized companies count as 2.0+. If the form claims experience but the LinkedIn shows no employment history, cap Dimension 2 at 1.0 and add red flag "Claimed experience not visible on LinkedIn".
+- Active founder / co-founder role at an active company OR followers >= 500 = qualifies for the LinkedIn bonus signal (within the existing 1.0 bonus cap).
+- Verified location must be Cairo / Giza / Alexandria for full Dimension 1 credit; if LinkedIn shows another country, cap Dimension 1 at 1.0.
+
+If NO Verified LinkedIn Profile block is present, score from form data only (do not penalize for the absence — enrichment may have been skipped).
 
 **Tiers**: 8-10 ADVANCE, 5-7 REVIEW, 3-4 HOLD, 0-2 REJECT
 
@@ -131,7 +140,7 @@ Return a JSON object with exactly these fields:
 }`;
 
 export const scoreApplicantOnCreate = functions
-  .runWith({timeoutSeconds: 60, memory: "256MB"})
+  .runWith({timeoutSeconds: 300, memory: "512MB"})
   .firestore.document("applicants/{applicantId}")
   .onCreate(async (snap) => {
     const data = snap.data();
@@ -185,6 +194,39 @@ export const scoreApplicantOnCreate = functions
       return;
     }
 
+    // Apify LinkedIn enrichment — runs before scoring so the GPT prompt sees
+    // verified profile data. Soft dependency: any failure falls back to
+    // form-only scoring rather than blocking the trigger.
+    const apifyToken = functions.config().apify?.token || process.env.APIFY_TOKEN;
+    const enrichment = await enrichLinkedInProfile(data.linkedInUrl || "", apifyToken);
+
+    let enrichmentBlock = "";
+    if (enrichment.status === "enriched") {
+      enrichmentBlock = `\n\n${buildLinkedInProfileBlock(enrichment.data)}`;
+      // Log Apify cost into the same hiring bucket as GPT scoring.
+      const costInfo: CostInfo = {
+        inputTokens: 0,
+        outputTokens: 0,
+        totalTokens: 0,
+        inputCost: 0,
+        outputCost: enrichment.costUsd,
+        totalCost: enrichment.costUsd,
+        model: "apify-harvestapi-linkedin-profile-scraper",
+      };
+      await logApiCost("system-ai-scorer", "applicant-linkedin-enrichment", costInfo, {
+        operationDetails: {
+          applicantId,
+          applicantName: data.name,
+          linkedInUrl: data.linkedInUrl,
+        },
+      });
+      console.log(`Apify enriched applicant ${applicantId} ($${enrichment.costUsd})`);
+    } else {
+      console.log(`Apify enrichment for ${applicantId}: ${enrichment.status}${
+        enrichment.status === "failed" ? ` — ${enrichment.error}` : ""
+      }`);
+    }
+
     try {
       const openai = new OpenAI({apiKey: openaiApiKey});
 
@@ -207,7 +249,7 @@ LinkedIn: ${data.linkedInUrl || "Not provided"}
 Bio: ${data.bio || "Not provided"}
 
 Form Answers:
-${formAnswersText}`;
+${formAnswersText}${enrichmentBlock}`;
 
       const completion = await openai.chat.completions.create({
         model: "gpt-4o-mini",
@@ -261,6 +303,12 @@ ${formAnswersText}`;
 
       const update: Record<string, unknown> = {
         aiScore,
+        enrichmentStatus: enrichment.status,
+        apifyEnrichment: enrichment.status === "enriched" ? enrichment.data : null,
+        enrichmentError: enrichment.status === "failed" ? enrichment.error : null,
+        enrichmentScrapedAt: enrichment.status === "enriched"
+          ? admin.firestore.FieldValue.serverTimestamp()
+          : null,
         updatedAt: admin.firestore.FieldValue.serverTimestamp(),
       };
       if (safeTier === "REJECT") update.status = "ai_rejected";
