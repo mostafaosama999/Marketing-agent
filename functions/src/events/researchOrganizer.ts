@@ -7,9 +7,11 @@ import OpenAI from "openai";
 const USER_AGENT =
   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36";
 
-const openai = new OpenAI({
-  apiKey: functions.config().openai?.key || process.env.OPENAI_API_KEY,
-});
+function getOpenAI(): OpenAI {
+  return new OpenAI({
+    apiKey: functions.config().openai?.key || process.env.OPENAI_API_KEY,
+  });
+}
 
 interface OrganizerResearch {
   organizerName: string;
@@ -225,7 +227,7 @@ async function runResearch(params: {
   userPrompt += `\nProvide your research as a JSON object.`;
 
   // Step 3: Call OpenAI
-  const completion = await openai.chat.completions.create({
+  const completion = await getOpenAI().chat.completions.create({
     model: "gpt-4o-mini",
     messages: [
       {role: "system", content: SYSTEM_PROMPT},
