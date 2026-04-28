@@ -5,7 +5,18 @@ const EGP_TO_USD = 50.5;
 export type CostCategory = 'platforms' | 'hr' | 'writing-tests';
 export type CostChannelStatus = 'closed' | 'recurring' | 'per-event';
 
+export const FREEZABLE_CHANNEL_KEYS = ['wuzzuf', 'linkedin-v2', 'upwork-recruiter'] as const;
+export type FreezableChannelKey = typeof FREEZABLE_CHANNEL_KEYS[number];
+
+export interface ChannelFreezeState {
+  frozen: boolean;
+  frozenAt?: Date;
+}
+
+export type ChannelFreezeMap = Partial<Record<FreezableChannelKey, ChannelFreezeState>>;
+
 export interface CostChannel {
+  key: string;
   name: string;
   category: CostCategory;
   amountUSD: number;
@@ -14,6 +25,9 @@ export interface CostChannel {
   status: CostChannelStatus;
   elapsed?: string;
   eventCount?: number;
+  freezable?: boolean;
+  frozen?: boolean;
+  frozenAt?: Date;
 }
 
 export interface HiringCostBreakdown {
@@ -47,14 +61,22 @@ function countPaidTests(applicants: Applicant[]): number {
   return applicants.filter((a) => a.paymentConfirmed === true).length;
 }
 
-export function calculateHiringCosts(applicants: Applicant[], referenceDate?: Date): HiringCostBreakdown {
-  const now = referenceDate ?? new Date();
+export function calculateHiringCosts(applicants: Applicant[], freezes?: ChannelFreezeMap): HiringCostBreakdown {
+  const now = new Date();
+  const referenceFor = (key: FreezableChannelKey): Date => {
+    const state = freezes?.[key];
+    return state?.frozen && state.frozenAt ? state.frozenAt : now;
+  };
+  const isFrozen = (key: FreezableChannelKey): boolean => freezes?.[key]?.frozen === true;
+  const frozenAtFor = (key: FreezableChannelKey): Date | undefined => freezes?.[key]?.frozenAt;
+
   const channels: CostChannel[] = [];
 
   // Recruiting Platforms
   // LinkedIn Job Post V1 — one-off, 7100 EGP
   const linkedinV1USD = 7100 / EGP_TO_USD;
   channels.push({
+    key: 'linkedin-v1',
     name: 'LinkedIn Job Post V1',
     category: 'platforms',
     amountUSD: linkedinV1USD,
@@ -65,9 +87,11 @@ export function calculateHiringCosts(applicants: Applicant[], referenceDate?: Da
 
   // Wuzzuf — $270/month, started March 28, 2026
   const wuzzufStart = new Date('2026-03-28');
-  const wuzzufMonths = monthsSince(wuzzufStart, now);
+  const wuzzufNow = referenceFor('wuzzuf');
+  const wuzzufMonths = monthsSince(wuzzufStart, wuzzufNow);
   const wuzzufUSD = wuzzufMonths * 270;
   channels.push({
+    key: 'wuzzuf',
     name: 'Wuzzuf',
     category: 'platforms',
     amountUSD: wuzzufUSD,
@@ -75,13 +99,18 @@ export function calculateHiringCosts(applicants: Applicant[], referenceDate?: Da
     unitRate: '$270/mo',
     status: 'recurring',
     elapsed: `${wuzzufMonths} mo`,
+    freezable: true,
+    frozen: isFrozen('wuzzuf'),
+    frozenAt: frozenAtFor('wuzzuf'),
   });
 
   // LinkedIn Job Post V2 — 1,000 EGP/day, started April 1, 2026
   const linkedinV2Start = new Date('2026-04-01');
-  const linkedinV2Days = daysSince(linkedinV2Start, now);
+  const linkedinV2Now = referenceFor('linkedin-v2');
+  const linkedinV2Days = daysSince(linkedinV2Start, linkedinV2Now);
   const linkedinV2USD = (linkedinV2Days * 1000) / EGP_TO_USD;
   channels.push({
+    key: 'linkedin-v2',
     name: 'LinkedIn Job Post V2',
     category: 'platforms',
     amountUSD: linkedinV2USD,
@@ -89,14 +118,19 @@ export function calculateHiringCosts(applicants: Applicant[], referenceDate?: Da
     unitRate: `${formatUSD(1000 / EGP_TO_USD)}/day`,
     status: 'recurring',
     elapsed: `${linkedinV2Days}d`,
+    freezable: true,
+    frozen: isFrozen('linkedin-v2'),
+    frozenAt: frozenAtFor('linkedin-v2'),
   });
 
   // Human Resources
   // Upwork Recruiter — $100/week, started March 22, 2026
   const upworkStart = new Date('2026-03-22');
-  const upworkWeeks = weeksSince(upworkStart, now);
+  const upworkNow = referenceFor('upwork-recruiter');
+  const upworkWeeks = weeksSince(upworkStart, upworkNow);
   const upworkUSD = upworkWeeks * 100;
   channels.push({
+    key: 'upwork-recruiter',
     name: 'Upwork Recruiter',
     category: 'hr',
     amountUSD: upworkUSD,
@@ -104,6 +138,9 @@ export function calculateHiringCosts(applicants: Applicant[], referenceDate?: Da
     unitRate: '$100/wk',
     status: 'recurring',
     elapsed: `${upworkWeeks} wks`,
+    freezable: true,
+    frozen: isFrozen('upwork-recruiter'),
+    frozenAt: frozenAtFor('upwork-recruiter'),
   });
 
   // Writing Tests
@@ -111,6 +148,7 @@ export function calculateHiringCosts(applicants: Applicant[], referenceDate?: Da
   const paidTestCount = countPaidTests(applicants);
   const paidTestsUSD = (paidTestCount * 1000) / EGP_TO_USD;
   channels.push({
+    key: 'paid-tests',
     name: 'Paid Writing Tests',
     category: 'writing-tests',
     amountUSD: paidTestsUSD,

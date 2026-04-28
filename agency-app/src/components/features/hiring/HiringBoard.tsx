@@ -4,7 +4,8 @@ import { Box, Typography, Button, Snackbar, Alert, CircularProgress, Select, Men
 import { Upload as UploadIcon, FilterList as FilterIcon, PersonAdd as PersonAddIcon, Search as SearchIcon, ViewKanban as ViewKanbanIcon, TableChart as TableChartIcon, BarChart as BarChartIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, Campaign as CampaignIcon } from '@mui/icons-material';
 import { Applicant, ApplicantStatus, RejectionStage, HIRING_STAGES } from '../../../types/applicant';
 import { subscribeToApplicants, updateApplicantStatus, subscribeToViewedApplicantIds, markApplicantViewed } from '../../../services/api/applicants';
-import { getHiringConfig, updateHiringConfig } from '../../../services/api/hiringConfig';
+import { getHiringConfig, updateChannelFreezes, buildAllFrozenMap, buildAllResumedMap, isAllFrozen } from '../../../services/api/hiringConfig';
+import { ChannelFreezeMap, FreezableChannelKey } from '../../../utils/hiringCosts';
 import { RejectionDialog } from './RejectionDialog';
 import { useAuth } from '../../../contexts/AuthContext';
 import { ApplicantColumn } from './ApplicantColumn';
@@ -77,8 +78,7 @@ const HiringBoard: React.FC = () => {
   const [dragOverRejectionZone, setDragOverRejectionZone] = useState<string | null>(null);
   const [dragOverSubSection, setDragOverSubSection] = useState<string | null>(null);
   const [recruiterOutreachCount, setRecruiterOutreachCount] = useState<number | undefined>(undefined);
-  const [hiringFeesFrozen, setHiringFeesFrozen] = useState<boolean>(false);
-  const [hiringFeesFrozenAt, setHiringFeesFrozenAt] = useState<Date | undefined>(undefined);
+  const [channelFreezes, setChannelFreezes] = useState<ChannelFreezeMap>({});
   const dragOverRef = useRef<string | null>(null);
 
   // Outbound tab state
@@ -91,31 +91,40 @@ const HiringBoard: React.FC = () => {
   const [dmTemplates, setDmTemplates] = useState<LinkedInDmTemplate[]>([]);
   const [defaultDmTemplateId, setDefaultDmTemplateId] = useState<string | null>(null);
 
-  // Fetch recruiter outreach count from hiring config
+  // Fetch recruiter outreach count + per-channel freeze state from hiring config
   useEffect(() => {
     getHiringConfig().then((config) => {
       if (config.recruiterOutreachCount) setRecruiterOutreachCount(config.recruiterOutreachCount);
-      setHiringFeesFrozen(config.hiringFeesFrozen ?? false);
-      setHiringFeesFrozenAt(config.hiringFeesFrozenAt);
+      if (config.channelFreezes) setChannelFreezes(config.channelFreezes);
     });
   }, []);
 
-  const handleToggleHiringFeesFrozen = useCallback(async () => {
-    const nextFrozen = !hiringFeesFrozen;
-    const prevFrozenAt = hiringFeesFrozenAt;
-    const nextFrozenAt = nextFrozen ? new Date() : prevFrozenAt;
-    setHiringFeesFrozen(nextFrozen);
-    if (nextFrozen) setHiringFeesFrozenAt(nextFrozenAt);
+  const persistChannelFreezes = useCallback(async (next: ChannelFreezeMap, prev: ChannelFreezeMap) => {
+    setChannelFreezes(next);
     try {
-      const payload: { hiringFeesFrozen: boolean; hiringFeesFrozenAt?: Date } = { hiringFeesFrozen: nextFrozen };
-      if (nextFrozen && nextFrozenAt) payload.hiringFeesFrozenAt = nextFrozenAt;
-      await updateHiringConfig(payload);
+      await updateChannelFreezes(next);
     } catch (err) {
-      console.error('Failed to update hiring fees freeze state', err);
-      setHiringFeesFrozen(!nextFrozen);
-      setHiringFeesFrozenAt(prevFrozenAt);
+      console.error('Failed to update channel freeze state', err);
+      setChannelFreezes(prev);
     }
-  }, [hiringFeesFrozen, hiringFeesFrozenAt]);
+  }, []);
+
+  const handleToggleChannelFreeze = useCallback((key: FreezableChannelKey) => {
+    const prev = channelFreezes;
+    const current = prev[key];
+    // Resume → drop frozenAt entirely. Freeze → always stamp `now` so re-freezing after resume doesn't replay stale time.
+    const nextEntry = current?.frozen
+      ? { frozen: false }
+      : { frozen: true, frozenAt: new Date() };
+    const next: ChannelFreezeMap = { ...prev, [key]: nextEntry };
+    void persistChannelFreezes(next, prev);
+  }, [channelFreezes, persistChannelFreezes]);
+
+  const handleToggleAllFreezes = useCallback(() => {
+    const prev = channelFreezes;
+    const next = isAllFrozen(prev) ? buildAllResumedMap() : buildAllFrozenMap(new Date(), prev);
+    void persistChannelFreezes(next, prev);
+  }, [channelFreezes, persistChannelFreezes]);
 
   // Subscribe to viewed applicant IDs
   useEffect(() => {
@@ -972,9 +981,9 @@ const HiringBoard: React.FC = () => {
         <PipelineFunnelStrip
           applicants={filteredApplicants}
           recruiterOutreachCount={recruiterOutreachCount}
-          hiringFeesFrozen={hiringFeesFrozen}
-          hiringFeesFrozenAt={hiringFeesFrozenAt}
-          onToggleHiringFeesFrozen={handleToggleHiringFeesFrozen}
+          channelFreezes={channelFreezes}
+          onToggleChannelFreeze={handleToggleChannelFreeze}
+          onToggleAllFreezes={handleToggleAllFreezes}
         />
       )}
 

@@ -2,20 +2,28 @@ import React, { useMemo, useState } from 'react';
 import { Box, Typography, Chip, Divider, Tooltip, Collapse, IconButton } from '@mui/material';
 import { ChevronRight as ChevronIcon, ExpandMore as ExpandMoreIcon, ExpandLess as ExpandLessIcon, PlayArrow as PlayIcon, Pause as PauseIcon } from '@mui/icons-material';
 import { Applicant, ApplicantStatus, RejectionStage, HIRING_STAGES, REJECTION_STAGE_LABELS } from '../../../types/applicant';
-import { calculateHiringCosts, formatUSD, CostCategory } from '../../../utils/hiringCosts';
+import { calculateHiringCosts, formatUSD, CostCategory, ChannelFreezeMap, FreezableChannelKey, FREEZABLE_CHANNEL_KEYS } from '../../../utils/hiringCosts';
 
 interface PipelineFunnelStripProps {
   applicants: Applicant[];
   recruiterOutreachCount?: number;
-  hiringFeesFrozen?: boolean;
-  hiringFeesFrozenAt?: Date;
-  onToggleHiringFeesFrozen?: () => void;
+  channelFreezes?: ChannelFreezeMap;
+  onToggleChannelFreeze?: (key: FreezableChannelKey) => void;
+  onToggleAllFreezes?: () => void;
 }
 
 // Responded is merged into Writing Test, so exclude from funnel
 const FUNNEL_STAGES: ApplicantStatus[] = ['applied', 'shortlisted', 'test_task', 'interview', 'hired'];
 
-export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applicants, recruiterOutreachCount, hiringFeesFrozen, hiringFeesFrozenAt, onToggleHiringFeesFrozen }) => {
+export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applicants, recruiterOutreachCount, channelFreezes, onToggleChannelFreeze, onToggleAllFreezes }) => {
+  const allFrozen = useMemo(
+    () => FREEZABLE_CHANNEL_KEYS.every((k) => channelFreezes?.[k]?.frozen === true),
+    [channelFreezes]
+  );
+  const anyFrozen = useMemo(
+    () => FREEZABLE_CHANNEL_KEYS.some((k) => channelFreezes?.[k]?.frozen === true),
+    [channelFreezes]
+  );
   const stageCounts = useMemo(() => {
     const counts: Record<ApplicantStatus, number> = {
       ai_rejected: 0, backlog: 0, applied: 0, shortlisted: 0, test_task: 0, not_responded: 0,
@@ -59,8 +67,8 @@ export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applic
   }, [stageCounts, applicants]);
 
   const costs = useMemo(
-    () => calculateHiringCosts(applicants, hiringFeesFrozen && hiringFeesFrozenAt ? hiringFeesFrozenAt : undefined),
-    [applicants, hiringFeesFrozen, hiringFeesFrozenAt]
+    () => calculateHiringCosts(applicants, channelFreezes),
+    [applicants, channelFreezes]
   );
 
   const recruiterStats = useMemo(() => {
@@ -335,9 +343,10 @@ export const PipelineFunnelStrip: React.FC<PipelineFunnelStripProps> = ({ applic
             costs={costs}
             costGroups={COST_GROUPS}
             paidTestCount={costs.paidTestCount}
-            hiringFeesFrozen={hiringFeesFrozen}
-            hiringFeesFrozenAt={hiringFeesFrozenAt}
-            onToggleHiringFeesFrozen={onToggleHiringFeesFrozen}
+            allFrozen={allFrozen}
+            anyFrozen={anyFrozen}
+            onToggleAllFreezes={onToggleAllFreezes}
+            onToggleChannelFreeze={onToggleChannelFreeze}
           />
 
           {/* Recruiter ROI Strip */}
@@ -365,10 +374,11 @@ const CostBreakdownStrip: React.FC<{
   costs: any;
   costGroups: any[];
   paidTestCount: number;
-  hiringFeesFrozen?: boolean;
-  hiringFeesFrozenAt?: Date;
-  onToggleHiringFeesFrozen?: () => void;
-}> = ({ costs, costGroups, paidTestCount, hiringFeesFrozen, hiringFeesFrozenAt, onToggleHiringFeesFrozen }) => (
+  allFrozen?: boolean;
+  anyFrozen?: boolean;
+  onToggleAllFreezes?: () => void;
+  onToggleChannelFreeze?: (key: FreezableChannelKey) => void;
+}> = ({ costs, costGroups, paidTestCount, allFrozen, anyFrozen, onToggleAllFreezes, onToggleChannelFreeze }) => (
   <Box
     sx={{
       px: 3,
@@ -388,9 +398,11 @@ const CostBreakdownStrip: React.FC<{
         px: 2.5,
         py: 1.25,
         borderRadius: 2,
-        background: hiringFeesFrozen
+        background: allFrozen
           ? 'linear-gradient(135deg, #94a3b8 0%, #64748b 100%)'
-          : 'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)',
+          : anyFrozen
+            ? 'linear-gradient(135deg, #f59e0b 0%, #94a3b8 100%)'
+            : 'linear-gradient(135deg, #f59e0b 0%, #ef4444 100%)',
         display: 'flex',
         flexDirection: 'column',
         alignItems: 'center',
@@ -402,40 +414,42 @@ const CostBreakdownStrip: React.FC<{
         {formatUSD(costs.totalUSD)}
       </Typography>
       <Typography sx={{ fontSize: '10px', fontWeight: 600, color: 'rgba(255,255,255,0.82)', mt: 0.5, letterSpacing: '0.04em', textTransform: 'uppercase' }}>
-        {hiringFeesFrozen ? 'Frozen Total' : 'Total Cost'}
+        {allFrozen ? 'Frozen Total' : anyFrozen ? 'Partial Freeze' : 'Total Cost'}
       </Typography>
     </Box>
 
-    {/* Freeze / Resume toggle */}
-    {onToggleHiringFeesFrozen && (
+    {/* Master Freeze All / Resume All toggle */}
+    {onToggleAllFreezes && (
       <Tooltip
         arrow
         title={
-          hiringFeesFrozen
-            ? `Frozen${hiringFeesFrozenAt ? ` at ${hiringFeesFrozenAt.toLocaleDateString()}` : ''} — click to resume daily accrual`
-            : 'Click to freeze hiring fees (stops daily accrual)'
+          allFrozen
+            ? 'Resume daily accrual for all platforms'
+            : anyFrozen
+              ? 'Freeze all remaining platforms (already-frozen platforms keep their freeze date)'
+              : 'Freeze all platforms — stops daily accrual'
         }
       >
         <IconButton
-          onClick={onToggleHiringFeesFrozen}
+          onClick={onToggleAllFreezes}
           size="small"
           sx={{
             ml: 1.5,
-            border: `1px solid ${hiringFeesFrozen ? '#10b981' : '#cbd5e1'}`,
+            border: `1px solid ${allFrozen ? '#10b981' : '#cbd5e1'}`,
             borderRadius: 1.5,
             px: 1,
             py: 0.5,
-            color: hiringFeesFrozen ? '#10b981' : '#ef4444',
-            background: hiringFeesFrozen ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.06)',
+            color: allFrozen ? '#10b981' : '#ef4444',
+            background: allFrozen ? 'rgba(16,185,129,0.08)' : 'rgba(239,68,68,0.06)',
             transition: 'all 0.15s',
             '&:hover': {
-              background: hiringFeesFrozen ? 'rgba(16,185,129,0.14)' : 'rgba(239,68,68,0.12)',
+              background: allFrozen ? 'rgba(16,185,129,0.14)' : 'rgba(239,68,68,0.12)',
             },
           }}
         >
-          {hiringFeesFrozen ? <PlayIcon sx={{ fontSize: 16 }} /> : <PauseIcon sx={{ fontSize: 16 }} />}
-          <Typography sx={{ fontSize: '10px', fontWeight: 700, ml: 0.5, textTransform: 'uppercase', letterSpacing: '0.04em' }}>
-            {hiringFeesFrozen ? 'Resume' : 'Freeze'}
+          {allFrozen ? <PlayIcon sx={{ fontSize: 16 }} /> : <PauseIcon sx={{ fontSize: 16 }} />}
+          <Typography sx={{ fontSize: '10px', fontWeight: 700, ml: 0.5, textTransform: 'uppercase', letterSpacing: '0.04em', whiteSpace: 'nowrap' }}>
+            {allFrozen ? 'Resume All' : 'Freeze All'}
           </Typography>
         </IconButton>
       </Tooltip>
@@ -460,8 +474,18 @@ const CostBreakdownStrip: React.FC<{
               <Box sx={{ display: 'flex', gap: 1.25 }}>
                 {channels.map((ch: any) => {
                   const isClosed = ch.status === 'closed';
+                  const isFrozen = ch.frozen === true;
+                  const showFreezeToggle = ch.freezable === true && !!onToggleChannelFreeze;
+                  const dotColor = isClosed
+                    ? '#cbd5e1'
+                    : isFrozen
+                      ? '#94a3b8'
+                      : ch.status === 'recurring'
+                        ? '#22c55e'
+                        : '#f59e0b';
+                  const showPulse = ch.status === 'recurring' && !isFrozen;
                   return (
-                    <Tooltip key={ch.name} arrow title={ch.detail} placement="bottom">
+                    <Tooltip key={ch.key ?? ch.name} arrow title={ch.detail} placement="bottom">
                       <Box
                         sx={{
                           display: 'flex',
@@ -469,18 +493,18 @@ const CostBreakdownStrip: React.FC<{
                           px: 1.5,
                           py: 0.75,
                           borderRadius: 1.5,
-                          borderLeft: `3px solid ${isClosed ? `${group.color}66` : group.color}`,
-                          background: 'rgba(0,0,0,0.025)',
+                          borderLeft: `3px solid ${isClosed || isFrozen ? `${group.color}66` : group.color}`,
+                          background: isFrozen ? 'rgba(148,163,184,0.10)' : 'rgba(0,0,0,0.025)',
                           cursor: 'default',
                           transition: 'background 0.15s',
                           '&:hover': { background: group.bgHover },
                         }}
                       >
-                        <Typography sx={{ fontSize: '15px', fontWeight: 700, color: isClosed ? '#94a3b8' : '#1e293b', lineHeight: 1, whiteSpace: 'nowrap' }}>
+                        <Typography sx={{ fontSize: '15px', fontWeight: 700, color: isClosed || isFrozen ? '#94a3b8' : '#1e293b', lineHeight: 1, whiteSpace: 'nowrap' }}>
                           {formatUSD(ch.amountUSD)}
                         </Typography>
                         <Box sx={{ display: 'flex', alignItems: 'center', gap: '5px', mt: 0.375 }}>
-                          <Typography sx={{ fontSize: '10px', fontWeight: 500, color: isClosed ? '#94a3b8' : '#64748b', whiteSpace: 'nowrap' }}>
+                          <Typography sx={{ fontSize: '10px', fontWeight: 500, color: isClosed || isFrozen ? '#94a3b8' : '#64748b', whiteSpace: 'nowrap' }}>
                             {abbreviateChannelName(ch.name)}
                           </Typography>
                           <Box
@@ -488,9 +512,9 @@ const CostBreakdownStrip: React.FC<{
                               width: 6,
                               height: 6,
                               borderRadius: '50%',
-                              bgcolor: isClosed ? '#cbd5e1' : ch.status === 'recurring' ? '#22c55e' : '#f59e0b',
+                              bgcolor: dotColor,
                               flexShrink: 0,
-                              ...(ch.status === 'recurring' && {
+                              ...(showPulse && {
                                 '@keyframes pulse-ring': {
                                   '0%': { boxShadow: '0 0 0 0px rgba(34,197,94,0.4)' },
                                   '70%': { boxShadow: '0 0 0 4px rgba(34,197,94,0)' },
@@ -509,6 +533,35 @@ const CostBreakdownStrip: React.FC<{
                             <Typography sx={{ fontSize: '9px', fontWeight: 600, color: '#94a3b8', whiteSpace: 'nowrap' }}>
                               {ch.eventCount}
                             </Typography>
+                          )}
+                          {showFreezeToggle && (
+                            <Tooltip
+                              arrow
+                              title={
+                                isFrozen
+                                  ? `Frozen${ch.frozenAt ? ` at ${new Date(ch.frozenAt).toLocaleDateString()}` : ''} — click to resume`
+                                  : `Freeze ${abbreviateChannelName(ch.name)} accrual`
+                              }
+                            >
+                              <IconButton
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  onToggleChannelFreeze!(ch.key as FreezableChannelKey);
+                                }}
+                                size="small"
+                                sx={{
+                                  ml: 0.25,
+                                  p: 0.25,
+                                  color: isFrozen ? '#10b981' : '#94a3b8',
+                                  '&:hover': {
+                                    background: isFrozen ? 'rgba(16,185,129,0.12)' : 'rgba(239,68,68,0.10)',
+                                    color: isFrozen ? '#10b981' : '#ef4444',
+                                  },
+                                }}
+                              >
+                                {isFrozen ? <PlayIcon sx={{ fontSize: 12 }} /> : <PauseIcon sx={{ fontSize: 12 }} />}
+                              </IconButton>
+                            </Tooltip>
                           )}
                         </Box>
                       </Box>
