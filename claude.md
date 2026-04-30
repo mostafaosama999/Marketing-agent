@@ -353,6 +353,7 @@ Multi-platform content marketing analytics synced from LinkedIn (Excel), TDS (pa
 | `docs/OFFER_IDEA_GENERATION.md` | V1/V2/V3 blog idea generation, AI concepts, bulk ops, costs |
 | `docs/CONTENT_ANALYTICS.md` | Multi-platform content analytics (LinkedIn, TDS, Medium), Firestore schema, sync skill, BDR integration |
 | `docs/HIRING_AUTOSCORING.md` | Inbound applicant autoscoring: Apify LinkedIn enrichment + GPT-4o-mini cross-checks, schema, cost, config |
+| `docs/HIRING_BATCH_NOTIFICATIONS.md` | Slack ping to #hiring every 5 new applicants in `applied` (post-AI-screen): counter doc, paths counted, config |
 
 ### 🚨 MANDATORY: Documentation Updates for Systems
 - **New system added**: When implementing a new system or major feature, you MUST create a corresponding `.md` file in `docs/` and link it in the table above.

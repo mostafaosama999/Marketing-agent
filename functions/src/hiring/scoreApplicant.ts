@@ -3,6 +3,7 @@ import * as admin from "firebase-admin";
 import OpenAI from "openai";
 import {logApiCost, calculateCost, extractTokenUsage, CostInfo} from "../utils/costTracker";
 import {enrichLinkedInProfile, buildLinkedInProfileBlock} from "./enrichLinkedInProfile";
+import {recordAppliedApplicant} from "./notifyAppliedThreshold";
 
 // Approved universities — exactly the 13 the user specified.
 // Uses ONE boundary-aware regex so short acronyms (auc, bue, aast, msa)
@@ -191,6 +192,11 @@ export const scoreApplicantOnCreate = functions
     const openaiApiKey = functions.config().openai?.key || process.env.OPENAI_API_KEY;
     if (!openaiApiKey) {
       console.error("OpenAI API key not configured, skipping AI scoring");
+      try {
+        await recordAppliedApplicant(applicantId, data.name || "(no name)");
+      } catch (err: any) {
+        console.error("recordAppliedApplicant failed:", err?.message || err);
+      }
       return;
     }
 
@@ -315,8 +321,22 @@ ${formAnswersText}${enrichmentBlock}`;
       await snap.ref.update(update);
 
       console.log(`AI scored applicant ${applicantId}: ${aiScore.total}/10 (${aiScore.tier})${safeTier === "REJECT" ? " → ai_rejected" : ""}`);
+
+      if (safeTier !== "REJECT") {
+        try {
+          await recordAppliedApplicant(applicantId, data.name || "(no name)");
+        } catch (err: any) {
+          console.error("recordAppliedApplicant failed:", err?.message || err);
+        }
+      }
     } catch (error: any) {
       console.error(`Failed to AI-score applicant ${applicantId}:`, error.message || error);
-      // Don't throw — the applicant is still created, just without AI score
+      // Don't throw — the applicant is still created, just without AI score.
+      // They remain in `status='applied'`, so still count toward the review batch.
+      try {
+        await recordAppliedApplicant(applicantId, data.name || "(no name)");
+      } catch (err: any) {
+        console.error("recordAppliedApplicant failed:", err?.message || err);
+      }
     }
   });
