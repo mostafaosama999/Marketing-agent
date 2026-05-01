@@ -1,5 +1,15 @@
 # Marketing Agent - CRM Pipeline System
 
+## Firebase Project (READ FIRST)
+
+**This repo deploys to `marketing-app-cc237`** — NOT `ai-adv-5e502`. The workstation-level `CLAUDE.md` calls out `ai-adv-5e502` for the sibling `Agent/` repo, which is a different project; do not confuse them.
+
+- Frontend Firestore: `agency-app/src/services/firebase/firestore.ts` → `projectId: "marketing-app-cc237"`
+- Functions deploy target: `.firebaserc` → `default: marketing-app-cc237`
+- All applicant docs, leads, companies, function logs, etc. live in `marketing-app-cc237`
+
+When debugging anything Firestore- or Functions-related, always pass `--project marketing-app-cc237` to `firebase` CLI calls and address Firestore via `projects/marketing-app-cc237/...` in the Firebase MCP. The Firebase MCP's default project may resolve to `ai-adv-5e502` — never trust it implicitly for this repo.
+
 ## Quick Reference
 
 1. [UI Design](#ui-design) - Design system and styling rules
