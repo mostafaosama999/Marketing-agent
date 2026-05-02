@@ -72,16 +72,24 @@ The matching frontend type is in `agency-app/src/types/applicant.ts`. The detail
 
 ## Configuration
 
-The Apify token must be set in Firebase Functions config before deploying:
+The Apify token is stored in **Google Secret Manager** via Firebase Functions params (not in `functions.config()`, which is being retired). The function declares it with `defineSecret("APIFY_TOKEN")` and binds it via `runWith({ secrets: [...] })`. Firebase grants the runtime service account `roles/secretmanager.secretAccessor` automatically on deploy.
+
+To set or rotate the token:
 
 ```bash
-APIFY_TOKEN=<your token>
-firebase functions:config:set apify.token="$APIFY_TOKEN"
+firebase functions:secrets:set APIFY_TOKEN --project marketing-app-cc237
+# (paste value when prompted, or use --data-file - and pipe in)
 ```
 
-Confirm with `firebase functions:config:get apify` (the value will be redacted in logs but visible in the JSON output — keep that off-screen).
+Confirm with `firebase functions:secrets:access APIFY_TOKEN`. The function reads it at runtime via `apifyTokenSecret.value()` — see `functions/src/hiring/scoreApplicant.ts`.
 
-The function reads the token at runtime via `functions.config().apify?.token || process.env.APIFY_TOKEN`, mirroring the OpenAI key pattern.
+After setting/rotating, redeploy the function so it picks up the new secret version:
+
+```bash
+firebase deploy --only functions:scoreApplicantOnCreate --project marketing-app-cc237
+```
+
+> **Note:** This is currently the only secret in this codebase using `defineSecret`. All other secrets (OpenAI, Apollo, Slack, Webflow, etc.) still live in the deprecated `functions.config()`. Migrating them is future work — see Firebase's [params migration guide](https://firebase.google.com/docs/functions/config-env#migrate-config).
 
 ## Cost model
 

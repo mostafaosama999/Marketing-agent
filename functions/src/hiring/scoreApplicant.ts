@@ -1,9 +1,12 @@
 import * as functions from "firebase-functions";
+import {defineSecret} from "firebase-functions/params";
 import * as admin from "firebase-admin";
 import OpenAI from "openai";
 import {logApiCost, calculateCost, extractTokenUsage, CostInfo} from "../utils/costTracker";
 import {enrichLinkedInProfile, buildLinkedInProfileBlock} from "./enrichLinkedInProfile";
 import {recordAppliedApplicant} from "./notifyAppliedThreshold";
+
+const apifyTokenSecret = defineSecret("APIFY_TOKEN");
 
 // Approved universities — exactly the 13 the user specified.
 // Uses ONE boundary-aware regex so short acronyms (auc, bue, aast, msa)
@@ -141,7 +144,7 @@ Return a JSON object with exactly these fields:
 }`;
 
 export const scoreApplicantOnCreate = functions
-  .runWith({timeoutSeconds: 300, memory: "512MB"})
+  .runWith({timeoutSeconds: 300, memory: "512MB", secrets: [apifyTokenSecret]})
   .firestore.document("applicants/{applicantId}")
   .onCreate(async (snap) => {
     const data = snap.data();
@@ -203,7 +206,7 @@ export const scoreApplicantOnCreate = functions
     // Apify LinkedIn enrichment — runs before scoring so the GPT prompt sees
     // verified profile data. Soft dependency: any failure falls back to
     // form-only scoring rather than blocking the trigger.
-    const apifyToken = functions.config().apify?.token || process.env.APIFY_TOKEN;
+    const apifyToken = apifyTokenSecret.value();
     const enrichment = await enrichLinkedInProfile(data.linkedInUrl || "", apifyToken);
 
     let enrichmentBlock = "";
