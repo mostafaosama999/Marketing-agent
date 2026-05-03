@@ -22,6 +22,7 @@ import {handleFindCompanies} from "../slashCommands/findCompanies";
 import {handleFindLeads} from "../slashCommands/findLeads";
 import {handleTry} from "../slashCommands/try";
 import {runSkill} from "../skillRunner";
+import {renderMultiStepFinal, renderMultiStepProgress} from "../slack/messageBlocks";
 import {postNotice} from "../slack/postDraft";
 import {
   MultiStepConfirmationContext,
@@ -156,17 +157,21 @@ async function postProgressPlaceholder(
   plan: MultiStepPlan,
   threadTs?: string
 ): Promise<string | undefined> {
-  const stepsList = plan.steps
-    .map((s, i) => `   ${i + 1}. ${s.description}${s.requiresConfirmation ? " ⏸️" : ""}`)
-    .join("\n");
-  const text =
-    `🧭 *Multi-step plan* — ${plan.steps.length} step${plan.steps.length === 1 ? "" : "s"}, ` +
-    `~$${plan.estimatedCostUsd.toFixed(3)}, ~${plan.estimatedDurationSec}s\n` +
-    `${stepsList}\n\n_${plan.rationale}_\n\n⏳ Starting…`;
+  const {text, blocks} = renderMultiStepProgress({
+    steps: plan.steps,
+    cursor: 0,
+    stepResults: [],
+    skippedSteps: new Set(),
+    estimatedCostUsd: plan.estimatedCostUsd,
+    estimatedDurationSec: plan.estimatedDurationSec,
+    rationale: plan.rationale,
+    state: "running",
+  });
   try {
     const post = await slack().chat.postMessage({
       channel: bdrChannelId(),
       text,
+      blocks: blocks as never,
       username: NIKOLA_BOT_NAME,
       icon_emoji: NIKOLA_BOT_EMOJI,
       thread_ts: threadTs,
@@ -178,28 +183,24 @@ async function postProgressPlaceholder(
   }
 }
 
-async function updateProgressMessage(state: RunState): Promise<void> {
+async function updateProgressMessage(state: RunState, runtimeState?: "running" | "paused"): Promise<void> {
   if (!state.progressMessageTs || !state.plan) return;
-  const lines: string[] = [
-    `🧭 *Multi-step plan* — step ${state.cursor}/${state.plan.steps.length} done`,
-  ];
-  state.plan.steps.forEach((s, i) => {
-    const emoji =
-      i < state.cursor
-        ? state.skippedSteps.has(i)
-          ? "⏭️"
-          : "✅"
-        : i === state.cursor
-          ? "⏳"
-          : "▫️";
-    const cost = state.stepResults[i] ? ` _($${state.stepResults[i].costUsd.toFixed(3)})_` : "";
-    lines.push(`   ${emoji} ${i + 1}. ${s.description}${cost}`);
+  const {text, blocks} = renderMultiStepProgress({
+    steps: state.plan.steps,
+    cursor: state.cursor,
+    stepResults: state.stepResults,
+    skippedSteps: state.skippedSteps,
+    estimatedCostUsd: state.plan.estimatedCostUsd,
+    estimatedDurationSec: state.plan.estimatedDurationSec,
+    rationale: state.plan.rationale,
+    state: runtimeState || (state.cursor >= state.plan.steps.length ? "complete" : "running"),
   });
   try {
     await slack().chat.update({
       channel: bdrChannelId(),
       ts: state.progressMessageTs,
-      text: lines.join("\n"),
+      text,
+      blocks: blocks as never,
     });
   } catch (e) {
     functions.logger.warn("progress message update failed", {error: (e as Error).message});
@@ -211,11 +212,27 @@ async function postFinalSummary(state: RunState): Promise<void> {
   const succeeded = state.stepResults.filter((r) => r.status === "completed").length;
   const failed = state.stepResults.filter((r) => r.status === "failed").length;
   const skipped = state.stepResults.filter((r) => r.status === "skipped").length;
-  await postNotice(
-    `🏁 *Multi-step complete* — ${succeeded} done, ${skipped} skipped, ${failed} failed. ` +
-      `Total cost: $${totalCost.toFixed(3)}`,
-    state.threadTs
-  );
+  // Update the in-place progress card to "complete" state for visual closure.
+  await updateProgressMessage(state);
+  // Then post a separate final summary card with totals.
+  const {text, blocks} = renderMultiStepFinal({
+    succeeded,
+    failed,
+    skipped,
+    totalCostUsd: totalCost,
+  });
+  try {
+    await slack().chat.postMessage({
+      channel: bdrChannelId(),
+      text,
+      blocks: blocks as never,
+      username: NIKOLA_BOT_NAME,
+      icon_emoji: NIKOLA_BOT_EMOJI,
+      thread_ts: state.threadTs,
+    });
+  } catch (e) {
+    functions.logger.warn("multi-step final summary post failed", {error: (e as Error).message});
+  }
   // Parent status moves from "awaiting-confirmation" / "processing" to
   // "completed" now that the entire plan has been worked through. The
   // child resume doc's own status is handled by the processor's finally.
@@ -230,16 +247,45 @@ async function postFinalSummary(state: RunState): Promise<void> {
 
 async function pauseForConfirmation(state: RunState, step: MultiStepPlanStep): Promise<void> {
   const stepNum = state.cursor + 1;
-  const text =
-    `⏸️ *Step ${stepNum}/${state.plan.steps.length} needs your OK* — ${step.description}\n\n` +
-    `_(skill: \`${step.skill}\`, args: \`${step.args}\`. This step is gated because it ` +
-    `hits a paid API or crosses the cost threshold.)_\n\n` +
-    `✅ to run · ❌ to skip · 💬 to cancel the rest of the plan.`;
+  // Reflect "paused" state on the in-place progress card first.
+  await updateProgressMessage(state, "paused");
+
+  const text = `⏸️ Step ${stepNum}/${state.plan.steps.length} needs your OK — ${step.description}`;
+  const blocks = [
+    {
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text:
+          `⏸️ *Step ${stepNum}/${state.plan.steps.length} needs your OK*\n` +
+          `*${step.description}*`,
+      },
+    },
+    {
+      type: "section",
+      fields: [
+        {type: "mrkdwn", text: `*Skill*\n\`${step.skill}\``},
+        {type: "mrkdwn", text: `*Args*\n${step.args || "_(none)_"}`},
+      ],
+    },
+    {
+      type: "context",
+      elements: [
+        {
+          type: "mrkdwn",
+          text:
+            "🔒 _Gated because this step hits a paid API or crosses the cost threshold._\n" +
+            "✅ run · ❌ skip · 💬 cancel the rest of the plan",
+        },
+      ],
+    },
+  ];
   let confirmationTs: string | undefined;
   try {
     const post = await slack().chat.postMessage({
       channel: bdrChannelId(),
       text,
+      blocks: blocks as never,
       username: NIKOLA_BOT_NAME,
       icon_emoji: NIKOLA_BOT_EMOJI,
       thread_ts: state.threadTs,

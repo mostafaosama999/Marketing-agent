@@ -21,6 +21,7 @@ import * as functions from "firebase-functions";
 import OpenAI from "openai";
 import {bdrChannelId, MODELS, NIKOLA_BOT_EMOJI, NIKOLA_BOT_NAME, openaiApiKey, slackBotToken} from "../config";
 import {WebClient} from "@slack/web-api";
+import {renderMemoryCandidate} from "../slack/messageBlocks";
 import {NikolaMemoryCandidate, NikolaWork} from "../types";
 
 const SKIP_KINDS = new Set(["remember", "status", "mention"]);
@@ -98,15 +99,13 @@ export async function maybeExtractMemoryCandidates(work: NikolaWork): Promise<vo
 }
 
 async function postCandidate(text: string, work: NikolaWork): Promise<void> {
-  const message =
-    `💭 *Want me to remember this?*\n` +
-    `> ${text}\n\n` +
-    `✅ remember · ❌ skip`;
+  const {text: fallbackText, blocks} = renderMemoryCandidate(text);
   let post;
   try {
     post = await slack().chat.postMessage({
       channel: bdrChannelId(),
-      text: message,
+      text: fallbackText,
+      blocks: blocks as never,
       username: NIKOLA_BOT_NAME,
       icon_emoji: NIKOLA_BOT_EMOJI,
       thread_ts: work.mentionTs,

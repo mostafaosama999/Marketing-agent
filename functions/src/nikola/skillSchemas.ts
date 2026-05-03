@@ -162,6 +162,33 @@ export const SKILL_SCHEMAS: Record<SkillName, SchemaWrapper> = {
               suggestedContactTitle: {type: "string"},
               source: {type: "string", description: "Where this was discovered (URL or signal)"},
               dedupeStatus: {type: "string", enum: ["new", "duplicate-of-existing"]},
+              /* W7 — richer per-lead detail so the Slack output reads like
+                 a Claude Skill report instead of a one-liner. */
+              whyGoodFit: {
+                type: "string",
+                description:
+                  "2-4 sentence narrative on why this company fits CodeContent's ICP — what they do, their content investment level, who their developer audience is. Concrete, not generic.",
+              },
+              whyMaybeNotFit: {
+                type: ["string", "null"],
+                description:
+                  "Honest counterpoint: what could make this a bad fit (wrong stage, too small, no blog, internal-tools focus). Null only if there's truly nothing concerning.",
+              },
+              topContentGap: {
+                type: ["string", "null"],
+                description:
+                  "Specific content gap CodeContent could fill — e.g. 'no integration tutorials for their new V2 SDK', 'sparse blog despite recent funding'. Cite a URL or recent product event.",
+              },
+              signalsObserved: {
+                type: "array",
+                items: {type: "string"},
+                description:
+                  "Concrete signals seen during research: funding round + amount, hiring posts, product launches, Twitter/blog cadence. Each item should reference where you saw it.",
+              },
+              recentBlogPostUrl: {
+                type: ["string", "null"],
+                description: "URL of the most recent blog post seen during research, or null if no blog or scraping failed.",
+              },
             },
             required: [
               "companyName",
@@ -173,13 +200,47 @@ export const SKILL_SCHEMAS: Record<SkillName, SchemaWrapper> = {
               "suggestedContactTitle",
               "source",
               "dedupeStatus",
+              "whyGoodFit",
+              "whyMaybeNotFit",
+              "topContentGap",
+              "signalsObserved",
+              "recentBlogPostUrl",
             ],
+            additionalProperties: false,
+          },
+        },
+        /**
+         * Companies the model surfaced in search results but could NOT fully
+         * qualify (typically because page scraping failed). Surfacing these
+         * in Slack lets Mostafa see what was actually discovered even when
+         * the strict `leads` schema would otherwise hide them.
+         */
+        discoveredButUnqualified: {
+          type: "array",
+          maxItems: 20,
+          description:
+            "Companies surfaced in search but not fully qualified (e.g. couldn't scrape their site). Always populate when scrapes fail; leave empty when all results were qualified.",
+          items: {
+            type: "object",
+            properties: {
+              companyName: {type: "string"},
+              website: {type: ["string", "null"]},
+              reason: {
+                type: "string",
+                description: "Why this couldn't be qualified — e.g. \"scrape failed\", \"insufficient signal\", \"out of scope\".",
+              },
+              source: {
+                type: "string",
+                description: "Where the name was discovered (search query or URL).",
+              },
+            },
+            required: ["companyName", "website", "reason", "source"],
             additionalProperties: false,
           },
         },
         summary: {type: "string"},
       },
-      required: ["focusArea", "leads", "summary"],
+      required: ["focusArea", "leads", "discoveredButUnqualified", "summary"],
       additionalProperties: false,
     },
   },

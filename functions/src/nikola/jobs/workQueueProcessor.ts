@@ -16,6 +16,7 @@ import {handleTry} from "../slashCommands/try";
 import {runSkill} from "../skillRunner";
 import {enqueueWork} from "./workQueueEnqueue";
 import {executeMultiStep} from "./multiStepExecutor";
+import {renderAnalystAnswer, renderClarification} from "../slack/messageBlocks";
 import {postBlocks, postNotice} from "../slack/postDraft";
 import {SlashPayload} from "../slack/slashHandler";
 import {
@@ -534,22 +535,20 @@ async function postClarification(input: {
   routingDecisionId: string;
 }): Promise<void> {
   const channelId = bdrChannelId();
-  const lines = [
-    `🤔 *Not sure which one you meant — pick with a reaction.*`,
-    `> _\"${input.userText.replace(/"/g, "'")}\"_`,
-    "",
-    ...input.candidates.map((c, i) => {
-      const emoji = i === 0 ? "1️⃣" : "2️⃣";
-      const desc = KIND_DESCRIPTION[c.kind] || c.kind;
-      const argsHint = c.args ? `  _(args: ${c.args})_` : "";
-      return `${emoji} *${c.kind}* — ${desc}${argsHint}`;
-    }),
-    "",
-    "❌ to cancel.",
-  ];
+  // Block Kit version — header, quoted user text, candidate list, footer.
+  const candidatesWithDescription = input.candidates.map((c) => ({
+    kind: c.kind,
+    args: c.args,
+    reason: KIND_DESCRIPTION[c.kind] || c.reason || "alternative",
+  }));
+  const {text, blocks} = renderClarification({
+    userText: input.userText,
+    candidates: candidatesWithDescription,
+  });
   const post = await slack().chat.postMessage({
     channel: channelId,
-    text: lines.join("\n"),
+    text,
+    blocks: blocks as never,
     thread_ts: input.slackThreadTs,
   });
   if (!post.ok || !post.ts) {
@@ -606,33 +605,16 @@ async function handleAnalyticalQuery(args: string, threadTs?: string): Promise<v
       confidence?: "high" | "medium" | "low";
       caveats?: string | null;
     };
-
-    const answer = meta.answer || "_(analyst returned no answer)_";
-    const lines: string[] = [answer];
-    if (meta.keyMetrics && meta.keyMetrics.length > 0) {
-      lines.push(
-        "",
-        "*Key metrics*",
-        ...meta.keyMetrics.map(
-          (m) => `• *${m.name}:* ${m.value}${m.hint ? ` _(${m.hint})_` : ""}`
-        )
-      );
-    }
-    const footer: string[] = [];
-    if (meta.sourcesQueried && meta.sourcesQueried.length > 0) {
-      footer.push(`_sources: ${meta.sourcesQueried.join(", ")}_`);
-    }
-    if (meta.confidence) {
-      footer.push(`_confidence: ${meta.confidence}_`);
-    }
-    if (meta.caveats) {
-      footer.push(`⚠️ _${meta.caveats}_`);
-    }
-    if (footer.length > 0) {
-      lines.push("", footer.join(" · "));
-    }
-    lines.push(`_cost: $${result.costUsd.toFixed(4)}_`);
-    await postNotice(lines.join("\n"), threadTs);
+    const {text, blocks} = renderAnalystAnswer({
+      question: args,
+      answer: meta.answer || "_(analyst returned no answer)_",
+      keyMetrics: meta.keyMetrics,
+      sourcesQueried: meta.sourcesQueried,
+      confidence: meta.confidence,
+      caveats: meta.caveats,
+      costUsd: result.costUsd,
+    });
+    await postBlocks(text, blocks, threadTs);
   } catch (e) {
     functions.logger.error("analytical-query failed", {
       args,

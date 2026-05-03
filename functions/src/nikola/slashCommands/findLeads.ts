@@ -1,6 +1,7 @@
 import * as admin from "firebase-admin";
 import {runSkill} from "../skillRunner";
-import {postNotice} from "../slack/postDraft";
+import {DiscoveryItem, renderDiscovery} from "../slack/messageBlocks";
+import {postBlocks, postNotice} from "../slack/postDraft";
 import {LeadDoc, NikolaDiscovery} from "../types";
 
 /**
@@ -66,6 +67,13 @@ export async function handleFindLeads(args: string, threadTs?: string): Promise<
         suggestedContactTitle: item.suggestedContactTitle,
         website: item.website,
         fundingSignal: item.fundingSignal,
+        // W7 — richer per-lead detail (preserved for the CRM frontend +
+        // future generate-outreach runs that already have research baked in).
+        whyGoodFit: item.whyGoodFit,
+        whyMaybeNotFit: item.whyMaybeNotFit,
+        topContentGap: item.topContentGap,
+        signalsObserved: item.signalsObserved,
+        recentBlogPostUrl: item.recentBlogPostUrl,
       },
       createdAt: now,
       updatedAt: now,
@@ -87,29 +95,60 @@ export async function handleFindLeads(args: string, threadTs?: string): Promise<
   };
   await discoveryRef.set(discovery);
 
-  // When the model returns 0 candidates and its summary mentions provider
-  // failures, append an explicit, actionable note. The tool layer already
-  // returns directive errors ("BOTH SEARCH PROVIDERS FAILED. Firecrawl: ...
-  // Apify-fallback: ..."), but the model often paraphrases those into vague
-  // phrases like "insufficient API credits" — Mostafa shouldn't have to dig
-  // through logs to know which provider to top up.
-  const summaryLower = summary.toLowerCase();
-  const looksLikeProviderFailure =
-    summaryLower.includes("insufficient credit") ||
-    summaryLower.includes("api credit") ||
-    summaryLower.includes("both search providers") ||
-    summaryLower.includes("web search") && summaryLower.includes("fail");
-  const note =
-    items.length === 0 && looksLikeProviderFailure
-      ? "\n\n⚠️ *Web search providers are out of credit.* Top up Firecrawl at " +
-        "<https://firecrawl.dev/account|firecrawl.dev/account> or Apify at " +
-        "<https://apify.com/account/billing|apify.com/account/billing> — they " +
-        "fall back to each other, so restoring either one will get this working."
-      : "";
-  await postNotice(
-    `🌱 Discovery (${focus || "any"}): ${items.length} candidates, ${created} created, ${dupes} dedupes. Cost $${result.costUsd.toFixed(3)}.\n${summary}${note}`,
-    threadTs
-  );
+  // Pull the unqualified-discovery list (added in W6 schema). The model
+  // populates this when it found candidates in search but couldn't fully
+  // qualify them — surfaces names instead of hiding them in a paragraph.
+  const discoveredButUnqualified =
+    (result.metadata?.discoveredButUnqualified as Array<{
+      companyName: string;
+      website?: string | null;
+      reason: string;
+      source: string;
+    }>) || [];
+
+  // Build the rich Slack output. The renderer handles provider-failure
+  // detection, detailed per-lead cards (w/ ICP rationale, hook, signals,
+  // content gap), summary, and footer.
+  const renderItems: DiscoveryItem[] = [
+    ...items.map(
+      (it) =>
+        ({
+          companyName: it.companyName as string | undefined,
+          website: it.website as string | undefined,
+          icpTier: it.icpTier as string | undefined,
+          hookForOutreach: it.hookForOutreach as string | undefined,
+          fundingSignal: it.fundingSignal as string | undefined,
+          suggestedContactTitle: it.suggestedContactTitle as string | undefined,
+          whyGoodFit: it.whyGoodFit as string | undefined,
+          whyMaybeNotFit: (it.whyMaybeNotFit as string | null) ?? null,
+          topContentGap: (it.topContentGap as string | null) ?? null,
+          signalsObserved: (it.signalsObserved as string[] | undefined) || [],
+          recentBlogPostUrl: (it.recentBlogPostUrl as string | null) ?? null,
+        } as DiscoveryItem)
+    ),
+    // Append unqualified discoveries as additional rows so Mostafa sees them.
+    ...discoveredButUnqualified.map(
+      (d) =>
+        ({
+          companyName: d.companyName,
+          website: d.website || undefined,
+          icpTier: "unqualified",
+          hookForOutreach: d.reason,
+          whyGoodFit: `Surfaced via search (${d.source}) but not fully qualified.`,
+          whyMaybeNotFit: d.reason,
+        } as DiscoveryItem)
+    ),
+  ];
+
+  const {text, blocks} = renderDiscovery({
+    focus,
+    items: renderItems,
+    created,
+    dupes,
+    costUsd: result.costUsd,
+    summary,
+  });
+  await postBlocks(text, blocks, threadTs);
 }
 
 /**
