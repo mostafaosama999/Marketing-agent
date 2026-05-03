@@ -44,7 +44,8 @@ export async function handleFindLeads(args: string, threadTs?: string): Promise<
     }
     const ref = admin.firestore().collection("leads").doc();
     const now = admin.firestore.Timestamp.now();
-    // Pull industry from the discovery item if present, else look up on companies/.
+    // Pull industry from the discovery item if present, else look up on
+    // entities (customFields.company_type — no top-level industry field).
     const industryFromItem = (item.industry as string) || (item.industryName as string) || undefined;
     const companyIndustry =
       industryFromItem || (await lookupCompanyIndustry(companyName));
@@ -92,19 +93,23 @@ export async function handleFindLeads(args: string, threadTs?: string): Promise<
   );
 }
 
-/** Look up industry on a matching company doc by name; undefined if not found. */
+/**
+ * Look up industry on the matching `entities` doc. Industry on entities lives
+ * at `customFields.company_type` (e.g. "Data science", "SaaS"); there is no
+ * top-level `industry` field. Returns undefined if no entity matches.
+ */
 async function lookupCompanyIndustry(companyName: string): Promise<string | undefined> {
   if (!companyName) return undefined;
   try {
     const snap = await admin
       .firestore()
-      .collection("companies")
+      .collection("entities")
       .where("name", "==", companyName)
       .limit(1)
       .get();
     if (snap.empty) return undefined;
-    const data = snap.docs[0].data() as {industry?: string};
-    return data.industry || undefined;
+    const data = snap.docs[0].data() as {customFields?: {company_type?: string}};
+    return data.customFields?.company_type || undefined;
   } catch {
     return undefined;
   }

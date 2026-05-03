@@ -26,9 +26,12 @@ export async function readCompany(args: {companyId: string}): Promise<{
   error?: string;
 }> {
   try {
-    const ref = admin.firestore().collection("companies").doc(args.companyId);
+    // The lead.companyId FK points at `entities` — there is no `companies`
+    // collection in this project. The argument name stays `companyId` for
+    // CRM-side semantic consistency, but the read goes to entities.
+    const ref = admin.firestore().collection("entities").doc(args.companyId);
     const snap = await ref.get();
-    if (!snap.exists) return {error: `Company ${args.companyId} not found`};
+    if (!snap.exists) return {error: `Entity ${args.companyId} not found`};
     return {company: {id: snap.id, ...(snap.data() as Omit<CompanyDoc, "id">)}};
   } catch (e) {
     return {error: e instanceof Error ? e.message : String(e)};

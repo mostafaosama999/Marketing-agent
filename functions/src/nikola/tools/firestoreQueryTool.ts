@@ -13,9 +13,15 @@ import * as admin from "firebase-admin";
  * Anything mutating goes through leadOpsTool with explicit shape.
  */
 
+/**
+ * Allowed collections for the `firestore_query` tool.
+ *
+ * NOTE: `companies` is intentionally excluded. The CRM stores company-level
+ * data in `entities`, not `companies` (the latter is empty / vestigial).
+ * Lead.companyId values are FKs into `entities`. Always query `entities`.
+ */
 const ALLOWED_COLLECTIONS = new Set([
   "leads",
-  "companies",
   "entities",
   "fieldDefinitions",
   "nikolaDiscovery",

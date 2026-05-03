@@ -92,9 +92,19 @@ Files:
 - Added outreach transition timestamps (`repliedAt`, `openedAt`,
   `refusedAt`, `noResponseAt`) on top of the existing `sentAt`. Stamped via
   a status→field map in `leadOpsTool.ts:updateLeadOutreach`.
-- Denormalized `lead.companyIndustry` from `companies/{id}.industry` —
-  copied at lead creation in `findLeads.ts` + `try.ts`, kept in sync via
-  the new `nikolaCompanyIndustrySync` Firestore onUpdate trigger.
+- Denormalized `lead.companyIndustry` from
+  `entities/{id}.customFields.company_type` — copied at lead creation in
+  `findLeads.ts` + `try.ts`, kept in sync via the new
+  `nikolaCompanyIndustrySync` Firestore onUpdate trigger on `entities`.
+  **Important schema clarification:** company-level data lives in the
+  `entities` collection, not `companies` (which is empty / vestigial in
+  this project). `lead.companyId` is an FK into `entities/{id}`. There is
+  no top-level `industry` field on entities; the closest analog is
+  `customFields.company_type`. All Nikola V2 code (analyst skill prompt,
+  firestoreQueryTool allowlist, readCompany tool, apolloLookup,
+  backfillCompanyIndustry) was migrated to use `entities` exclusively after
+  EDA confirmed `companies` is empty. The pre-existing `readCompany` and
+  `apolloLookup(companyId)` were silently broken and now read correctly.
 - Added 7 missing composite indexes to `firestore.indexes.json` (most
   notably `leads: status + updatedAt` and the outreach status × timestamp
   pairs that `dueLeadsQuery.ts` had been running without an index).

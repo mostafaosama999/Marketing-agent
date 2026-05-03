@@ -1,40 +1,55 @@
 /**
- * onUpdate trigger on the `companies` collection. When a company's `industry`
- * field changes, propagate it to all linked `leads` (lead.companyIndustry).
+ * onUpdate trigger on the `entities` collection. When an entity's
+ * `customFields.company_type` field changes, propagate it to all linked
+ * `leads` (lead.companyIndustry).
  *
  * Why: the analyst skill answers questions like "industries by reply rate"
  * via a single query against `leads.companyIndustry`. Without this trigger,
  * industry edits in the CRM UI would leave leads with stale denormalized
  * values until the next backfill.
  *
+ * NOTE on collection name:
+ *   - The CRM stores company-level data in `entities`, not `companies`
+ *     (the latter is empty / vestigial). The lead-side FK is still called
+ *     `companyId` for CRM-side semantic consistency, but it points at
+ *     `entities/{id}`.
+ *
+ * NOTE on the industry field:
+ *   - There is no top-level `industry` field on `entities`. The closest
+ *     analog is `customFields.company_type` (e.g. "Data science", "SaaS").
+ *     This trigger watches that path.
+ *
  * Single user, low-frequency edits — no batching/throttling needed.
  */
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions";
 
-interface CompanyDocShape {
+interface EntityDocShape {
   name?: string;
-  industry?: string;
+  customFields?: {
+    company_type?: string;
+    [key: string]: unknown;
+  };
 }
 
 export const nikolaCompanyIndustrySync = functions
   .runWith({memory: "256MB", timeoutSeconds: 120})
-  .firestore.document("companies/{companyId}")
+  .firestore.document("entities/{entityId}")
   .onUpdate(async (change, context) => {
-    const before = change.before.data() as CompanyDocShape | undefined;
-    const after = change.after.data() as CompanyDocShape | undefined;
-    const beforeIndustry = before?.industry;
-    const afterIndustry = after?.industry;
+    const before = change.before.data() as EntityDocShape | undefined;
+    const after = change.after.data() as EntityDocShape | undefined;
+    const beforeIndustry = before?.customFields?.company_type;
+    const afterIndustry = after?.customFields?.company_type;
     if (beforeIndustry === afterIndustry) return null;
 
-    const companyId = context.params.companyId;
+    const entityId = context.params.entityId;
 
-    // Find all leads linked to this company by companyId OR by company name.
+    // Find all leads linked to this entity by companyId (FK) OR by company name.
     // Use both because some legacy paths only set the name.
     const byId = admin
       .firestore()
       .collection("leads")
-      .where("companyId", "==", companyId)
+      .where("companyId", "==", entityId)
       .get();
     const byName = after?.name
       ? admin
@@ -53,7 +68,7 @@ export const nikolaCompanyIndustrySync = functions
     if (leadIds.size === 0) return null;
 
     // Batch update — Firestore allows 500 ops per batch, plenty for any
-    // realistic company → leads fanout in this single-tenant CRM.
+    // realistic entity → leads fanout in this single-tenant CRM.
     const batch = admin.firestore().batch();
     for (const leadId of leadIds) {
       const ref = admin.firestore().collection("leads").doc(leadId);
@@ -69,7 +84,7 @@ export const nikolaCompanyIndustrySync = functions
     await batch.commit();
 
     functions.logger.info("companyIndustrySync propagated", {
-      companyId,
+      entityId,
       beforeIndustry,
       afterIndustry,
       leadsUpdated: leadIds.size,

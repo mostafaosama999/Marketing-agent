@@ -1,10 +1,12 @@
-// One-shot backfill: copy companies/{companyId}.industry onto every linked
+// One-shot backfill: copy the entities-side industry signal onto every linked
 // lead as lead.companyIndustry. Unblocks the analyst skill's
 // "industries by reply rate" style queries with a single-collection query.
 //
+// Source field: entities/{id}.customFields.company_type (e.g. "Data science",
+// "SaaS"). There is NO top-level `industry` field on entities in this project.
 // Lead linkage:
-//   1. lead.companyId (preferred, when set)
-//   2. else lead.company name match against companies.name
+//   1. lead.companyId (preferred — FK into entities/{id})
+//   2. else lead.company name match against entities.name
 //
 // Safe to re-run — only writes when the lead's current value differs.
 //
@@ -19,17 +21,21 @@ admin.initializeApp({projectId: "marketing-app-cc237"});
 const db = admin.firestore();
 
 async function main() {
-  const companiesSnap = await db.collection("companies").get();
-  console.log(`Loaded ${companiesSnap.size} companies.`);
+  const entitiesSnap = await db.collection("entities").get();
+  console.log(`Loaded ${entitiesSnap.size} entities.`);
 
-  // Build name → industry map for the name-fallback path.
-  const nameToIndustry = new Map<string, string>();
+  // Build (id → industry) and (name → industry) maps from customFields.company_type.
   const idToIndustry = new Map<string, string>();
-  for (const doc of companiesSnap.docs) {
-    const data = doc.data() as {name?: string; industry?: string};
-    if (data.industry) {
-      idToIndustry.set(doc.id, data.industry);
-      if (data.name) nameToIndustry.set(data.name, data.industry);
+  const nameToIndustry = new Map<string, string>();
+  for (const doc of entitiesSnap.docs) {
+    const data = doc.data() as {
+      name?: string;
+      customFields?: {company_type?: string};
+    };
+    const industry = data.customFields?.company_type;
+    if (industry) {
+      idToIndustry.set(doc.id, industry);
+      if (data.name) nameToIndustry.set(data.name, industry);
     }
   }
 
@@ -85,7 +91,7 @@ async function main() {
 
   console.log(`\nUpdated: ${updated}`);
   console.log(`Unchanged (already correct): ${unchanged}`);
-  console.log(`No company match: ${nomatch}`);
+  console.log(`No entity match: ${nomatch}`);
   if (samples.length > 0) {
     console.log("\nSample updates (first 20):");
     for (const s of samples) {

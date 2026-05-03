@@ -204,18 +204,22 @@ async function findOrCreateLead(parsed: ParsedInput): Promise<LeadDoc | null> {
   return skeleton;
 }
 
-/** Look up the industry on the matching company doc, if one exists. Returns undefined otherwise. */
+/**
+ * Look up the industry on the matching `entities` doc, if one exists.
+ * Industry source = customFields.company_type (no top-level industry field).
+ * Returns undefined otherwise.
+ */
 async function lookupCompanyIndustry(companyName: string): Promise<string | undefined> {
   try {
     const snap = await admin
       .firestore()
-      .collection("companies")
+      .collection("entities")
       .where("name", "==", companyName)
       .limit(1)
       .get();
     if (snap.empty) return undefined;
-    const data = snap.docs[0].data() as {industry?: string};
-    return data.industry || undefined;
+    const data = snap.docs[0].data() as {customFields?: {company_type?: string}};
+    return data.customFields?.company_type || undefined;
   } catch {
     return undefined;
   }

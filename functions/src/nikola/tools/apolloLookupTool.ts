@@ -24,13 +24,15 @@ export async function apolloLookup(args: ApolloLookupArgs): Promise<{
       return {source: "lead", data};
     }
     if (args.companyId) {
+      // The lead.companyId FK points at the `entities` collection — not a
+      // separate `companies` collection (which is empty in this project).
       const snap = await admin
         .firestore()
-        .collection("companies")
+        .collection("entities")
         .doc(args.companyId)
         .get();
       if (!snap.exists)
-        return {source: "none", error: `Company ${args.companyId} not found`};
+        return {source: "none", error: `Entity ${args.companyId} not found`};
       const data = (snap.data() as {apolloEnrichment?: Record<string, unknown>})
         .apolloEnrichment;
       return {source: "company", data};

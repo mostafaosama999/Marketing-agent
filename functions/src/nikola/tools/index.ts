@@ -85,8 +85,9 @@ const DEFINITIONS: Record<ToolName, {
       description:
         "Read or count documents from a Nikola/CRM collection. Use for read-only analytics " +
         "queries (counts, time-bounded filters, pipeline snapshots) and for dedup checks. " +
-        "Allowed collections: leads, companies, entities, fieldDefinitions, nikolaDiscovery, " +
-        "nikolaContext, nikolaWorkQueue, nikolaDrafts, nikolaSkillRuns, nikolaRoutingDecisions, " +
+        "Allowed collections: leads, entities (the company-level rollup — DO NOT use 'companies'; " +
+        "that collection is empty), fieldDefinitions, nikolaDiscovery, nikolaContext, " +
+        "nikolaWorkQueue, nikolaDrafts, nikolaSkillRuns, nikolaRoutingDecisions, " +
         "nikolaPendingClarifications, nikolaMemory, nikolaMemoryCandidates, nikolaState, " +
         "nikolaPatches, nikolaThreads. " +
         "Equality filters via whereEquals, range filters via whereRange (single field per query, " +

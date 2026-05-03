@@ -134,7 +134,12 @@ export interface LeadDoc {
       [key: string]: unknown;
     };
   };
-  /** Denormalized from companies/{companyId}.industry — see companyIndustrySync. */
+  /**
+   * Denormalized from entities/{companyId}.customFields.company_type — see
+   * companyIndustrySync. (lead.companyId is an FK into the `entities`
+   * collection; there is no separate `companies` collection in this project.
+   * The "industry" semantic lives at customFields.company_type.)
+   */
   companyIndustry?: string;
   totalApiCosts?: number;
   createdAt?: admin.firestore.Timestamp;
