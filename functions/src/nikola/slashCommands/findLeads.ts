@@ -87,8 +87,27 @@ export async function handleFindLeads(args: string, threadTs?: string): Promise<
   };
   await discoveryRef.set(discovery);
 
+  // When the model returns 0 candidates and its summary mentions provider
+  // failures, append an explicit, actionable note. The tool layer already
+  // returns directive errors ("BOTH SEARCH PROVIDERS FAILED. Firecrawl: ...
+  // Apify-fallback: ..."), but the model often paraphrases those into vague
+  // phrases like "insufficient API credits" — Mostafa shouldn't have to dig
+  // through logs to know which provider to top up.
+  const summaryLower = summary.toLowerCase();
+  const looksLikeProviderFailure =
+    summaryLower.includes("insufficient credit") ||
+    summaryLower.includes("api credit") ||
+    summaryLower.includes("both search providers") ||
+    summaryLower.includes("web search") && summaryLower.includes("fail");
+  const note =
+    items.length === 0 && looksLikeProviderFailure
+      ? "\n\n⚠️ *Web search providers are out of credit.* Top up Firecrawl at " +
+        "<https://firecrawl.dev/account|firecrawl.dev/account> or Apify at " +
+        "<https://apify.com/account/billing|apify.com/account/billing> — they " +
+        "fall back to each other, so restoring either one will get this working."
+      : "";
   await postNotice(
-    `🌱 Discovery (${focus || "any"}): ${items.length} candidates, ${created} created, ${dupes} dedupes. Cost $${result.costUsd.toFixed(3)}.\n${summary}`,
+    `🌱 Discovery (${focus || "any"}): ${items.length} candidates, ${created} created, ${dupes} dedupes. Cost $${result.costUsd.toFixed(3)}.\n${summary}${note}`,
     threadTs
   );
 }
