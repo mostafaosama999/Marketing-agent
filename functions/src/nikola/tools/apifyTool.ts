@@ -8,8 +8,13 @@
  * `runWith` includes the secret). Returns gracefully if the secret is not
  * available rather than throwing — the caller (firecrawlTool) will surface
  * the original Firecrawl error in that case.
+ *
+ * The rag-web-browser output shape is variable across modes/versions, so
+ * markdown extraction tries several candidate field paths before giving up.
+ * If everything fails, the raw response shape is logged once for diagnosis.
  */
 import axios from "axios";
+import * as functions from "firebase-functions";
 
 const APIFY_RAG_BROWSER_ACTOR = "apify~rag-web-browser";
 const APIFY_RUN_SYNC_URL =
@@ -18,6 +23,52 @@ const HTTP_TIMEOUT_MS = 90_000;
 
 function apifyToken(): string | undefined {
   return process.env.APIFY_TOKEN || undefined;
+}
+
+/**
+ * The rag-web-browser Actor has shipped multiple output shapes. Markdown can
+ * appear at item.markdown, item.text, item.text_content, item.body, or
+ * nested under item.crawl.markdown. Walk the candidates in order.
+ */
+function extractMarkdown(item: Record<string, unknown> | undefined): string | undefined {
+  if (!item) return undefined;
+  const candidates = [
+    item.markdown,
+    item.text,
+    item.text_content,
+    item.textContent,
+    item.body,
+    (item.crawl as Record<string, unknown> | undefined)?.markdown,
+    (item.crawl as Record<string, unknown> | undefined)?.text,
+  ];
+  for (const c of candidates) {
+    if (typeof c === "string" && c.length > 0) return c;
+  }
+  return undefined;
+}
+
+function extractTitle(item: Record<string, unknown> | undefined): string | undefined {
+  if (!item) return undefined;
+  const m = (item.metadata as Record<string, unknown> | undefined)?.title;
+  if (typeof m === "string") return m;
+  if (typeof item.title === "string") return item.title;
+  return undefined;
+}
+
+function extractUrl(item: Record<string, unknown> | undefined): string {
+  if (!item) return "";
+  const m = (item.metadata as Record<string, unknown> | undefined)?.url;
+  if (typeof m === "string") return m;
+  if (typeof item.url === "string") return item.url;
+  return "";
+}
+
+function extractDescription(item: Record<string, unknown> | undefined): string | undefined {
+  if (!item) return undefined;
+  const m = (item.metadata as Record<string, unknown> | undefined)?.description;
+  if (typeof m === "string") return m;
+  if (typeof item.description === "string") return item.description;
+  return undefined;
 }
 
 export interface ApifySearchResultItem {
@@ -36,7 +87,8 @@ export interface ApifySearchResult {
 /**
  * Search the web via the rag-web-browser Actor in "query" mode. Returns up to
  * `limit` results — title + url + brief description. Pulls full markdown when
- * `scrapeContent` is true (slower, more credit-heavy).
+ * `scrapeContent` is true (slower, more credit-heavy, but lets the caller
+ * skip a follow-up scrape per result).
  */
 export async function apifySearch(args: {
   query: string;
@@ -72,10 +124,10 @@ export async function apifySearch(args: {
     }
     const items = Array.isArray(res.data) ? res.data : [];
     const results: ApifySearchResultItem[] = items.slice(0, limit).map((item) => ({
-      title: item?.metadata?.title || item?.title || undefined,
-      url: item?.metadata?.url || item?.url || "",
-      description: item?.metadata?.description || item?.description || undefined,
-      markdown: args.scrapeContent ? item?.markdown : undefined,
+      title: extractTitle(item),
+      url: extractUrl(item),
+      description: extractDescription(item),
+      markdown: args.scrapeContent ? extractMarkdown(item) : undefined,
     }));
     return {query: args.query, results: results.filter((r) => r.url)};
   } catch (e) {
@@ -95,8 +147,11 @@ export interface ApifyScrapeResult {
 }
 
 /**
- * Scrape a single URL via rag-web-browser ("url" mode) — handles JS-rendered
- * pages, near-1:1 substitute for firecrawl_scrape.
+ * Scrape a single URL via rag-web-browser. The Actor's URL-only mode requires
+ * `startUrls` AND a non-empty `query` (the actor uses query as a relevance
+ * filter even when given specific URLs — empty query has been observed to
+ * yield empty datasets). We pass the URL itself as the query as a no-op
+ * filter that still satisfies the validation.
  */
 export async function apifyScrape(args: {url: string}): Promise<ApifyScrapeResult> {
   const token = apifyToken();
@@ -107,9 +162,12 @@ export async function apifyScrape(args: {url: string}): Promise<ApifyScrapeResul
     const res = await axios.post(
       APIFY_RUN_SYNC_URL,
       {
+        // rag-web-browser quirk: needs a query even with startUrls.
+        query: args.url,
         startUrls: [{url: args.url}],
         outputFormats: ["markdown"],
         maxResults: 1,
+        scrapingTool: "browser-playwright",
       },
       {
         params: {token},
@@ -125,14 +183,31 @@ export async function apifyScrape(args: {url: string}): Promise<ApifyScrapeResul
       };
     }
     const items = Array.isArray(res.data) ? res.data : [];
-    const item = items[0];
+    const item = items[0] as Record<string, unknown> | undefined;
     if (!item) {
+      // First-call diagnostic: log the empty-dataset shape so we can spot
+      // input-format problems on subsequent runs.
+      functions.logger.warn("apifyScrape: empty dataset", {
+        url: args.url,
+        responseShape: truncate(JSON.stringify(res.data), 500),
+      });
       return {url: args.url, error: "Apify returned empty dataset"};
+    }
+    const markdown = extractMarkdown(item);
+    if (!markdown) {
+      // Item present but no recognizable markdown field. Log the keys so we
+      // can adjust extractMarkdown if the Actor output shape changed.
+      functions.logger.warn("apifyScrape: item has no markdown-shaped field", {
+        url: args.url,
+        itemKeys: Object.keys(item),
+        sample: truncate(JSON.stringify(item), 500),
+      });
+      return {url: args.url, error: "Apify returned item without markdown content"};
     }
     return {
       url: args.url,
-      markdown: item.markdown,
-      title: item?.metadata?.title || item?.title,
+      markdown,
+      title: extractTitle(item),
     };
   } catch (e) {
     return {url: args.url, error: e instanceof Error ? e.message : String(e)};

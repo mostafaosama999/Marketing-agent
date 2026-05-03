@@ -169,10 +169,14 @@ export async function firecrawlSearch(args: FirecrawlSearchArgs): Promise<{
       query: args.query,
       firecrawlError: r.errorMsg,
     });
+    // When falling back to Apify, force scrapeContent=true so the search
+    // results carry markdown. This avoids a follow-up Apify scrape per
+    // result (which is slower and has its own failure modes), and gives
+    // the model enough context to qualify candidates from search alone.
     const apifyResult = await apifySearch({
       query: args.query,
       limit: args.limit,
-      scrapeContent: args.scrapeContent,
+      scrapeContent: true,
     });
     if (apifyResult.results.length > 0) {
       functions.logger.info("Apify fallback search OK", {
