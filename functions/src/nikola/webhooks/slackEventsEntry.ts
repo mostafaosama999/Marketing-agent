@@ -39,6 +39,27 @@ export const nikolaSlackEventsHandler = functions
       return;
     }
 
+    // Slack retries the same event when it doesn't get a 200 within ~3s.
+    // On Cloud Functions cold start the full round-trip (verify + dispatch
+    // + Firestore enqueue) can blow past that, so the retry creates a
+    // duplicate work doc and the user sees two replies. Acknowledge retries
+    // immediately without re-processing — the original delivery either
+    // succeeded (in which case we'd be doubling) or failed (in which case
+    // we'd want a real fix, not a retry from the same prompt).
+    //
+    // Slack docs: https://api.slack.com/apis/connections/events-api#retries
+    const retryNum = req.header("x-slack-retry-num");
+    if (retryNum) {
+      functions.logger.info("Slack retry received — acking without re-processing", {
+        retryNum,
+        retryReason: req.header("x-slack-retry-reason"),
+      });
+      // Telling Slack to stop retrying this specific event.
+      res.set("X-Slack-No-Retry", "1");
+      res.status(200).json({ok: true});
+      return;
+    }
+
     const body = req.body;
 
     // Always 200 within 3s; do real work in dispatchSlackEvent which is fast.
