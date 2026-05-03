@@ -173,3 +173,13 @@ export {backfillAiRejectedCloud} from "./hiring/backfillAiRejected";
 
 // Export event organizer research functions
 export {researchEventOrganizer, onEventCreatedResearchOrganizer} from "./events/researchOrganizer";
+
+// Nikola — single-user Slack BDR bot. See src/nikola/ + docs/NIKOLA.md.
+export {
+  nikolaSlackEvents,
+  nikolaSlashCommand,
+  nikolaMorningBatch,
+  nikolaContextSync,
+  nikolaGmailWebhook,
+  setupNikolaGmailWatchHttp,
+} from "./nikola";

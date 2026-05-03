@@ -1,6 +1,7 @@
 {
   "name": "functions",
   "scripts": {
+    "prebuild": "node scripts/copy-bdr-assets.js",
     "build": "tsc",
     "build:watch": "tsc --watch",
     "serve": "npm run build && firebase emulators:start --only functions",
@@ -45,7 +46,8 @@
     "googleapis": "^134.0.0",
     "imap": "^0.8.19",
     "mailparser": "^3.9.0",
-    "openai": "^4.38.2",
+    "@notionhq/client": "^2.2.15",
+    "openai": "^4.85.0",
     "papaparse": "^5.5.3",
     "puppeteer": "^24.29.1",
     "resend": "^6.10.0",

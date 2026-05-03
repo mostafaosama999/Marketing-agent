@@ -2,9 +2,33 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // ⚠️ DEVELOPMENT MODE: allow everything
-    match /{document=**} {
-      allow read, write: if true;
+
+    // 🔒 Nikola collections — never client-writable / readable.
+    // Cloud Functions write/read these via admin SDK which bypasses these rules.
+    // Listed explicitly (not regex) so additions are intentional.
+    match /nikolaDrafts/{document=**}     { allow read, write: if false; }
+    match /nikolaPatches/{document=**}    { allow read, write: if false; }
+    match /nikolaThreads/{document=**}    { allow read, write: if false; }
+    match /nikolaContext/{document=**}    { allow read, write: if false; }
+    match /nikolaSkillRuns/{document=**}  { allow read, write: if false; }
+    match /nikolaState/{document=**}      { allow read, write: if false; }
+    match /nikolaDiscovery/{document=**}  { allow read, write: if false; }
+    match /nikolaGmailWatch/{document=**} { allow read, write: if false; }
+
+    // ⚠️ DEVELOPMENT MODE: everything else is wide open.
+    // Top-level wildcard (single-collection segment) so nikola* matches above
+    // are NOT shadowed by the catch-all per Firestore rules OR-semantics.
+    match /{coll}/{document=**} {
+      allow read, write: if !(coll in [
+        'nikolaDrafts',
+        'nikolaPatches',
+        'nikolaThreads',
+        'nikolaContext',
+        'nikolaSkillRuns',
+        'nikolaState',
+        'nikolaDiscovery',
+        'nikolaGmailWatch'
+      ]);
     }
   }
 }

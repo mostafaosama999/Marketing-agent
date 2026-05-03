@@ -121,6 +121,11 @@ agency-app/emulator-data/
 agency-app/scripts/
 functions/scripts/
 scripts/
+# Exception: Nikola prebuild script must ship with the deploy
+!functions/scripts/copy-bdr-assets.js
+
+# Nikola — generated bundle of BDR skills/context, regenerated on every build
+functions/nikola-bundled/
 
 # Local scripts and data files
 reinstall-claude
