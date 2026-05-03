@@ -123,6 +123,11 @@ functions/scripts/
 scripts/
 # Exception: Nikola prebuild script must ship with the deploy
 !functions/scripts/copy-bdr-assets.js
+# Exception: Nikola V2 operational scripts (backfills + replay CLI) — ship
+# so they're reproducible and reviewable, not local-only.
+!functions/scripts/backfillRepliedAt.ts
+!functions/scripts/backfillCompanyIndustry.ts
+!functions/scripts/replayRouting.ts
 
 # Nikola — generated bundle of BDR skills/context, regenerated on every build
 functions/nikola-bundled/

@@ -14,6 +14,7 @@ service cloud.firestore {
     match /nikolaState/{document=**}      { allow read, write: if false; }
     match /nikolaDiscovery/{document=**}  { allow read, write: if false; }
     match /nikolaGmailWatch/{document=**} { allow read, write: if false; }
+    match /nikolaWorkQueue/{document=**}  { allow read, write: if false; }
 
     // ⚠️ DEVELOPMENT MODE: everything else is wide open.
     // Top-level wildcard (single-collection segment) so nikola* matches above
@@ -27,7 +28,8 @@ service cloud.firestore {
         'nikolaSkillRuns',
         'nikolaState',
         'nikolaDiscovery',
-        'nikolaGmailWatch'
+        'nikolaGmailWatch',
+        'nikolaWorkQueue'
       ]);
     }
   }

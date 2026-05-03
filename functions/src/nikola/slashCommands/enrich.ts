@@ -15,15 +15,15 @@ import {postNotice} from "../slack/postDraft";
  * the existing CRM UI's enrichment for now (real Apollo call wiring is
  * deferred to v1.1 to keep blast radius small).
  */
-export async function handleEnrich(args: string): Promise<void> {
+export async function handleEnrich(args: string, threadTs?: string): Promise<void> {
   const leadId = args.trim();
   if (!leadId) {
-    await postNotice("Usage: `/nikola enrich <leadId>`");
+    await postNotice("Usage: `/nikola enrich <leadId>`", threadTs);
     return;
   }
   const snap = await admin.firestore().collection("leads").doc(leadId).get();
   if (!snap.exists) {
-    await postNotice(`Lead ${leadId} not found.`);
+    await postNotice(`Lead ${leadId} not found.`, threadTs);
     return;
   }
   const lead = snap.data() as Record<string, unknown>;
@@ -33,7 +33,8 @@ export async function handleEnrich(args: string): Promise<void> {
       `Lead ${leadId} already has Apollo data. ` +
         `Snapshot: employees ${(enriched.employeeCount as number) || "?"}, industries ${
           ((enriched.industries as string[] | undefined) || []).join(", ") || "?"
-        }.`
+        }.`,
+      threadTs
     );
     return;
   }
@@ -43,6 +44,7 @@ export async function handleEnrich(args: string): Promise<void> {
   await postNotice(
     `Lead ${leadId} is not yet enriched. ` +
       `Open the lead in the CRM UI to trigger Apollo enrichment ` +
-      `(or call \`enrichOrganizationCloud\` directly with \`{leadId}\`).`
+      `(or call \`enrichOrganizationCloud\` directly with \`{leadId}\`).`,
+    threadTs
   );
 }

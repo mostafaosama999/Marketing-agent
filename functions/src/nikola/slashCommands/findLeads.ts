@@ -9,13 +9,13 @@ import {LeadDoc, NikolaDiscovery} from "../types";
  * (with status='new_lead', outreach.linkedIn.status='not_sent'), records a
  * nikolaDiscovery doc, and posts a summary in #bdr.
  */
-export async function handleFindLeads(args: string): Promise<void> {
+export async function handleFindLeads(args: string, threadTs?: string): Promise<void> {
   const focus = args.trim() || "";
   let result;
   try {
     result = await runSkill("lead-generation", {focusArea: focus});
   } catch (e) {
-    await postNotice(`❌ Discovery failed: ${e instanceof Error ? e.message : String(e)}`);
+    await postNotice(`❌ Discovery failed: ${e instanceof Error ? e.message : String(e)}`, threadTs);
     return;
   }
 
@@ -44,9 +44,14 @@ export async function handleFindLeads(args: string): Promise<void> {
     }
     const ref = admin.firestore().collection("leads").doc();
     const now = admin.firestore.Timestamp.now();
+    // Pull industry from the discovery item if present, else look up on companies/.
+    const industryFromItem = (item.industry as string) || (item.industryName as string) || undefined;
+    const companyIndustry =
+      industryFromItem || (await lookupCompanyIndustry(companyName));
     const lead: LeadDoc = {
       id: ref.id,
       company: companyName,
+      companyIndustry,
       status: ((item.icpTier as string) === "skip" ? "lost" : "new_lead") as LeadDoc["status"],
       outreach: {
         linkedIn: {status: "not_sent"},
@@ -82,6 +87,25 @@ export async function handleFindLeads(args: string): Promise<void> {
   await discoveryRef.set(discovery);
 
   await postNotice(
-    `🌱 Discovery (${focus || "any"}): ${items.length} candidates, ${created} created, ${dupes} dedupes. Cost $${result.costUsd.toFixed(3)}.\n${summary}`
+    `🌱 Discovery (${focus || "any"}): ${items.length} candidates, ${created} created, ${dupes} dedupes. Cost $${result.costUsd.toFixed(3)}.\n${summary}`,
+    threadTs
   );
+}
+
+/** Look up industry on a matching company doc by name; undefined if not found. */
+async function lookupCompanyIndustry(companyName: string): Promise<string | undefined> {
+  if (!companyName) return undefined;
+  try {
+    const snap = await admin
+      .firestore()
+      .collection("companies")
+      .where("name", "==", companyName)
+      .limit(1)
+      .get();
+    if (snap.empty) return undefined;
+    const data = snap.docs[0].data() as {industry?: string};
+    return data.industry || undefined;
+  } catch {
+    return undefined;
+  }
 }

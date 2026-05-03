@@ -1,7 +1,6 @@
 import * as admin from "firebase-admin";
 import {
   NikolaSlashPayloadSnapshot,
-  NikolaWork,
   NikolaWorkKind,
   NikolaWorkSource,
 } from "../types";
@@ -20,21 +19,25 @@ export interface EnqueueArgs {
   source: NikolaWorkSource;
   payload?: NikolaSlashPayloadSnapshot;
   mentionTs?: string;
+  /** Multi-step resume: child doc points to the parent that holds plan state. */
+  parentWorkId?: string;
 }
 
 export async function enqueueWork(input: EnqueueArgs): Promise<string> {
   const ref = admin.firestore().collection("nikolaWorkQueue").doc();
   const now = admin.firestore.Timestamp.now();
-  const doc: NikolaWork = {
+  // Build doc without undefined fields — Firestore rejects them by default.
+  const doc: Record<string, unknown> = {
     id: ref.id,
     kind: input.kind,
     args: input.args || "",
     source: input.source,
-    payload: input.payload,
-    mentionTs: input.mentionTs,
     status: "pending",
     createdAt: now,
   };
+  if (input.payload) doc.payload = input.payload;
+  if (input.mentionTs) doc.mentionTs = input.mentionTs;
+  if (input.parentWorkId) doc.parentWorkId = input.parentWorkId;
   await ref.set(doc);
   return ref.id;
 }

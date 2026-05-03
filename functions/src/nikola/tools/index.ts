@@ -83,19 +83,53 @@ const DEFINITIONS: Record<ToolName, {
     function: {
       name: "firestore_query",
       description:
-        "Read documents from one of these collections: leads, companies, entities, fieldDefinitions, nikolaDiscovery, nikolaContext. " +
-        "Use for dedup checks against existing pipeline. Maximum 50 results per call.",
+        "Read or count documents from a Nikola/CRM collection. Use for read-only analytics " +
+        "queries (counts, time-bounded filters, pipeline snapshots) and for dedup checks. " +
+        "Allowed collections: leads, companies, entities, fieldDefinitions, nikolaDiscovery, " +
+        "nikolaContext, nikolaWorkQueue, nikolaDrafts, nikolaSkillRuns, nikolaRoutingDecisions, " +
+        "nikolaPendingClarifications, nikolaMemory, nikolaMemoryCandidates, nikolaState, " +
+        "nikolaPatches, nikolaThreads. " +
+        "Equality filters via whereEquals, range filters via whereRange (single field per query, " +
+        "ISO-8601 strings auto-coerce to Timestamps). Pass countOnly:true for 'how many' " +
+        "questions — far cheaper than fetching docs. Max 50 docs per non-count call.",
       parameters: {
         type: "object",
         properties: {
           collection: {type: "string"},
           whereEquals: {
             type: "array",
-            description: "Equality filters as [field, value] tuples",
-            items: {type: "array", minItems: 2, maxItems: 2},
+            description: "Equality filters, AND-combined.",
+            items: {
+              type: "object",
+              properties: {
+                field: {type: "string"},
+                value: {type: "string", description: "Compared value (string-coerce numbers/bools client-side)"},
+              },
+              required: ["field", "value"],
+            },
+          },
+          whereRange: {
+            type: "array",
+            description:
+              "Range filters with op + value. ISO-8601 timestamp strings (e.g. '2026-04-01T00:00:00Z') " +
+              "auto-coerce to Firestore Timestamps. Firestore allows range filters on a SINGLE field per query.",
+            items: {
+              type: "object",
+              properties: {
+                field: {type: "string"},
+                op: {type: "string", enum: [">", ">=", "<", "<="]},
+                value: {type: ["string", "number"]},
+              },
+              required: ["field", "op", "value"],
+            },
+          },
+          countOnly: {
+            type: "boolean",
+            description: "Return only the count via Firestore count() aggregation. Cheaper than fetching docs.",
+            default: false,
           },
           limit: {type: "integer", minimum: 1, maximum: 50, default: 10},
-          fields: {type: "array", items: {type: "string"}, description: "Field paths to return"},
+          fields: {type: "array", items: {type: "string"}, description: "Field paths to return (supports dotted paths like outreach.linkedIn.status)"},
         },
         required: ["collection"],
       },
@@ -234,6 +268,15 @@ export const TOOLS_FOR_SKILL: Record<SkillName, ToolName[]> = {
   "cwp-apply": ["web_search", "firecrawl_scrape", "read_context"],
   "gig-hunt": ["web_search", "firecrawl_scrape", "read_context"],
   "learn": [],
+  // Analyst is read-only by design. NEVER add web_search, firecrawl, Apollo, or
+  // any mutating tool here — the analytical-query path must not perform actions.
+  "analyst": [
+    "firestore_query",
+    "read_lead",
+    "read_company",
+  ],
+  // Planner is a single-call skill — emits the step plan, no tools.
+  "planner": [],
 };
 
 export function toolDefsForSkill(skill: SkillName) {

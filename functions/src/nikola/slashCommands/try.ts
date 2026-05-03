@@ -21,10 +21,17 @@ function ai(): OpenAI {
  * Anything = leadId | LinkedIn URL | website URL | company name | "Person at Company" | freeform research request
  *
  * Resolves into a lead, then routes + drafts + posts.
+ *
+ * `threadTs` (optional): when called from a mention or thread context, results
+ * are posted in that Slack thread instead of #bdr root.
  */
-export async function handleTry(args: string, _payload: SlashPayload): Promise<void> {
+export async function handleTry(
+  args: string,
+  _payload?: SlashPayload,
+  threadTs?: string
+): Promise<void> {
   if (!args.trim()) {
-    await postNotice("Usage: `/nikola try <leadId | name | URL | LinkedIn | freeform>`");
+    await postNotice("Usage: `/nikola try <leadId | name | URL | LinkedIn | freeform>`", threadTs);
     return;
   }
 
@@ -43,37 +50,43 @@ export async function handleTry(args: string, _payload: SlashPayload): Promise<v
       break;
     case "research":
       // No specific target — kick off lead-generation with the description as focus
-      await postNotice(`🔎 Researching: ${parsed.value}. Will surface candidates as new leads.`);
+      await postNotice(`🔎 Researching: ${parsed.value}. Will surface candidates as new leads.`, threadTs);
       try {
         await runSkill("lead-generation", {focusArea: parsed.value});
-        await postNotice("✅ Discovery complete — check `leads` collection or `/nikola status`.");
+        await postNotice("✅ Discovery complete — check `leads` collection or `/nikola status`.", threadTs);
       } catch (e) {
-        await postNotice(`❌ Discovery failed: ${e instanceof Error ? e.message : String(e)}`);
+        await postNotice(`❌ Discovery failed: ${e instanceof Error ? e.message : String(e)}`, threadTs);
       }
       return;
   }
 
   if (!lead) {
-    await postNotice(`Couldn't resolve "${args}" to a lead.`);
+    await postNotice(`Couldn't resolve "${args}" to a lead.`, threadTs);
     return;
   }
 
   // Route + draft
   const route = routeForLead(lead);
   if (!route) {
-    await postNotice(`Lead "${lead.name || lead.company}" isn't actionable (status=${lead.status}, archived=${lead.archived}).`);
+    await postNotice(
+      `Lead "${lead.name || lead.company}" isn't actionable (status=${lead.status}, archived=${lead.archived}).`,
+      threadTs
+    );
     return;
   }
   let result;
   try {
     result = await runSkill(route.skill, {lead, mode: route.mode});
   } catch (e) {
-    await postNotice(`❌ ${route.skill} failed: ${e instanceof Error ? e.message : String(e)}`);
+    await postNotice(`❌ ${route.skill} failed: ${e instanceof Error ? e.message : String(e)}`, threadTs);
     return;
   }
   const variants = normaliseVariants(result.variants);
   if (variants.length === 0) {
-    await postNotice(`No variants produced for ${lead.name || lead.company}. Reason: ${(result.metadata?.reason as string) || "unknown"}`);
+    await postNotice(
+      `No variants produced for ${lead.name || lead.company}. Reason: ${(result.metadata?.reason as string) || "unknown"}`,
+      threadTs
+    );
     return;
   }
   const humanized = await humanizeVariants(variants, "linkedin");
@@ -85,6 +98,7 @@ export async function handleTry(args: string, _payload: SlashPayload): Promise<v
     channel: "linkedin",
     index: 1,
     total: 1,
+    threadTs,
   });
 }
 
@@ -161,17 +175,19 @@ async function findOrCreateLead(parsed: ParsedInput): Promise<LeadDoc | null> {
   // Create a fresh lead skeleton
   const ref = admin.firestore().collection("leads").doc();
   const now = admin.firestore.Timestamp.now();
+  const companyName =
+    parsed.kind === "company"
+      ? parsed.value
+      : parsed.kind === "url"
+        ? domainFrom(parsed.value)
+        : parsed.kind === "person"
+          ? parsed.hint
+          : undefined;
   const skeleton: LeadDoc = {
     id: ref.id,
     name: parsed.kind === "person" ? parsed.value : undefined,
-    company:
-      parsed.kind === "company"
-        ? parsed.value
-        : parsed.kind === "url"
-          ? domainFrom(parsed.value)
-          : parsed.kind === "person"
-            ? parsed.hint
-            : undefined,
+    company: companyName,
+    companyIndustry: companyName ? await lookupCompanyIndustry(companyName) : undefined,
     status: "new_lead",
     outreach: {
       linkedIn: {
@@ -186,6 +202,23 @@ async function findOrCreateLead(parsed: ParsedInput): Promise<LeadDoc | null> {
   };
   await ref.set(skeleton);
   return skeleton;
+}
+
+/** Look up the industry on the matching company doc, if one exists. Returns undefined otherwise. */
+async function lookupCompanyIndustry(companyName: string): Promise<string | undefined> {
+  try {
+    const snap = await admin
+      .firestore()
+      .collection("companies")
+      .where("name", "==", companyName)
+      .limit(1)
+      .get();
+    if (snap.empty) return undefined;
+    const data = snap.docs[0].data() as {industry?: string};
+    return data.industry || undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 function domainFrom(url: string): string {

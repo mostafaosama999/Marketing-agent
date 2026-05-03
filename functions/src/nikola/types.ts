@@ -8,7 +8,9 @@ export type SkillName =
   | "cwp-hunt"
   | "cwp-apply"
   | "gig-hunt"
-  | "learn";
+  | "learn"
+  | "analyst"
+  | "planner";
 
 export type LeadStatus =
   | "new_lead"
@@ -111,12 +113,20 @@ export interface LeadDoc {
     linkedIn?: {
       status?: OutreachStatus;
       sentAt?: admin.firestore.Timestamp;
+      openedAt?: admin.firestore.Timestamp;
+      repliedAt?: admin.firestore.Timestamp;
+      refusedAt?: admin.firestore.Timestamp;
+      noResponseAt?: admin.firestore.Timestamp;
       profileUrl?: string;
       [key: string]: unknown;
     };
     email?: {
       status?: OutreachStatus;
       sentAt?: admin.firestore.Timestamp;
+      openedAt?: admin.firestore.Timestamp;
+      repliedAt?: admin.firestore.Timestamp;
+      refusedAt?: admin.firestore.Timestamp;
+      noResponseAt?: admin.firestore.Timestamp;
       recipientEmail?: string;
       draftId?: string;
       draftUrl?: string;
@@ -124,6 +134,8 @@ export interface LeadDoc {
       [key: string]: unknown;
     };
   };
+  /** Denormalized from companies/{companyId}.industry — see companyIndustrySync. */
+  companyIndustry?: string;
   totalApiCosts?: number;
   createdAt?: admin.firestore.Timestamp;
   updatedAt?: admin.firestore.Timestamp;
@@ -261,11 +273,28 @@ export type NikolaWorkKind =
   | "find-leads"
   | "find-companies"
   | "mention"
-  | "status";
+  | "status"
+  | "analytical-query"
+  | "multi-step"
+  | "remember";
 
 export type NikolaWorkSource = "slash" | "mention";
 
-export type NikolaWorkStatus = "pending" | "processing" | "completed" | "failed";
+export type NikolaWorkStatus =
+  | "pending"
+  | "processing"
+  | "completed"
+  | "failed"
+  /**
+   * Multi-step plan paused at a confirmation gate. The executor returned
+   * after posting a confirmation block; the parent doc is the source of
+   * truth for plan/cursor/skippedSteps. A reaction spawns a child work doc
+   * with parentWorkId that resumes the executor.
+   *
+   * Distinct from "completed" so the analyst's pipeline-state queries
+   * don't undercount in-flight multi-step plans.
+   */
+  | "awaiting-confirmation";
 
 /** Minimal SlashPayload — duplicated here from slashHandler to avoid circular import. */
 export interface NikolaSlashPayloadSnapshot {
@@ -276,6 +305,43 @@ export interface NikolaSlashPayloadSnapshot {
   text: string;
   response_url: string;
   trigger_id?: string;
+}
+
+export interface MultiStepPlanStep {
+  skill: "try" | "enrich" | "find-leads" | "find-companies" | "analytical-query";
+  args: string;
+  description: string;
+  requiresConfirmation: boolean;
+}
+
+export interface MultiStepPlan {
+  steps: MultiStepPlanStep[];
+  estimatedCostUsd: number;
+  estimatedDurationSec: number;
+  rationale: string;
+  requiresSplit: boolean;
+}
+
+export interface MultiStepResult {
+  stepIndex: number;
+  skill: string;
+  status: "completed" | "failed" | "skipped";
+  outputSummary?: string;
+  costUsd: number;
+  completedAt: admin.firestore.Timestamp;
+  error?: string;
+}
+
+/**
+ * Confirmation gate: when an executor hits a `requiresConfirmation: true`
+ * step, it posts a confirmation block and persists this on the parent work
+ * doc, then exits. A reaction (✅ / ❌ / 💬) triggers a *child* work doc with
+ * `parentWorkId` so the executor can resume from `nextCursor`.
+ */
+export interface MultiStepConfirmationContext {
+  stepIndex: number;
+  slackMessageTs: string;
+  awaitedSince: admin.firestore.Timestamp;
 }
 
 export interface NikolaWork {
@@ -290,6 +356,20 @@ export interface NikolaWork {
   createdAt: admin.firestore.Timestamp;
   startedAt?: admin.firestore.Timestamp;
   completedAt?: admin.firestore.Timestamp;
+
+  /* Multi-step orchestration state (kind === "multi-step"). Set by the
+   * executor as it runs; survives across processor boundaries when the
+   * executor pauses at a confirmation gate. */
+  plan?: MultiStepPlan;
+  stepResults?: MultiStepResult[];
+  cursor?: number;                        // index of the next step to run
+  confirmationContext?: MultiStepConfirmationContext;
+  /** Set on a child "resume" work doc that picks up where the parent paused. */
+  parentWorkId?: string;
+  /** Slack ts of the in-place updating progress message. Reused across phases. */
+  progressMessageTs?: string;
+  /** When ❌-skip is reacted, advance past the gated step. */
+  skippedSteps?: number[];
 }
 
 export interface NikolaDiscovery {
@@ -300,6 +380,74 @@ export interface NikolaDiscovery {
   runDate: admin.firestore.Timestamp;
   triggeredBy: "mostafa" | "system";
   costUsd: number;
+}
+
+/** A confirmed memory fact. Lives on `nikolaMemory/singleton.facts[]`. */
+export interface NikolaMemoryFact {
+  id: string;
+  text: string;
+  keywords: string[];
+  addedAt: admin.firestore.Timestamp;
+  sourceWorkId: string;
+  confirmedBy: "mostafa";
+  accessCount: number;
+  lastAccessedAt?: admin.firestore.Timestamp;
+}
+
+export interface NikolaMemoryDoc {
+  facts: NikolaMemoryFact[];
+  updatedAt: admin.firestore.Timestamp;
+}
+
+/**
+ * An extracted candidate awaiting Mostafa's Remember/Skip confirmation.
+ * Lives in its own collection so we can auto-purge stale candidates after
+ * 7 days without disturbing confirmed facts.
+ */
+export interface NikolaMemoryCandidate {
+  id: string;
+  text: string;
+  sourceWorkId: string;
+  /** Slack ts of the confirmation block message — used by reactionFlow lookup. */
+  slackMessageTs: string;
+  status: "pending" | "confirmed" | "rejected" | "expired";
+  expiresAt: admin.firestore.Timestamp;
+  createdAt: admin.firestore.Timestamp;
+  resolvedAt?: admin.firestore.Timestamp;
+}
+
+/** Audit log of every router decision. Powers replay + manual misroute review. */
+export interface NikolaRoutingDecision {
+  id: string;
+  userText: string;                  // mention text after stripping bot prefix
+  routeMethod: "string-match" | "llm" | "clarification";
+  matchedKind: NikolaWorkKind | "status" | "noop" | "unknown";
+  args: string;
+  confidence?: number;               // 0..1, set when routeMethod === "llm"
+  llmRaw?: string;                   // raw classifier output, for replay
+  costUsd: number;
+  wasCorrect?: boolean;              // populated later from reactions
+  slackTs?: string;                  // Slack ts of the user message
+  workId?: string;                   // resulting nikolaWorkQueue doc id, if any
+  createdAt: admin.firestore.Timestamp;
+}
+
+/**
+ * Holding doc for low-confidence classifier decisions. Posted as a numbered
+ * notice in #bdr; user reacts 1️⃣/2️⃣ to pick a candidate skill, ❌ to cancel.
+ * The reaction handler resolves this doc and enqueues the chosen work kind.
+ */
+export interface NikolaPendingClarification {
+  id: string;
+  userText: string;
+  candidates: Array<{ kind: NikolaWorkKind | "status"; args: string; reason: string }>;
+  slackMessageTs: string;            // ts of the clarification notice itself
+  slackThreadTs?: string;            // mention's thread ts (where to reply)
+  status: "pending" | "resolved" | "cancelled" | "expired";
+  resolvedKind?: NikolaWorkKind | "status";
+  routingDecisionId?: string;        // back-link to NikolaRoutingDecision
+  createdAt: admin.firestore.Timestamp;
+  resolvedAt?: admin.firestore.Timestamp;
 }
 
 /**

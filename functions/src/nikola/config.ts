@@ -65,6 +65,12 @@ export const MODEL_FOR_SKILL: Record<SkillName, string> = {
   "cwp-apply": MODELS.fast,
   "gig-hunt": MODELS.fast,
   "learn": MODELS.fast,
+  // Read-only analytical-query handler. Cheap model is enough; this skill
+  // chains a few firestore_query calls and summarizes — no creative writing.
+  "analyst": MODELS.fast,
+  // Multi-step planner. Single LLM call per request, then handed to executor.
+  // Use the fast model — planning a 3-5 step chain doesn't need gpt-5.
+  "planner": MODELS.fast,
 };
 
 /**

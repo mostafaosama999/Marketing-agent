@@ -337,4 +337,113 @@ export const SKILL_SCHEMAS: Record<SkillName, SchemaWrapper> = {
       additionalProperties: false,
     },
   },
+
+  /* W2: read-only analyst — answers analytical questions about the pipeline. */
+  "analyst": {
+    name: "analyst_output",
+    strict: true,
+    schema: {
+      type: "object",
+      properties: {
+        answer: {
+          type: "string",
+          description:
+            "Slack-formatted markdown answer. Lead with the one-line headline number/answer; details after. Cite collections used.",
+        },
+        keyMetrics: {
+          type: ["array", "null"],
+          description:
+            "Optional structured numbers surfaced in the answer (used to render a card).",
+          items: {
+            type: "object",
+            properties: {
+              name: {type: "string"},
+              value: {type: ["string", "number"]},
+              hint: {type: ["string", "null"]},
+            },
+            required: ["name", "value", "hint"],
+            additionalProperties: false,
+          },
+        },
+        sourcesQueried: {
+          type: ["array", "null"],
+          description: "Firestore collections this answer used (e.g. ['leads', 'nikolaWorkQueue']).",
+          items: {type: "string"},
+        },
+        confidence: {type: "string", enum: ["high", "medium", "low"]},
+        caveats: {
+          type: ["string", "null"],
+          description: "Any caveat the user should know — e.g. 'reply timestamps backfilled approximately'.",
+        },
+      },
+      required: ["answer", "keyMetrics", "sourcesQueried", "confidence", "caveats"],
+      additionalProperties: false,
+    },
+  },
+
+  /* W3: multi-step planner — emits the step list. */
+  "planner": {
+    name: "planner_output",
+    strict: true,
+    schema: {
+      type: "object",
+      properties: {
+        steps: {
+          type: "array",
+          minItems: 1,
+          maxItems: 8,
+          items: {
+            type: "object",
+            properties: {
+              skill: {
+                type: "string",
+                enum: [
+                  "try",
+                  "enrich",
+                  "find-leads",
+                  "find-companies",
+                  "analytical-query",
+                ],
+                description: "Subaction this step dispatches to. Must be a real Nikola handler.",
+              },
+              args: {
+                type: "string",
+                description: "Args string passed to the handler (focus area, leadId, query text, etc).",
+              },
+              description: {
+                type: "string",
+                description: "One-line human-readable description of what this step will do.",
+              },
+              requiresConfirmation: {
+                type: "boolean",
+                description:
+                  "Set true for any step that hits a paid API (Apollo enrich, Firecrawl heavy) or costs >$0.05.",
+              },
+            },
+            required: ["skill", "args", "description", "requiresConfirmation"],
+            additionalProperties: false,
+          },
+        },
+        estimatedCostUsd: {type: "number"},
+        estimatedDurationSec: {type: "number"},
+        rationale: {
+          type: "string",
+          description: "Why this step list. Surfaced to the user in the start-of-job preview.",
+        },
+        requiresSplit: {
+          type: "boolean",
+          description:
+            "True if estimatedDurationSec > 480 — caller will queue trailing steps as a fresh work doc.",
+        },
+      },
+      required: [
+        "steps",
+        "estimatedCostUsd",
+        "estimatedDurationSec",
+        "rationale",
+        "requiresSplit",
+      ],
+      additionalProperties: false,
+    },
+  },
 };

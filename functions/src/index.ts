@@ -3,6 +3,10 @@ import * as functions from "firebase-functions";
 
 // Initialize Firebase Admin SDK
 admin.initializeApp();
+// Allow undefined fields in Firestore writes (silently dropped instead of throwing).
+// Required for Nikola write sites that construct docs with optional fields.
+// MUST be called before any Firestore operation; safe here because no module-level ops exist.
+admin.firestore().settings({ignoreUndefinedProperties: true});
 
 /**
  * Simple health check function for monitoring
@@ -182,4 +186,7 @@ export {
   nikolaContextSync,
   nikolaGmailWebhook,
   setupNikolaGmailWatchHttp,
+  nikolaWorkQueueProcessor,
+  nikolaCompanyIndustrySync,
+  nikolaMemoryExtractor,
 } from "./nikola";

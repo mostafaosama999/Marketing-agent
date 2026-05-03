@@ -35,6 +35,22 @@ export async function readCompany(args: {companyId: string}): Promise<{
   }
 }
 
+/**
+ * Maps an OutreachStatus to the timestamp field that should be stamped on the
+ * transition. W2 added the non-sent transitions so the analyst skill can
+ * answer time-bounded questions like "reply rate this month".
+ *
+ * not_sent has no associated timestamp (it's the initial state).
+ */
+const TIMESTAMP_FIELD_FOR_STATUS: Record<OutreachStatus, string | null> = {
+  not_sent: null,
+  sent: "sentAt",
+  opened: "openedAt",
+  replied: "repliedAt",
+  refused: "refusedAt",
+  no_response: "noResponseAt",
+};
+
 export async function updateLeadOutreach(args: {
   leadId: string;
   channel: "linkedIn" | "email";
@@ -43,13 +59,14 @@ export async function updateLeadOutreach(args: {
 }): Promise<{ok: boolean; error?: string}> {
   try {
     const ref = admin.firestore().collection("leads").doc(args.leadId);
+    const tsField = TIMESTAMP_FIELD_FOR_STATUS[args.status];
     await ref.set(
       {
         outreach: {
           [args.channel]: {
             status: args.status,
-            ...(args.status === "sent"
-              ? {sentAt: admin.firestore.FieldValue.serverTimestamp()}
+            ...(tsField
+              ? {[tsField]: admin.firestore.FieldValue.serverTimestamp()}
               : {}),
           },
         },

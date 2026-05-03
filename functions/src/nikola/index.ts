@@ -1,19 +1,24 @@
 /**
  * Nikola Cloud Function exports — registered from src/index.ts.
  *
- * 5 deployed functions:
- *   - nikolaSlackEvents       HTTPS  Slack Events API webhook
- *   - nikolaSlashCommand      HTTPS  /nikola slash dispatcher
- *   - nikolaMorningBatch      pubsub Daily 07:00 UTC weekday batch
- *   - nikolaContextSync       pubsub Daily 03:00 UTC Notion + reports sync
- *   - nikolaGmailWebhook      HTTPS  Pub/Sub push handler for Gmail replies
- *   - setupNikolaGmailWatch   HTTPS  One-time / weekly watch renewal
+ * 7 deployed functions:
+ *   - nikolaSlackEvents          HTTPS     Slack Events API webhook
+ *   - nikolaSlashCommand         HTTPS     /nikola slash dispatcher
+ *   - nikolaMorningBatch         pubsub    Daily 07:00 UTC weekday batch
+ *   - nikolaContextSync          pubsub    Daily 03:00 UTC Notion + reports sync
+ *   - nikolaGmailWebhook         HTTPS     Pub/Sub push handler for Gmail replies
+ *   - setupNikolaGmailWatchHttp  HTTPS     One-time / weekly watch renewal
+ *   - nikolaWorkQueueProcessor   firestore onCreate work-queue processor (v1.1)
  */
 import * as functions from "firebase-functions";
 import {runMorningBatch} from "./jobs/morningBatch";
 import {runContextSync} from "./jobs/contextSync";
 import {processGmailPushNotification} from "./gmail/notificationHandler";
 import {setupNikolaGmailWatch} from "./gmail/watchManager";
+
+export {nikolaWorkQueueProcessor} from "./jobs/workQueueProcessor";
+export {nikolaCompanyIndustrySync} from "./jobs/companyIndustrySync";
+export {nikolaMemoryExtractor} from "./jobs/memoryExtractor";
 
 export {
   nikolaSlackEventsHandler as nikolaSlackEvents,

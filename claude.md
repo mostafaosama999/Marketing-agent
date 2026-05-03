@@ -364,6 +364,8 @@ Multi-platform content marketing analytics synced from LinkedIn (Excel), TDS (pa
 | `docs/CONTENT_ANALYTICS.md` | Multi-platform content analytics (LinkedIn, TDS, Medium), Firestore schema, sync skill, BDR integration |
 | `docs/HIRING_AUTOSCORING.md` | Inbound applicant autoscoring: Apify LinkedIn enrichment + GPT-4o-mini cross-checks, schema, cost, config |
 | `docs/HIRING_BATCH_NOTIFICATIONS.md` | Slack ping to #hiring every 5 new applicants in `applied` (post-AI-screen): counter doc, paths counted, config |
+| `docs/NIKOLA_V2.md` | Nikola V2 architecture: 3-path routing, analyst/planner skills, hybrid memory, observability — replaces the V1 ad-hoc dispatch |
+| `docs/NIKOLA_MISROUTE_POSTMORTEM.md` | Template for capturing every Nikola misroute. Mandatory after any wrong dispatch; feeds prompt fixes |
 
 ### 🚨 MANDATORY: Documentation Updates for Systems
 - **New system added**: When implementing a new system or major feature, you MUST create a corresponding `.md` file in `docs/` and link it in the table above.

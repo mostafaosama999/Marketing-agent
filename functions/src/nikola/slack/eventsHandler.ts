@@ -1,5 +1,6 @@
 import * as functions from "firebase-functions";
 import {bdrChannelId, mostafaSlackUserId} from "../config";
+import {handleAppMention} from "./mentionFlow";
 import {handleReaction} from "./reactionFlow";
 import {handleThreadMessage} from "./threadReplyFlow";
 
@@ -51,6 +52,9 @@ export async function dispatchSlackEvent(payload: {
         if (event.bot_id) return {ok: true};
         if (event.subtype && event.subtype !== "thread_broadcast") return {ok: true};
         await handleThreadMessage(event as never);
+        break;
+      case "app_mention":
+        await handleAppMention(event as never);
         break;
       default:
         functions.logger.debug("Unhandled event type", {eventType});

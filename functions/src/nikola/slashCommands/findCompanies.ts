@@ -8,7 +8,7 @@ import {NikolaDiscovery, SkillName} from "../types";
  * Runs cwp-hunt + gig-hunt in parallel. Persists each as a nikolaDiscovery doc.
  * Posts a summary highlighting top items by fitScore.
  */
-export async function handleFindCompanies(args: string): Promise<void> {
+export async function handleFindCompanies(args: string, threadTs?: string): Promise<void> {
   const focus = args.trim() || "";
   const results = await Promise.allSettled([
     runWith("cwp-hunt", focus),
@@ -26,7 +26,7 @@ export async function handleFindCompanies(args: string): Promise<void> {
     totalCost += r.value.costUsd;
   }
   lines.push(`Total cost: $${totalCost.toFixed(3)}`);
-  await postNotice(lines.join("\n"));
+  await postNotice(lines.join("\n"), threadTs);
 }
 
 async function runWith(skill: SkillName, focus: string): Promise<{line: string; costUsd: number}> {
