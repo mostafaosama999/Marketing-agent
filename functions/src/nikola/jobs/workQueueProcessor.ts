@@ -1,6 +1,10 @@
 import * as admin from "firebase-admin";
 import * as functions from "firebase-functions";
+import {defineSecret} from "firebase-functions/params";
 import OpenAI from "openai";
+
+// Apify is the firecrawl-quota fallback for web_search / firecrawl_scrape.
+const apifyTokenSecret = defineSecret("APIFY_TOKEN");
 import {bdrChannelId, MODELS, openaiApiKey, slackBotToken} from "../config";
 import {WebClient} from "@slack/web-api";
 import {MENTION_INTENT_PROMPT} from "../prompts/mentionIntentPrompt";
@@ -696,7 +700,11 @@ function helpText(): string {
 
 /** Cloud Function entry — wired in `nikola/index.ts`. */
 export const nikolaWorkQueueProcessor = functions
-  .runWith({timeoutSeconds: 540, memory: "1GB"})
+  .runWith({
+    timeoutSeconds: 540,
+    memory: "1GB",
+    secrets: [apifyTokenSecret],
+  })
   .firestore.document("nikolaWorkQueue/{workId}")
   .onCreate(async (_snap, context) => {
     await processWorkDoc(context.params.workId);

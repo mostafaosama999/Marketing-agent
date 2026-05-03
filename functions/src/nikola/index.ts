@@ -1,20 +1,28 @@
 /**
  * Nikola Cloud Function exports — registered from src/index.ts.
  *
- * 7 deployed functions:
+ * Deployed functions:
  *   - nikolaSlackEvents          HTTPS     Slack Events API webhook
  *   - nikolaSlashCommand         HTTPS     /nikola slash dispatcher
  *   - nikolaMorningBatch         pubsub    Daily 07:00 UTC weekday batch
  *   - nikolaContextSync          pubsub    Daily 03:00 UTC Notion + reports sync
  *   - nikolaGmailWebhook         HTTPS     Pub/Sub push handler for Gmail replies
  *   - setupNikolaGmailWatchHttp  HTTPS     One-time / weekly watch renewal
- *   - nikolaWorkQueueProcessor   firestore onCreate work-queue processor (v1.1)
+ *   - nikolaWorkQueueProcessor   firestore onCreate work-queue processor
+ *   - nikolaCompanyIndustrySync  firestore onUpdate trigger on entities (W2)
+ *   - nikolaMemoryExtractor      firestore onUpdate trigger on workQueue (W4)
  */
 import * as functions from "firebase-functions";
+import {defineSecret} from "firebase-functions/params";
 import {runMorningBatch} from "./jobs/morningBatch";
 import {runContextSync} from "./jobs/contextSync";
 import {processGmailPushNotification} from "./gmail/notificationHandler";
 import {setupNikolaGmailWatch} from "./gmail/watchManager";
+
+// APIFY_TOKEN: used as a fallback when Firecrawl runs out of monthly credit.
+// The hiring pipeline already declares this secret; redeclaring here is fine
+// (Firebase resolves the same Secret Manager entry).
+const apifyTokenSecret = defineSecret("APIFY_TOKEN");
 
 export {nikolaWorkQueueProcessor} from "./jobs/workQueueProcessor";
 export {nikolaCompanyIndustrySync} from "./jobs/companyIndustrySync";
@@ -27,7 +35,11 @@ export {
 
 /** Daily morning batch — 07:00 UTC, weekdays only. Avoids existing 02/09 UTC slots. */
 export const nikolaMorningBatch = functions
-  .runWith({timeoutSeconds: 540, memory: "1GB"})
+  .runWith({
+    timeoutSeconds: 540,
+    memory: "1GB",
+    secrets: [apifyTokenSecret],
+  })
   .pubsub.schedule("0 7 * * 1-5")
   .timeZone("UTC")
   .onRun(async () => {
