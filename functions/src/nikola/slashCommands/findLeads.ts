@@ -11,7 +11,7 @@ import {LeadDoc, NikolaDiscovery} from "../types";
  * nikolaDiscovery doc, and posts a summary in #bdr.
  */
 export async function handleFindLeads(args: string, threadTs?: string): Promise<void> {
-  const focus = args.trim() || "";
+  const focus = enrichFocusArea(args.trim() || "");
   let result;
   try {
     result = await runSkill("lead-generation", {focusArea: focus});
@@ -149,6 +149,39 @@ export async function handleFindLeads(args: string, threadTs?: string): Promise<
     summary,
   });
   await postBlocks(text, blocks, threadTs);
+}
+
+/**
+ * Pre-process the user-supplied focus before handing it to the lead-generation
+ * skill. Specifically: when the user writes "similar to X" (or "like X" /
+ * "matching X"), rewrite the focus so the model treats X as a *reference
+ * archetype* — research X first to extract its domain/stage/audience signals
+ * and find OTHERS with those traits, not X itself.
+ *
+ * Without this rewrite, gpt-4.1-mini reads "find companies similar to
+ * Ultralytics" as "find companies named Ultralytics" and returns the very
+ * company the user asked to find peers of (which then dedups against the
+ * CRM, producing zero new leads).
+ */
+function enrichFocusArea(raw: string): string {
+  if (!raw) return raw;
+
+  // Match "similar to <Name>", "like <Name>", "matching <Name>". Capture the
+  // name (allowing 1-3 words) up to the next punctuation or end of string.
+  const re = /\b(?:similar to|like|matching)\s+([A-Z][\w.&-]*(?:\s+[A-Z][\w.&-]*){0,2})\b/i;
+  const m = raw.match(re);
+  if (!m) return raw;
+
+  const archetype = m[1].trim();
+  return (
+    `${raw}\n\n` +
+    `IMPORTANT: "${archetype}" is the ICP archetype, NOT a company to return. ` +
+    `Research ${archetype} first (its product category, stage, employee size, ` +
+    `developer audience, content cadence) and use those signals to find OTHER ` +
+    `companies that share those traits. Explicitly EXCLUDE ${archetype} and any ` +
+    `subsidiary/parent of ${archetype} from your output. Aim for 5-10 distinct ` +
+    `peer companies that compete with or address the same audience as ${archetype}.`
+  );
 }
 
 /**
