@@ -182,7 +182,7 @@ export {researchEventOrganizer, onEventCreatedResearchOrganizer} from "./events/
 export {
   nikolaSlackEvents,
   nikolaSlashCommand,
-  nikolaMorningBatch,
+  // nikolaMorningBatch — DISABLED 2026-05-04, see functions/src/nikola/index.ts
   nikolaContextSync,
   nikolaGmailWebhook,
   setupNikolaGmailWatchHttp,
