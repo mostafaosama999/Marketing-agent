@@ -900,14 +900,22 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
     return groups;
   }, [sortedLeads]);
 
-  // Step 2: Sort companies by lead count (descending), then alphabetically
+  // Step 2: Order companies by where their first lead lands in the active sort
+  // (so e.g. createdAt desc → company with the newest lead appears first).
+  // Without this, companies were always pinned by lead count and the user's
+  // chosen sort only ordered leads inside each group.
   const sortedCompanies = useMemo(() => {
-    return Object.keys(groupedLeads).sort((a, b) => {
-      const countDiff = groupedLeads[b].length - groupedLeads[a].length;
-      if (countDiff !== 0) return countDiff;
-      return a.localeCompare(b);
+    const firstIndexByCompany = new Map<string, number>();
+    sortedLeads.forEach((lead, idx) => {
+      const company = lead.company || lead.companyName || 'No Company';
+      if (!firstIndexByCompany.has(company)) {
+        firstIndexByCompany.set(company, idx);
+      }
     });
-  }, [groupedLeads]);
+    return Object.keys(groupedLeads).sort(
+      (a, b) => (firstIndexByCompany.get(a) ?? 0) - (firstIndexByCompany.get(b) ?? 0)
+    );
+  }, [sortedLeads, groupedLeads]);
 
   // Step 3: Paginate leads while respecting company groups
   // This creates a map of company -> leads to show on this page
