@@ -28,10 +28,10 @@ function deserializeChannelFreezes(raw: unknown): ChannelFreezeMap | undefined {
     const entry = (raw as Record<string, unknown>)[key];
     if (entry && typeof entry === 'object') {
       const e = entry as Record<string, unknown>;
-      map[key] = {
-        frozen: Boolean(e.frozen),
-        frozenAt: toDate(e.frozenAt),
-      };
+      // Only attach frozenAt when present — Firestore rejects explicit undefined
+      // on subsequent writes (the next toggle spreads this state back into setDoc).
+      const frozenAt = toDate(e.frozenAt);
+      map[key] = frozenAt ? { frozen: Boolean(e.frozen), frozenAt } : { frozen: Boolean(e.frozen) };
     }
   }
   return Object.keys(map).length > 0 ? map : undefined;
@@ -71,7 +71,17 @@ export async function updateHiringConfig(config: Partial<HiringConfig>): Promise
 }
 
 export async function updateChannelFreezes(channelFreezes: ChannelFreezeMap): Promise<void> {
-  await updateHiringConfig({ channelFreezes });
+  // Strip explicit-undefined fields. Firestore rejects them, and they can sneak in via
+  // legacy docs or upstream spreads of prior state.
+  const sanitized: ChannelFreezeMap = {};
+  for (const key of FREEZABLE_CHANNEL_KEYS) {
+    const entry = channelFreezes[key];
+    if (!entry) continue;
+    sanitized[key] = entry.frozen && entry.frozenAt
+      ? { frozen: true, frozenAt: entry.frozenAt }
+      : { frozen: Boolean(entry.frozen) };
+  }
+  await updateHiringConfig({ channelFreezes: sanitized });
 }
 
 export function buildAllFrozenMap(now: Date, existing?: ChannelFreezeMap): ChannelFreezeMap {
