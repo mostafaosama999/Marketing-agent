@@ -56,8 +56,11 @@ const ROLE_OPTIONS: { value: EventCompanyRole; label: string }[] = [
   { value: 'exhibitor', label: 'Exhibitor' },
   { value: 'speaker', label: 'Speaker' },
   { value: 'organizer', label: 'Organizer' },
+  { value: 'host', label: 'Host' },
   { value: 'attendee', label: 'Attendee' },
 ];
+
+const DEFAULT_ROLE_COLOR = { bg: '#f1f5f9', text: '#475569' };
 
 const PRIORITY_OPTIONS: { value: 'high' | 'medium' | 'low'; label: string; color: string }[] = [
   { value: 'high', label: 'High', color: '#ef4444' },
@@ -82,6 +85,7 @@ const ROLE_COLORS: Record<EventCompanyRole, { bg: string; text: string }> = {
   exhibitor: { bg: '#f3e8ff', text: '#7c3aed' },
   speaker: { bg: '#dcfce7', text: '#166534' },
   organizer: { bg: '#fef9c3', text: '#854d0e' },
+  host: { bg: '#e0e7ff', text: '#3730a3' },
   attendee: { bg: '#f1f5f9', text: '#475569' },
 };
 
@@ -226,7 +230,7 @@ export const EventCompaniesTab: React.FC<EventCompaniesTabProps> = ({
               </TableRow>
             ) : (
               companies.map((company) => {
-                const roleColors = ROLE_COLORS[company.role];
+                const roleColors = ROLE_COLORS[company.role] || DEFAULT_ROLE_COLOR;
                 const priorityConfig = PRIORITY_OPTIONS.find((p) => p.value === company.priority);
 
                 return (

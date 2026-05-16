@@ -15,7 +15,7 @@ export type TicketAvailability = 'available' | 'sold_out' | 'waitlist' | 'free' 
 
 export type IcpMatch = 'yes' | 'partial' | 'no';
 
-export type EventCompanyRole = 'sponsor' | 'exhibitor' | 'speaker' | 'organizer' | 'attendee';
+export type EventCompanyRole = 'sponsor' | 'exhibitor' | 'speaker' | 'organizer' | 'host' | 'attendee';
 
 export type EventLeadRole = 'speaker' | 'panelist' | 'workshop_leader' | 'attendee';
 
