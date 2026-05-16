@@ -92,6 +92,7 @@ export const EventsPage: React.FC = () => {
   const [monthFilter, setMonthFilter] = useState<number | 'all'>('all');
   const [hideNoIcp, setHideNoIcp] = useState(false);
   const [tierFilter, setTierFilter] = useState<EducationalTier | 'all'>('all');
+  const [showPastEvents, setShowPastEvents] = useState(false);
 
   // Add dialog state
   const [addDialogOpen, setAddDialogOpen] = useState(false);
@@ -102,6 +103,15 @@ export const EventsPage: React.FC = () => {
   // Apply filters
   const filteredEvents = useMemo(() => {
     let filtered = [...events];
+
+    if (!showPastEvents) {
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      filtered = filtered.filter((e) => {
+        const end = new Date(e.endDate || e.startDate);
+        return end >= today;
+      });
+    }
 
     if (search.trim()) {
       const term = search.toLowerCase();
@@ -137,7 +147,7 @@ export const EventsPage: React.FC = () => {
     }
 
     return filtered;
-  }, [events, search, statusFilter, typeFilter, monthFilter, hideNoIcp, tierFilter, activeCategory]);
+  }, [events, search, statusFilter, typeFilter, monthFilter, hideNoIcp, tierFilter, activeCategory, showPastEvents]);
 
   const handleAddTag = () => {
     const tag = tagInput.trim().toLowerCase();
@@ -212,6 +222,7 @@ export const EventsPage: React.FC = () => {
     setMonthFilter('all');
     setHideNoIcp(false);
     setTierFilter('all');
+    setShowPastEvents(false);
   }, [setSearchParams]);
 
   if (loading) {
@@ -340,11 +351,13 @@ export const EventsPage: React.FC = () => {
               typeFilter={typeFilter}
               monthFilter={monthFilter}
               hideNoIcp={hideNoIcp}
+              showPastEvents={showPastEvents}
               onSearchChange={setSearch}
               onStatusChange={setStatusFilter}
               onTypeChange={setTypeFilter}
               onMonthChange={setMonthFilter}
               onHideNoIcpChange={setHideNoIcp}
+              onShowPastEventsChange={setShowPastEvents}
               category={activeCategory}
               tierFilter={tierFilter}
               onTierChange={setTierFilter}

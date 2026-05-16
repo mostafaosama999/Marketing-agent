@@ -43,11 +43,13 @@ interface EventsFiltersProps {
   typeFilter: EventType | 'all';
   monthFilter: number | 'all';
   hideNoIcp: boolean;
+  showPastEvents: boolean;
   onSearchChange: (value: string) => void;
   onStatusChange: (value: EventStatus | 'all') => void;
   onTypeChange: (value: EventType | 'all') => void;
   onMonthChange: (value: number | 'all') => void;
   onHideNoIcpChange: (value: boolean) => void;
+  onShowPastEventsChange: (value: boolean) => void;
   // Educational-specific
   category?: EventCategory;
   tierFilter?: EducationalTier | 'all';
@@ -75,11 +77,13 @@ export const EventsFilters: React.FC<EventsFiltersProps> = ({
   typeFilter,
   monthFilter,
   hideNoIcp,
+  showPastEvents,
   onSearchChange,
   onStatusChange,
   onTypeChange,
   onMonthChange,
   onHideNoIcpChange,
+  onShowPastEventsChange,
   category,
   tierFilter,
   onTierChange,
@@ -196,6 +200,29 @@ export const EventsFilters: React.FC<EventsFiltersProps> = ({
           }}
         />
       )}
+
+      <FormControlLabel
+        control={
+          <Checkbox
+            checked={showPastEvents}
+            onChange={(e) => onShowPastEventsChange(e.target.checked)}
+            size="small"
+            sx={{
+              color: '#94a3b8',
+              '&.Mui-checked': { color: '#667eea' },
+            }}
+          />
+        }
+        label="Show past events"
+        sx={{
+          ml: 0,
+          '& .MuiFormControlLabel-label': {
+            fontSize: '14px',
+            color: '#64748b',
+            whiteSpace: 'nowrap',
+          },
+        }}
+      />
 
       {category === 'educational' && onTierChange && (
         <FormControl size="small" sx={{ minWidth: 140 }}>
