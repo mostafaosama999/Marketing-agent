@@ -32,6 +32,8 @@ import {
   ARCHIVE_REASON_LABELS,
   isStale,
 } from '../../../types/sourcedCandidate';
+import { useColumnWidths } from '../../../hooks/useColumnWidths';
+import { ResizableHeaderCell } from '../../common/ResizableHeaderCell';
 
 interface OutboundTableProps {
   candidates: SourcedCandidate[];
@@ -60,6 +62,16 @@ export const OutboundTable: React.FC<OutboundTableProps> = ({
 }) => {
   const [menuAnchor, setMenuAnchor] = useState<{ el: HTMLElement; candidate: SourcedCandidate } | null>(null);
   const [archiveMenu, setArchiveMenu] = useState<{ el: HTMLElement; candidate: SourcedCandidate } | null>(null);
+
+  const { getWidth: getColumnWidth, setWidth: setColumnWidth, resetWidth: resetColumnWidth } =
+    useColumnWidths('outbound_table');
+  const resizeProps = (columnId: string) => ({
+    columnId,
+    width: getColumnWidth(columnId),
+    onResize: setColumnWidth,
+    onResetWidth: resetColumnWidth,
+  });
+  const OUTBOUND_COLUMNS = ['name', 'linkedin', 'score', 'tier', 'role', 'university', 'age', 'status', 'last_contacted', 'actions'] as const;
 
   const openActionMenu = (e: React.MouseEvent<HTMLElement>, candidate: SourcedCandidate) => {
     e.stopPropagation();
@@ -100,20 +112,26 @@ export const OutboundTable: React.FC<OutboundTableProps> = ({
         }}
       >
         <Table size="small" stickyHeader>
+          <colgroup>
+            {OUTBOUND_COLUMNS.map((id) => {
+              const w = getColumnWidth(id);
+              return <col key={id} style={w ? { width: `${w}px` } : undefined} />;
+            })}
+          </colgroup>
           <TableHead>
             <TableRow>
-              <TableCell sx={{ fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+              <ResizableHeaderCell {...resizeProps('name')} sx={{ fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>
                 Name
-              </TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LinkedIn</TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Score</TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Tier</TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Role @ Company</TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>University</TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Age</TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px', minWidth: 140 }}>Status</TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Last Contacted</TableCell>
-              <TableCell sx={{ fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Actions</TableCell>
+              </ResizableHeaderCell>
+              <ResizableHeaderCell {...resizeProps('linkedin')} sx={{ fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>LinkedIn</ResizableHeaderCell>
+              <ResizableHeaderCell {...resizeProps('score')} sx={{ fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Score</ResizableHeaderCell>
+              <ResizableHeaderCell {...resizeProps('tier')} sx={{ fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Tier</ResizableHeaderCell>
+              <ResizableHeaderCell {...resizeProps('role')} sx={{ fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Role @ Company</ResizableHeaderCell>
+              <ResizableHeaderCell {...resizeProps('university')} sx={{ fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>University</ResizableHeaderCell>
+              <ResizableHeaderCell {...resizeProps('age')} sx={{ fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Age</ResizableHeaderCell>
+              <ResizableHeaderCell {...resizeProps('status')} sx={{ fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px', minWidth: 140 }}>Status</ResizableHeaderCell>
+              <ResizableHeaderCell {...resizeProps('last_contacted')} sx={{ fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Last Contacted</ResizableHeaderCell>
+              <ResizableHeaderCell {...resizeProps('actions')} sx={{ fontWeight: 700, fontSize: '12px', textTransform: 'uppercase', letterSpacing: '0.5px' }}>Actions</ResizableHeaderCell>
             </TableRow>
           </TableHead>
           <TableBody>

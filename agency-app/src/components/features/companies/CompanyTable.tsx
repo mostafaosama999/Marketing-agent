@@ -45,6 +45,8 @@ import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFns';
 import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { Company } from '../../../types/crm';
 import { TableColumnConfig } from '../../../types/table';
+import { useColumnWidths } from '../../../hooks/useColumnWidths';
+import { ResizableHeaderCell } from '../../common/ResizableHeaderCell';
 import { FieldDefinition } from '../../../types/fieldDefinitions';
 import { getFieldDefinitions, ensureCompanyLabelsFieldDefinition } from '../../../services/api/fieldDefinitionsService';
 import { DropdownMenuWithAdd } from '../crm/DropdownMenuWithAdd';
@@ -89,6 +91,10 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
 
   const [orderBy, setOrderBy] = useState<string>('name');
   const [order, setOrder] = useState<SortDirection>('asc');
+
+  // Column widths (persisted to localStorage)
+  const { getWidth: getColumnWidth, setWidth: setColumnWidth, resetWidth: resetColumnWidth } =
+    useColumnWidths('companies_table');
 
   // Dropdown field definitions
   const [fieldDefinitions, setFieldDefinitions] = useState<FieldDefinition[]>([]);
@@ -1418,6 +1424,14 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
         }}
       >
         <Table size="small">
+          <colgroup>
+            {onSelectCompany && onSelectAll && <col style={{ width: '48px' }} />}
+            {displayColumns.map((column) => {
+              const w = getColumnWidth(column.id);
+              return <col key={column.id} style={w ? { width: `${w}px` } : undefined} />;
+            })}
+            <col style={{ width: '120px' }} />
+          </colgroup>
           <TableHead sx={{
             position: 'sticky',
             top: 0,
@@ -1452,8 +1466,12 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
 
               {/* Table columns */}
               {displayColumns.map((column) => (
-                <TableCell
+                <ResizableHeaderCell
                   key={column.id}
+                  columnId={column.id}
+                  width={getColumnWidth(column.id)}
+                  onResize={setColumnWidth}
+                  onResetWidth={resetColumnWidth}
                   align={column.id === 'leadCount' ? 'center' : 'left'}
                   sx={{
                     py: 0,
@@ -1465,7 +1483,6 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
                     letterSpacing: '0.5px',
                     height: '36px',
                     bgcolor: column.id === 'ratingV2' ? 'rgba(102, 126, 234, 0.08)' : 'transparent',
-                    position: 'relative',
                     '&::after': column.id === 'ratingV2' ? {
                       content: '""',
                       position: 'absolute',
@@ -1501,7 +1518,7 @@ export const CompanyTable: React.FC<CompanyTableProps> = ({
                   >
                     {column.label}
                   </TableSortLabel>
-                </TableCell>
+                </ResizableHeaderCell>
               ))}
 
               {/* Actions column */}

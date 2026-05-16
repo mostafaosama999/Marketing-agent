@@ -27,6 +27,8 @@ import {
 } from "@mui/icons-material";
 import {EmailData} from "../../services/api/gmailService";
 import EmailDetailRow from "./EmailDetailRow";
+import {useColumnWidths} from "../../hooks/useColumnWidths";
+import {ResizableHeaderCell} from "../common/ResizableHeaderCell";
 
 interface EmailsTableProps {
   emails: EmailData[];
@@ -37,6 +39,15 @@ const EmailsTable: React.FC<EmailsTableProps> = ({emails, loading = false}) => {
   const [expandedRows, setExpandedRows] = useState<Set<string>>(new Set());
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(20);
+
+  const {getWidth: getColumnWidth, setWidth: setColumnWidth, resetWidth: resetColumnWidth} =
+    useColumnWidths("emails_table");
+  const resizeProps = (columnId: string) => ({
+    columnId,
+    width: getColumnWidth(columnId),
+    onResize: setColumnWidth,
+    onResetWidth: resetColumnWidth,
+  });
 
   const toggleRow = (emailId: string) => {
     setExpandedRows((prev) => {
@@ -110,6 +121,13 @@ const EmailsTable: React.FC<EmailsTableProps> = ({emails, loading = false}) => {
     >
       <TableContainer>
         <Table>
+          <colgroup>
+            <col style={{width: "50px"}} />
+            {(["subject", "from", "received", "status"] as const).map((id) => {
+              const w = getColumnWidth(id);
+              return <col key={id} style={w ? {width: `${w}px`} : undefined} />;
+            })}
+          </colgroup>
           <TableHead>
             <TableRow
               sx={{
@@ -117,18 +135,18 @@ const EmailsTable: React.FC<EmailsTableProps> = ({emails, loading = false}) => {
               }}
             >
               <TableCell sx={{width: 50}} />
-              <TableCell sx={{color: "white", fontWeight: 600}}>
+              <ResizableHeaderCell {...resizeProps("subject")} sx={{color: "white", fontWeight: 600}}>
                 Subject
-              </TableCell>
-              <TableCell sx={{color: "white", fontWeight: 600}}>
+              </ResizableHeaderCell>
+              <ResizableHeaderCell {...resizeProps("from")} sx={{color: "white", fontWeight: 600}}>
                 From
-              </TableCell>
-              <TableCell sx={{color: "white", fontWeight: 600}}>
+              </ResizableHeaderCell>
+              <ResizableHeaderCell {...resizeProps("received")} sx={{color: "white", fontWeight: 600}}>
                 Received
-              </TableCell>
-              <TableCell sx={{color: "white", fontWeight: 600}}>
+              </ResizableHeaderCell>
+              <ResizableHeaderCell {...resizeProps("status")} sx={{color: "white", fontWeight: 600}}>
                 Status
-              </TableCell>
+              </ResizableHeaderCell>
             </TableRow>
           </TableHead>
           <TableBody>

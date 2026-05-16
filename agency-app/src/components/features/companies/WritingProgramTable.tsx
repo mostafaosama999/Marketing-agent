@@ -25,6 +25,8 @@ import {
 } from '@mui/icons-material';
 import { Company } from '../../../types/crm';
 import { TableColumnConfig } from '../../../types/table';
+import { useColumnWidths } from '../../../hooks/useColumnWidths';
+import { ResizableHeaderCell } from '../../common/ResizableHeaderCell';
 
 interface WritingProgramTableProps {
   companies: Array<Company & { leadCount?: number }>;
@@ -51,6 +53,16 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
   const [order, setOrder] = useState<SortDirection>('desc');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
+
+  const { getWidth: getColumnWidth, setWidth: setColumnWidth, resetWidth: resetColumnWidth } =
+    useColumnWidths('writing_program_table');
+
+  const resizeProps = (columnId: string) => ({
+    columnId,
+    width: getColumnWidth(columnId),
+    onResize: setColumnWidth,
+    onResetWidth: resetColumnWidth,
+  });
 
   // Filter to only visible columns (both default and custom)
   const displayColumns = useMemo(() => {
@@ -213,6 +225,14 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
         }}
       >
         <Table size="small">
+          <colgroup>
+            {onSelectCompany && <col style={{ width: '48px' }} />}
+            {displayColumns.map((column) => {
+              const w = getColumnWidth(column.id);
+              return <col key={column.id} style={w ? { width: `${w}px` } : undefined} />;
+            })}
+            {onAnalyzeSingle && <col style={{ width: '80px' }} />}
+          </colgroup>
           <TableHead
             sx={{
               position: 'sticky',
@@ -242,7 +262,7 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
                 </TableCell>
               )}
               {isColumnVisible('createdAt') && (
-                <TableCell sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
+                <ResizableHeaderCell {...resizeProps('createdAt')} sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
                   <TableSortLabel
                     active={orderBy === 'createdAt'}
                     direction={orderBy === 'createdAt' ? order : 'asc'}
@@ -250,10 +270,10 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
                   >
                     Created
                   </TableSortLabel>
-                </TableCell>
+                </ResizableHeaderCell>
               )}
               {isColumnVisible('company') && (
-                <TableCell sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
+                <ResizableHeaderCell {...resizeProps('company')} sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
                   <TableSortLabel
                     active={orderBy === 'name'}
                     direction={orderBy === 'name' ? order : 'asc'}
@@ -261,10 +281,10 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
                   >
                     Company
                   </TableSortLabel>
-                </TableCell>
+                </ResizableHeaderCell>
               )}
               {isColumnVisible('website') && (
-                <TableCell sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
+                <ResizableHeaderCell {...resizeProps('website')} sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
                   <TableSortLabel
                     active={orderBy === 'website'}
                     direction={orderBy === 'website' ? order : 'asc'}
@@ -272,10 +292,10 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
                   >
                     Website
                   </TableSortLabel>
-                </TableCell>
+                </ResizableHeaderCell>
               )}
               {isColumnVisible('programFound') && (
-                <TableCell sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
+                <ResizableHeaderCell {...resizeProps('programFound')} sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
                   <TableSortLabel
                     active={orderBy === 'hasProgram'}
                     direction={orderBy === 'hasProgram' ? order : 'asc'}
@@ -283,10 +303,10 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
                   >
                     Program Found
                   </TableSortLabel>
-                </TableCell>
+                </ResizableHeaderCell>
               )}
               {isColumnVisible('status') && (
-                <TableCell sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
+                <ResizableHeaderCell {...resizeProps('status')} sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
                   <TableSortLabel
                     active={orderBy === 'isOpen'}
                     direction={orderBy === 'isOpen' ? order : 'asc'}
@@ -294,10 +314,10 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
                   >
                     Status
                   </TableSortLabel>
-                </TableCell>
+                </ResizableHeaderCell>
               )}
               {isColumnVisible('payment') && (
-                <TableCell sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
+                <ResizableHeaderCell {...resizeProps('payment')} sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
                   <TableSortLabel
                     active={orderBy === 'paymentAmount'}
                     direction={orderBy === 'paymentAmount' ? order : 'asc'}
@@ -305,25 +325,25 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
                   >
                     Payment
                   </TableSortLabel>
-                </TableCell>
+                </ResizableHeaderCell>
               )}
               {isColumnVisible('paymentMethod') && (
-                <TableCell sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
+                <ResizableHeaderCell {...resizeProps('paymentMethod')} sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
                   Payment Method
-                </TableCell>
+                </ResizableHeaderCell>
               )}
               {isColumnVisible('programUrl') && (
-                <TableCell sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
+                <ResizableHeaderCell {...resizeProps('programUrl')} sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
                   Program URL
-                </TableCell>
+                </ResizableHeaderCell>
               )}
               {isColumnVisible('contactEmail') && (
-                <TableCell sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
+                <ResizableHeaderCell {...resizeProps('contactEmail')} sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
                   Contact
-                </TableCell>
+                </ResizableHeaderCell>
               )}
               {isColumnVisible('publishedDate') && (
-                <TableCell sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
+                <ResizableHeaderCell {...resizeProps('publishedDate')} sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>
                   <TableSortLabel
                     active={orderBy === 'publishedDate'}
                     direction={orderBy === 'publishedDate' ? order : 'asc'}
@@ -331,11 +351,12 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
                   >
                     Published
                   </TableSortLabel>
-                </TableCell>
+                </ResizableHeaderCell>
               )}
               {visibleCustomFields.map(fieldName => (
-                <TableCell
+                <ResizableHeaderCell
                   key={fieldName}
+                  {...resizeProps(fieldName)}
                   sx={{ fontWeight: 600, fontSize: '12px', color: '#667eea', textTransform: 'uppercase' }}
                 >
                   <TableSortLabel
@@ -345,7 +366,7 @@ export const WritingProgramTable: React.FC<WritingProgramTableProps> = ({
                   >
                     {fieldName.replace(/_/g, ' ')}
                   </TableSortLabel>
-                </TableCell>
+                </ResizableHeaderCell>
               ))}
               {onAnalyzeSingle && (
                 <TableCell sx={{ fontWeight: 600, fontSize: '12px', color: '#64748b', textTransform: 'uppercase' }}>

@@ -34,6 +34,8 @@ import {
 } from '@mui/icons-material';
 import { useNavigate } from 'react-router-dom';
 import { Lead } from '../../../types/lead';
+import { useColumnWidths } from '../../../hooks/useColumnWidths';
+import { ResizableHeaderCell } from '../../common/ResizableHeaderCell';
 
 interface OutreachActivityTableProps {
   leads: Lead[];
@@ -634,6 +636,16 @@ export const OutreachActivityTable: React.FC<OutreachActivityTableProps> = ({ le
     leads: [],
   });
 
+  const { getWidth: getColumnWidth, setWidth: setColumnWidth, resetWidth: resetColumnWidth } =
+    useColumnWidths('outreach_activity_table');
+  const resizeProps = (columnId: string) => ({
+    columnId,
+    width: getColumnWidth(columnId),
+    onResize: setColumnWidth,
+    onResetWidth: resetColumnWidth,
+  });
+  const OUTREACH_COLUMNS = ['month', 'li_sent', 'li_resp', 'email_sent', 'email_resp'] as const;
+
   // Aggregate data by month and week
   const monthlyData = useMemo(() => {
     // Group leads by month and week for LinkedIn
@@ -837,13 +849,19 @@ export const OutreachActivityTable: React.FC<OutreachActivityTableProps> = ({ le
 
           <TableContainer component={Paper} elevation={0} sx={{ borderRadius: 2, border: '1px solid #e2e8f0' }}>
             <Table>
+              <colgroup>
+                {OUTREACH_COLUMNS.map((id) => {
+                  const w = getColumnWidth(id);
+                  return <col key={id} style={w ? { width: `${w}px` } : undefined} />;
+                })}
+              </colgroup>
               <TableHead>
                 <TableRow sx={{ backgroundColor: 'rgba(102, 126, 234, 0.08)' }}>
-                  <TableCell sx={{ fontWeight: 700, color: '#1e293b' }}>Month</TableCell>
-                  <TableCell align="center" sx={{ fontWeight: 700, color: '#1e293b' }}>LinkedIn Sent</TableCell>
-                  <TableCell align="center" sx={{ fontWeight: 700, color: '#1e293b' }}>LinkedIn Responses</TableCell>
-                  <TableCell align="center" sx={{ fontWeight: 700, color: '#1e293b' }}>Email Sent</TableCell>
-                  <TableCell align="center" sx={{ fontWeight: 700, color: '#1e293b' }}>Email Responses</TableCell>
+                  <ResizableHeaderCell {...resizeProps('month')} sx={{ fontWeight: 700, color: '#1e293b' }}>Month</ResizableHeaderCell>
+                  <ResizableHeaderCell {...resizeProps('li_sent')} align="center" sx={{ fontWeight: 700, color: '#1e293b' }}>LinkedIn Sent</ResizableHeaderCell>
+                  <ResizableHeaderCell {...resizeProps('li_resp')} align="center" sx={{ fontWeight: 700, color: '#1e293b' }}>LinkedIn Responses</ResizableHeaderCell>
+                  <ResizableHeaderCell {...resizeProps('email_sent')} align="center" sx={{ fontWeight: 700, color: '#1e293b' }}>Email Sent</ResizableHeaderCell>
+                  <ResizableHeaderCell {...resizeProps('email_resp')} align="center" sx={{ fontWeight: 700, color: '#1e293b' }}>Email Responses</ResizableHeaderCell>
                 </TableRow>
               </TableHead>
               <TableBody>

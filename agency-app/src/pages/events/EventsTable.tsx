@@ -31,6 +31,8 @@ import {
   EDUCATIONAL_TIER_LABELS,
   EDUCATIONAL_TIER_COLORS,
 } from '../../types/event';
+import { useColumnWidths } from '../../hooks/useColumnWidths';
+import { ResizableHeaderCell } from '../../components/common/ResizableHeaderCell';
 
 interface EventsTableProps {
   events: Event[];
@@ -95,6 +97,9 @@ export const EventsTable: React.FC<EventsTableProps> = ({ events, category = 'cl
   const [sortDirection, setSortDirection] = useState<SortDirection>('asc');
   const [page, setPage] = useState(0);
   const [rowsPerPage, setRowsPerPage] = useState(25);
+
+  const { getWidth: getColumnWidth, setWidth: setColumnWidth, resetWidth: resetColumnWidth } =
+    useColumnWidths(`events_table_${category}`);
 
   // Inline price editing state
   const [editingPriceId, setEditingPriceId] = useState<string | null>(null);
@@ -486,11 +491,22 @@ export const EventsTable: React.FC<EventsTableProps> = ({ events, category = 'cl
     >
       <TableContainer sx={{ flex: 1, overflow: 'auto' }}>
         <Table stickyHeader size="small">
+          <colgroup>
+            {columns.map((col) => {
+              const w = getColumnWidth(col.field);
+              const styleWidth = w ? `${w}px` : col.width;
+              return <col key={col.field} style={styleWidth ? { width: styleWidth } : undefined} />;
+            })}
+          </colgroup>
           <TableHead>
             <TableRow>
               {columns.map((col) => (
-                <TableCell
+                <ResizableHeaderCell
                   key={col.field}
+                  columnId={col.field}
+                  width={getColumnWidth(col.field)}
+                  onResize={setColumnWidth}
+                  onResetWidth={resetColumnWidth}
                   sx={{
                     fontWeight: 600,
                     fontSize: '12px',
@@ -499,7 +515,6 @@ export const EventsTable: React.FC<EventsTableProps> = ({ events, category = 'cl
                     color: '#64748b',
                     bgcolor: '#f8fafc',
                     borderBottom: '2px solid #e2e8f0',
-                    width: col.width,
                     whiteSpace: 'nowrap',
                     py: 1.5,
                   }}
@@ -515,7 +530,7 @@ export const EventsTable: React.FC<EventsTableProps> = ({ events, category = 'cl
                   >
                     {col.label}
                   </TableSortLabel>
-                </TableCell>
+                </ResizableHeaderCell>
               ))}
             </TableRow>
           </TableHead>

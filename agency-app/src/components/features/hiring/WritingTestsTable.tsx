@@ -23,6 +23,8 @@ import {
 } from '@mui/icons-material';
 import { Applicant, ApplicantStatus } from '../../../types/applicant';
 import { setApplicantPaymentConfirmed } from '../../../services/api/applicants';
+import { useColumnWidths } from '../../../hooks/useColumnWidths';
+import { ResizableHeaderCell } from '../../common/ResizableHeaderCell';
 
 interface WritingTestsTableProps {
   applicants: Applicant[];
@@ -73,6 +75,16 @@ type SortDir = 'asc' | 'desc';
 const WritingTestsTable: React.FC<WritingTestsTableProps> = ({ applicants, onApplicantClick }) => {
   const [sortField, setSortField] = useState<SortField>('days_elapsed');
   const [sortDir, setSortDir] = useState<SortDir>('desc');
+
+  const { getWidth: getColumnWidth, setWidth: setColumnWidth, resetWidth: resetColumnWidth } =
+    useColumnWidths('writing_tests_table');
+  const resizeProps = (columnId: string) => ({
+    columnId,
+    width: getColumnWidth(columnId),
+    onResize: setColumnWidth,
+    onResetWidth: resetColumnWidth,
+  });
+  const WRITING_TESTS_COLUMNS = ['candidate', 'status', 'score', 'paid_test', 'payment_confirmed', 'test_assigned', 'days_elapsed', 'deadline', 'email_sent', 'source', 'links'] as const;
 
   // Helper to get the display status (for rejected candidates, use 'rejected')
   const getDisplayStatus = (a: Applicant): string => {
@@ -331,6 +343,12 @@ const WritingTestsTable: React.FC<WritingTestsTableProps> = ({ applicants, onApp
         }}
       >
         <Table size="small">
+          <colgroup>
+            {WRITING_TESTS_COLUMNS.map((id) => {
+              const w = getColumnWidth(id);
+              return <col key={id} style={w ? { width: `${w}px` } : undefined} />;
+            })}
+          </colgroup>
           <TableHead>
             <TableRow
               sx={{
@@ -347,33 +365,33 @@ const WritingTestsTable: React.FC<WritingTestsTableProps> = ({ applicants, onApp
                 },
               }}
             >
-              <TableCell>
+              <ResizableHeaderCell {...resizeProps('candidate')}>
                 <TableSortLabel active={sortField === 'name'} direction={sortField === 'name' ? sortDir : 'asc'} onClick={() => handleSort('name')}>
                   Candidate
                 </TableSortLabel>
-              </TableCell>
-              <TableCell>
+              </ResizableHeaderCell>
+              <ResizableHeaderCell {...resizeProps('status')}>
                 <TableSortLabel active={sortField === 'status'} direction={sortField === 'status' ? sortDir : 'asc'} onClick={() => handleSort('status')}>
                   Status
                 </TableSortLabel>
-              </TableCell>
-              <TableCell>
+              </ResizableHeaderCell>
+              <ResizableHeaderCell {...resizeProps('score')}>
                 <TableSortLabel active={sortField === 'score'} direction={sortField === 'score' ? sortDir : 'asc'} onClick={() => handleSort('score')}>
                   Candidate Score
                 </TableSortLabel>
-              </TableCell>
-              <TableCell>Paid Test</TableCell>
-              <TableCell align="center">Payment Confirmed</TableCell>
-              <TableCell>Test Assigned</TableCell>
-              <TableCell>
+              </ResizableHeaderCell>
+              <ResizableHeaderCell {...resizeProps('paid_test')}>Paid Test</ResizableHeaderCell>
+              <ResizableHeaderCell {...resizeProps('payment_confirmed')} align="center">Payment Confirmed</ResizableHeaderCell>
+              <ResizableHeaderCell {...resizeProps('test_assigned')}>Test Assigned</ResizableHeaderCell>
+              <ResizableHeaderCell {...resizeProps('days_elapsed')}>
                 <TableSortLabel active={sortField === 'days_elapsed'} direction={sortField === 'days_elapsed' ? sortDir : 'asc'} onClick={() => handleSort('days_elapsed')}>
                   Days Elapsed
                 </TableSortLabel>
-              </TableCell>
-              <TableCell>Deadline</TableCell>
-              <TableCell>Email Sent</TableCell>
-              <TableCell>Source</TableCell>
-              <TableCell align="center">Links</TableCell>
+              </ResizableHeaderCell>
+              <ResizableHeaderCell {...resizeProps('deadline')}>Deadline</ResizableHeaderCell>
+              <ResizableHeaderCell {...resizeProps('email_sent')}>Email Sent</ResizableHeaderCell>
+              <ResizableHeaderCell {...resizeProps('source')}>Source</ResizableHeaderCell>
+              <ResizableHeaderCell {...resizeProps('links')} align="center">Links</ResizableHeaderCell>
             </TableRow>
           </TableHead>
           <TableBody>

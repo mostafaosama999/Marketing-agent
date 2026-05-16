@@ -37,6 +37,8 @@ import { DatePicker } from '@mui/x-date-pickers/DatePicker';
 import { Lead, LeadStatus } from '../../../types/lead';
 import { usePipelineConfigContext } from '../../../contexts/PipelineConfigContext';
 import { TableColumnConfig } from '../../../types/table';
+import { useColumnWidths } from '../../../hooks/useColumnWidths';
+import { ResizableHeaderCell } from '../../common/ResizableHeaderCell';
 import { FieldDefinition } from '../../../types/fieldDefinitions';
 import { getFieldDefinitions } from '../../../services/api/fieldDefinitionsService';
 import { updateLeadCustomField, updateLeadField, updateLeadLinkedInStatus, updateLeadEmailStatus, updateLeadRating } from '../../../services/api/leads';
@@ -160,6 +162,10 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
 
   const [orderBy, setOrderBy] = useState<string>('createdAt');
   const [order, setOrder] = useState<SortDirection>('desc');
+
+  // Column widths (persisted to localStorage)
+  const { getWidth: getColumnWidth, setWidth: setColumnWidth, resetWidth: resetColumnWidth } =
+    useColumnWidths('leads_table');
   const [statusMenuAnchor, setStatusMenuAnchor] = useState<null | HTMLElement>(null);
   const [selectedLeadForStatus, setSelectedLeadForStatus] = useState<Lead | null>(null);
   const [linkedInMenuAnchor, setLinkedInMenuAnchor] = useState<null | HTMLElement>(null);
@@ -1642,6 +1648,13 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
         }}
       >
         <Table size="small">
+          <colgroup>
+            <col style={{ width: '48px' }} />
+            {displayColumns.map((column) => {
+              const w = getColumnWidth(column.id);
+              return <col key={column.id} style={w ? { width: `${w}px` } : undefined} />;
+            })}
+          </colgroup>
           <TableHead sx={{
             position: 'sticky',
             top: 0,
@@ -1704,8 +1717,12 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
                 const hoverColor = getSectionHoverColor(column.section);
 
                 return (
-                  <TableCell
+                  <ResizableHeaderCell
                     key={column.id}
+                    columnId={column.id}
+                    width={getColumnWidth(column.id)}
+                    onResize={setColumnWidth}
+                    onResetWidth={resetColumnWidth}
                     sx={{
                       py: 0,
                       px: 1,
@@ -1750,7 +1767,7 @@ export const CRMLeadsTable: React.FC<CRMLeadsTableProps> = ({
                         {column.label}
                       </Box>
                     </TableSortLabel>
-                  </TableCell>
+                  </ResizableHeaderCell>
                 );
               })}
             </TableRow>
