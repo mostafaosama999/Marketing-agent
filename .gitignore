@@ -138,3 +138,6 @@ Total marketing - Copy of 2025.csv
 
 # LinkedIn analytics Excel exports (personal data)
 data/linkedin/*.xlsx
+
+# Firebase service account key (symlink to ~/.config/gcloud/marketing-sa-key.json)
+.service-account.json
