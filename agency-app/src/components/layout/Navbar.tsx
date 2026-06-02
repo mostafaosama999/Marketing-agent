@@ -177,7 +177,7 @@ const Navbar: React.FC = () => {
 
   // Track unseen hiring applicants
   useEffect(() => {
-    if (!user?.uid || !(userProfile?.role === 'Manager' || userProfile?.role === 'CEO')) return;
+    if (!user?.uid) return;
 
     let viewedIds: Set<string> = new Set();
     const unsubs: (() => void)[] = [];
@@ -290,29 +290,27 @@ const Navbar: React.FC = () => {
           </NavButton>
 
           {/* Hiring Pipeline Button - Left Side */}
-          {(userProfile?.role === 'Manager' || userProfile?.role === 'CEO') && (
-            <Badge
-              badgeContent={unseenHiringCount}
-              color="error"
-              max={99}
-              sx={{
-                '& .MuiBadge-badge': {
-                  fontSize: '10px',
-                  fontWeight: 700,
-                  minWidth: 18,
-                  height: 18,
-                },
-              }}
+          <Badge
+            badgeContent={unseenHiringCount}
+            color="error"
+            max={99}
+            sx={{
+              '& .MuiBadge-badge': {
+                fontSize: '10px',
+                fontWeight: 700,
+                minWidth: 18,
+                height: 18,
+              },
+            }}
+          >
+            <NavButton
+              isActive={location.pathname === '/hiring'}
+              startIcon={<PersonAdd />}
+              {...({ component: Link, to: '/hiring' } as any)}
             >
-              <NavButton
-                isActive={location.pathname === '/hiring'}
-                startIcon={<PersonAdd />}
-                {...({ component: Link, to: '/hiring' } as any)}
-              >
-                HIRING
-              </NavButton>
-            </Badge>
-          )}
+              HIRING
+            </NavButton>
+          </Badge>
 
           {/* Events Button - Left Side */}
           <NavButton
