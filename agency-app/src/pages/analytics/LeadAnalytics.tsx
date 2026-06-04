@@ -27,6 +27,7 @@ import { subscribeToLeads } from '../../services/api/leads';
 import { Lead, LeadStatus } from '../../types/lead';
 import { OutreachResponseModal } from '../../components/features/analytics/OutreachResponseModal';
 import { OutreachActivityTable } from '../../components/features/analytics/OutreachActivityTable';
+import { ResponseTrendsSection } from '../../components/features/analytics/ResponseTrendsSection';
 
 // Modern theme
 const modernTheme = createTheme({
@@ -984,6 +985,9 @@ const LeadAnalytics: React.FC = () => {
                 </CardContent>
               </Card>
             )}
+
+            {/* Response Trends (counts + response rate over time) */}
+            <ResponseTrendsSection leads={leads} dayRange={outreachDayRange} />
 
             {/* Monthly Outreach Summary Table */}
             <OutreachActivityTable leads={leads} />

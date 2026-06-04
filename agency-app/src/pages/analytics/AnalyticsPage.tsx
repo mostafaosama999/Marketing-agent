@@ -10,11 +10,9 @@ import {
 import {
   TrendingUp as TrendingUpIcon,
   Business as BusinessIcon,
-  QueryStats as QueryStatsIcon,
 } from '@mui/icons-material';
 import LeadAnalytics from './LeadAnalytics';
 import CompanyAnalytics from './CompanyAnalytics';
-import ResponseAnalytics from './ResponseAnalytics';
 
 // Modern theme
 const modernTheme = createTheme({
@@ -124,27 +122,6 @@ const AnalyticsPage: React.FC = () => {
                 },
               }}
             />
-            <Tab
-              icon={<QueryStatsIcon />}
-              iconPosition="start"
-              label="Response Trends"
-              id="analytics-tab-2"
-              aria-controls="analytics-tabpanel-2"
-              sx={{
-                textTransform: 'none',
-                fontWeight: 600,
-                fontSize: '15px',
-                minHeight: 64,
-                color: '#64748b',
-                '&.Mui-selected': {
-                  color: '#667eea',
-                },
-                '&:hover': {
-                  color: '#667eea',
-                  background: 'rgba(102, 126, 234, 0.05)',
-                },
-              }}
-            />
           </Tabs>
         </Box>
 
@@ -154,9 +131,6 @@ const AnalyticsPage: React.FC = () => {
         </TabPanel>
         <TabPanel value={currentTab} index={1}>
           <CompanyAnalytics />
-        </TabPanel>
-        <TabPanel value={currentTab} index={2}>
-          <ResponseAnalytics />
         </TabPanel>
       </Box>
     </ThemeProvider>
