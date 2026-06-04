@@ -80,7 +80,7 @@ const LeadAnalytics: React.FC = () => {
   const [leads, setLeads] = useState<Lead[]>([]);
   const [loading, setLoading] = useState(true);
   const [viewMode] = useState<'daily' | 'weekly'>('weekly'); // Fixed to weekly view
-  const [outreachDayRange, setOutreachDayRange] = useState<7 | 14 | 30 | 'all'>('all');
+  const [outreachDayRange, setOutreachDayRange] = useState<number | 'all'>('all');
   const [linkedInModalOpen, setLinkedInModalOpen] = useState(false);
   const [emailModalOpen, setEmailModalOpen] = useState(false);
 
@@ -382,13 +382,10 @@ const LeadAnalytics: React.FC = () => {
                hasLinkedInResponse(lead);
       }
 
-      // For specific date ranges, include if has date within range
-      if (linkedInDate !== null && linkedInDate >= cutoffDate) {
-        return true;
-      }
-
-      // Fallback: Include if status shows contact was made
-      return linkedInStatus && ['sent', 'opened', 'replied'].includes(linkedInStatus);
+      // For specific date ranges, only include leads with a contact date within range.
+      // (No status fallback here — leads without dates would otherwise leak into
+      // every range, making the 7/14/30-day numbers barely change.)
+      return linkedInDate !== null && linkedInDate >= cutoffDate;
     });
 
     const emailOutreach = leads.filter(lead => {
@@ -402,13 +399,9 @@ const LeadAnalytics: React.FC = () => {
                hasEmailResponse(lead);
       }
 
-      // For specific date ranges, include if has date within range
-      if (emailDate !== null && emailDate >= cutoffDate) {
-        return true;
-      }
-
-      // Fallback: Include if status shows contact was made
-      return emailStatus && ['sent', 'opened', 'replied'].includes(emailStatus);
+      // For specific date ranges, only include leads with a contact date within range.
+      // (No status fallback — see LinkedIn filter above.)
+      return emailDate !== null && emailDate >= cutoffDate;
     });
 
     // Calculate total unique leads reached out to (not sum, to avoid double-counting)
@@ -740,7 +733,7 @@ const LeadAnalytics: React.FC = () => {
 
             {/* Outreach Activity Section */}
             <Box sx={{ mt: 6, mb: 4 }}>
-              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3 }}>
+              <Box sx={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', mb: 3, flexWrap: 'wrap', gap: 2 }}>
                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                   <SendIcon sx={{ fontSize: 36, color: '#667eea' }} />
                   <Box>
@@ -794,6 +787,10 @@ const LeadAnalytics: React.FC = () => {
                   <ToggleButton value={7}>7 Days</ToggleButton>
                   <ToggleButton value={14}>14 Days</ToggleButton>
                   <ToggleButton value={30}>30 Days</ToggleButton>
+                  <ToggleButton value={60}>60 Days</ToggleButton>
+                  <ToggleButton value={90}>90 Days</ToggleButton>
+                  <ToggleButton value={180}>6 Months</ToggleButton>
+                  <ToggleButton value={365}>1 Year</ToggleButton>
                   <ToggleButton value="all">All Time</ToggleButton>
                 </ToggleButtonGroup>
               </Box>

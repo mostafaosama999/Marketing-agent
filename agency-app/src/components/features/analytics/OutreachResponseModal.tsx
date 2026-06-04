@@ -38,7 +38,7 @@ interface OutreachResponseModalProps {
   onClose: () => void;
   leads: Lead[];
   modalType: 'linkedin' | 'email';
-  outreachDayRange: 7 | 14 | 30 | 'all';
+  outreachDayRange: number | 'all';
 }
 
 interface ResponseLeadRow {
@@ -250,14 +250,9 @@ export const OutreachResponseModal: React.FC<OutreachResponseModalProps> = ({
           // If viewing "All Time", include all leads with positive responses
           if (outreachDayRange === 'all') return true;
 
-          // For specific date ranges, check if date is within range
-          if (linkedInDate !== null) {
-            return linkedInDate >= cutoffDate;
-          }
-
-          // Fallback: Include if LinkedIn status shows contact was made (even without date)
-          const linkedInStatus = lead.outreach?.linkedIn?.status;
-          return linkedInStatus && ['sent', 'opened', 'replied'].includes(linkedInStatus);
+          // For specific date ranges, only include leads with a contact date within range.
+          // (No status fallback — keeps this list consistent with the response-rate cards.)
+          return linkedInDate !== null && linkedInDate >= cutoffDate;
         } else {
           const emailDate = getEmailDate(lead);
           const hasResponse = hasEmailResponse(lead);
@@ -268,14 +263,9 @@ export const OutreachResponseModal: React.FC<OutreachResponseModalProps> = ({
           // If viewing "All Time", include all leads with positive responses
           if (outreachDayRange === 'all') return true;
 
-          // For specific date ranges, check if date is within range
-          if (emailDate !== null) {
-            return emailDate >= cutoffDate;
-          }
-
-          // Fallback: Include if email status shows contact was made (even without date)
-          const emailStatus = lead.outreach?.email?.status;
-          return emailStatus && ['sent', 'opened', 'replied'].includes(emailStatus);
+          // For specific date ranges, only include leads with a contact date within range.
+          // (No status fallback — see LinkedIn filter above.)
+          return emailDate !== null && emailDate >= cutoffDate;
         }
       })
       .map(lead => ({
