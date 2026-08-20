@@ -93,7 +93,7 @@ interface ResponseTrendsSectionProps {
 }
 
 export const ResponseTrendsSection: React.FC<ResponseTrendsSectionProps> = ({ leads, dayRange }) => {
-  const [granularity, setGranularity] = useState<Granularity>('monthly');
+  const [granularity, setGranularity] = useState<Granularity>('daily');
 
   // Responses bucketed over time. A response is attributed to the date the
   // outreach was SENT (same convention as the Monthly Outreach Summary table) —

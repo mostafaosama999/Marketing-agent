@@ -10,6 +10,10 @@
 
 When debugging anything Firestore- or Functions-related, always pass `--project marketing-app-cc237` to `firebase` CLI calls and address Firestore via `projects/marketing-app-cc237/...` in the Firebase MCP. The Firebase MCP's default project may resolve to `ai-adv-5e502` — never trust it implicitly for this repo.
 
+## Deploy Small Changes Without Asking
+
+For small, low-risk changes (bug fixes, small UI tweaks, copy/column changes, one-off data corrections) — commit, push, build, and run `firebase deploy` (functions and/or hosting as relevant) immediately, without asking for confirmation first. Still confirm before deploying larger features, schema/security-rule changes, or anything the user hasn't already reviewed in-session.
+
 ## Quick Reference
 
 1. [UI Design](#ui-design) - Design system and styling rules

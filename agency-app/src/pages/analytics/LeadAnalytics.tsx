@@ -26,6 +26,7 @@ import {
 import { subscribeToLeads } from '../../services/api/leads';
 import { Lead, LeadStatus } from '../../types/lead';
 import { OutreachResponseModal } from '../../components/features/analytics/OutreachResponseModal';
+import { WonLeadsModal } from '../../components/features/analytics/WonLeadsModal';
 import { OutreachActivityTable } from '../../components/features/analytics/OutreachActivityTable';
 import { ResponseTrendsSection } from '../../components/features/analytics/ResponseTrendsSection';
 
@@ -84,6 +85,7 @@ const LeadAnalytics: React.FC = () => {
   const [outreachDayRange, setOutreachDayRange] = useState<number | 'all'>('all');
   const [linkedInModalOpen, setLinkedInModalOpen] = useState(false);
   const [emailModalOpen, setEmailModalOpen] = useState(false);
+  const [wonModalOpen, setWonModalOpen] = useState(false);
 
   // Subscribe to leads
   useEffect(() => {
@@ -369,6 +371,7 @@ const LeadAnalytics: React.FC = () => {
       : (() => {
           const date = new Date();
           date.setDate(date.getDate() - outreachDayRange);
+          date.setHours(0, 0, 0, 0);
           return date;
         })();
 
@@ -444,6 +447,7 @@ const LeadAnalytics: React.FC = () => {
       : (() => {
           const date = new Date();
           date.setDate(date.getDate() - outreachDayRange);
+          date.setHours(0, 0, 0, 0);
           return date;
         })();
 
@@ -596,11 +600,20 @@ const LeadAnalytics: React.FC = () => {
               </Grid>
 
               <Grid size={{ xs: 12, sm: 6, md: 3 }}>
-                <Card sx={{
-                  background: 'linear-gradient(135deg, #4caf50 0%, #388e3c 100%)',
-                  borderRadius: 3,
-                  boxShadow: '0 4px 20px rgba(76, 175, 80, 0.3)',
-                }}>
+                <Card
+                  onClick={() => setWonModalOpen(true)}
+                  sx={{
+                    background: 'linear-gradient(135deg, #4caf50 0%, #388e3c 100%)',
+                    borderRadius: 3,
+                    boxShadow: '0 4px 20px rgba(76, 175, 80, 0.3)',
+                    cursor: 'pointer',
+                    transition: 'transform 0.2s ease, box-shadow 0.2s ease',
+                    '&:hover': {
+                      transform: 'translateY(-2px)',
+                      boxShadow: '0 8px 28px rgba(76, 175, 80, 0.4)',
+                    },
+                  }}
+                >
                   <CardContent>
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
                       <CheckCircleIcon sx={{ fontSize: 40, color: 'white', opacity: 0.9 }} />
@@ -1030,6 +1043,12 @@ const LeadAnalytics: React.FC = () => {
         leads={leads}
         modalType="email"
         outreachDayRange={outreachDayRange}
+      />
+
+      <WonLeadsModal
+        open={wonModalOpen}
+        onClose={() => setWonModalOpen(false)}
+        leads={leads}
       />
     </ThemeProvider>
   );
