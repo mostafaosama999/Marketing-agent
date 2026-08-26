@@ -430,13 +430,13 @@ Multi-platform content marketing analytics synced from LinkedIn (Excel), TDS (pa
 
 ## Firecrawl Cost Guardrails
 
-Nikola's `web_search` and `scrape` tools (`functions/src/nikola/tools/firecrawlTool.ts`) call the Firecrawl API with the **shared account key** — the same key used by the Firecrawl MCP in every other workstation repo. The account is on the **Hobby plan: 5,000 credits/month ($19), hard cap**. When credits run out, Nikola auto-falls back to Apify (which has its own $29 cap), so runaway Firecrawl spend cascades into Apify spend.
+Nikola's `web_search` and `scrape` tools (`functions/src/nikola/tools/firecrawlTool.ts`) call the Firecrawl API with the **shared account key** — the same key used by the Firecrawl MCP in every other workstation repo. The account is on the **100,000 credits/month plan, hard cap** (upgraded 2026-08-25 from Hobby / 5,000). When credits run out, Nikola auto-falls back to Apify (which has its own $29 cap), so runaway Firecrawl spend still cascades into Apify spend.
 
 **Rules (MANDATORY):**
-- **`search` bills ~1 credit per result.** Keep the default `limit: 5` in `firecrawlTool.ts` — never raise it without a cost justification. `scrapeContent: true` additionally bills a scrape per result; default it off.
-- **`scrape` markdown only.** Never add `json` format (5 credits/page) or scrape social-media URLs (YouTube/TikTok/Instagram auto-escalate to stealth proxy at 5 credits/page) from Nikola tools.
-- **Never add a `crawl` endpoint** to Nikola without a hard `limit ≤ 10`.
-- Any new Nikola feature or scheduled job that calls Firecrawl must state its worst-case credits-per-run before deploy, and a recurring job's daily worst case must stay **under 50 credits/day**.
+- **`search` bills ~1 credit per result.** The code default in `firecrawlTool.ts` is still `limit: 5`; raising it up to **`limit ≤ 20`** is now fine, above that needs a cost justification. `scrapeContent: true` additionally bills a scrape per result; default it off.
+- **`scrape` markdown by default.** `json` format and social-media URLs both bill 5 credits/page (YouTube/TikTok/Instagram auto-escalate to stealth proxy) — affordable on the 100k plan, but justify them per feature rather than defaulting to them in Nikola tools.
+- **Never add a `crawl` endpoint** to Nikola without a hard `limit ≤ 200`.
+- Any new Nikola feature or scheduled job that calls Firecrawl must state its worst-case credits-per-run before deploy, and a recurring job's daily worst case must stay **under 1,000 credits/day**.
 - Check remaining credits: `curl -s -H "Authorization: Bearer $FIRECRAWL_API_KEY" https://api.firecrawl.dev/v2/team/credit-usage`
 
 ---
