@@ -1,0 +1,25 @@
+entityName,leadName,email,crmSentAt,notes
+Statsig,Kaz,kaz@statsig.com,,"CRM says sent but no Gmail evidence found for this address in any folder, including trash and a broader domain search — discrepancy."
+Hugging Face,Jeff,michelle@huggingface.co,,"CRM says sent but no Gmail evidence found for this address in any folder, including trash and a broader domain search — discrepancy."
+Rill Data,Alexander,alex.thor@rilldata.com,,"CRM says sent but no Gmail evidence found for this address in any folder, including trash and a broader domain search — discrepancy."
+Stainless,CJ,avilla@stainless.com,,"MISMATCH: CRM says sent but no Gmail thread found to this address (checked exact address and domain-wide, in:anywhere)."
+Observe Inc,John,john.troyer@observeinc.com,,"MISMATCH: CRM says sent but no Gmail thread found to this address (checked exact address and domain-wide, in:anywhere)."
+Pipedream,Danny,danny@pipedream.com,,CRM says sent but no Gmail thread to/from this address was found — possible discrepancy.
+Domo,Lauren,lauren.udwari@domo.com,,"DISCREPANCY: CRM says sent, but no Gmail messages to this address were found — no evidence of actual outbound send."
+Materialize,Kay,kay.kim@materialize.com,,MISMATCH: CRM says sent but no Gmail results found for to:kay.kim@materialize.com — no evidence of an outbound email.
+Cerbos,Emre,emre@cerbos.dev,2026-05-14,DISCREPANCY: CRM says sent (2026-05-14) but no Gmail results found for to:emre@cerbos.dev.
+Checkly,Daniel,daniel@checklyhq.com,2026-05-31,CRM says sent 2026-05-31 but no Gmail thread to/from daniel@checklyhq.com found under any query.
+Deepgram,Praveen,praveen.rangnath@deepgram.com,2026-05-30,DISCREPANCY: CRM shows sent 2026-05-30 but no Gmail thread to praveen.rangnath@deepgram.com was found.
+Embrace,Praveena,praveena.khatri@embrace.io,2026-05-31,CRM marks sent but no Gmail message to this address found (tried multiple query forms) - discrepancy.
+Flagsmith,Adrian,adrian.gregory@flagsmith.com,,MISMATCH: CRM says sent but no Gmail evidence of an outbound email to this address was found.
+Solo,Adam,adam.sayah@solo.io,,CRM says sent but no Gmail evidence found for this address after multiple query variants - possible mislabeled/stale CRM status.
+mabl,Fernando,fernando@mabl.com,2026-05-31,CRM says sent (dated 2026-05-31) but no Gmail evidence found for this address after multiple query variants - possible mislabeled/stale CRM status.
+New Relic,Jemiah,jsius@newrelic.com,2026-06-01,No Gmail thread to this address found (checked with and without in:anywhere); CRM says sent but no evidence.
+PolyAI,Morgan,morgan@poly.ai,2026-05-31,No Gmail thread to this address found (checked with and without in:anywhere); CRM says sent but no evidence in Gmail.
+Jam.dev,Dani,dani@jam.dev,,MISMATCH: CRM says sent but zero Gmail results for to:dani@jam.dev — no outbound evidence found.
+Sifflet,Romain,romain.doutriaux@siffletdata.com,2026-07-19,MISMATCH: CRM says sent (2026-07-19) but zero Gmail results for to:romain.doutriaux@siffletdata.com — no outbound evidence found.
+Spectro Cloud,Anthony,ant@spectrocloud.com,2026-05-31,"CRM says sent 2026-05-31 but no Gmail results (sent or otherwise) for to:ant@spectrocloud.com — discrepancy, CRM status looks incorrect or email never actually went out."
+Tonic.ai,Chiara,chiara@tonic.ai,2026-05-31,"CRM says sent 2026-05-31 but no Gmail results for to:chiara@tonic.ai — discrepancy, CRM status looks incorrect or email never actually went out."
+Port.io,Hila,hila.k@getport.io,,"CRM says sent (crmSentAt null) but no Gmail results for to:hila.k@getport.io — discrepancy, CRM status looks incorrect or email never actually went out."
+Voxel51,Jimmy,jimmy@voxel51.com,2026-05-05,DISCREPANCY: CRM says sent 2026-05-05 but no Gmail evidence of any outbound email to this address was found.
+Wallarm,Michelle,mgerson@wallarm.com,2026-05-31,DISCREPANCY: CRM says sent 2026-05-31 but no Gmail evidence of any outbound email to this address was found.
