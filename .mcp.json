@@ -1,0 +1,18 @@
+{
+  "mcpServers": {
+    "firebase": {
+      "type": "stdio",
+      "command": "npx",
+      "args": [
+        "-y",
+        "firebase-tools@latest",
+        "mcp",
+        "--dir",
+        "/Users/mostafa.osama2/Desktop/codecontent_workstation/Marketing-agent"
+      ],
+      "env": {
+        "GOOGLE_APPLICATION_CREDENTIALS": "/Users/mostafa.osama2/.config/gcloud/marketing-sa-key.json"
+      }
+    }
+  }
+}
