@@ -442,3 +442,50 @@ Nikola's `web_search` and `scrape` tools (`functions/src/nikola/tools/firecrawlT
 ---
 
 **End of Documentation**
+
+## macOS screenshots — NEVER retype the path
+
+macOS names screenshots with a **narrow no-break space (U+202F, bytes `e2 80 af`)** before
+`AM`/`PM` — not a regular space. The two are visually identical, so re-typing the path
+produces a filename that does not exist:
+
+```
+Screenshot 2026-09-08 at 12.17.02 PM.png   ← U+202F  (real file on disk)
+Screenshot 2026-09-08 at 12.17.02 PM.png   ← 0x20    (retyped — does NOT exist)
+```
+
+When the user drags a screenshot in, the path arrives byte-correct. It breaks only when the
+path is **re-typed** into a Read/Bash call. Under `/var/...` the failure is disguised as
+`Refusing to read ...: its symlink resolution changed after permission was checked`
+(`/var` is a symlink to `private/var`) instead of a plain not-found.
+
+### Use the right technique for the location
+
+**Dragged thumbnail** — path looks like
+`/var/folders/.../T/TemporaryItems/NSIRD_screencaptureui_XXXX/Screenshot ....png`.
+Globbing does **not** work here: macOS TCC denies `readdir` on `TemporaryItems`
+(`Operation not permitted`), so `*` cannot expand. Reconstruct the byte instead —
+copy the directory verbatim from the user's message and rebuild only the filename:
+
+```bash
+D="/var/folders/2v/.../T/TemporaryItems/NSIRD_screencaptureui_Dv38AI"
+cp "$D/$(printf 'Screenshot 2026-09-08 at 12.17.02\xe2\x80\xafPM.png')" "$SCRATCH/shot.png"
+```
+
+**Saved to ~/Desktop** — globbing works, use it:
+
+```bash
+cp ~/Desktop/Screenshot*2026-09-08*12.17.02* "$SCRATCH/shot.png"
+```
+
+**Fully general fallback** — the session transcript stores the path with correct bytes:
+
+```bash
+grep -o '/var/folders/[^"]*\.png' ~/.claude/projects/<project-dir>/<session-id>.jsonl | tail -1
+```
+
+Then `Read` the copy in the scratchpad.
+
+**Never tell the user a dragged screenshot is missing or was cleaned up until one of the
+above has actually failed.** The file is almost always still there — a bare `ls` of the
+retyped path lying with `No such file or directory` is the expected symptom, not evidence.
