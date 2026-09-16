@@ -21,6 +21,7 @@ import {
   TableSortLabel,
   IconButton,
   Link,
+  Chip,
 } from '@mui/material';
 import {
   CheckCircle as CheckCircleIcon,
@@ -46,20 +47,28 @@ interface WonLeadRow {
 type SortField = 'name' | 'company' | 'dateWon';
 type SortDirection = 'asc' | 'desc';
 
+// new Date() on a bad value yields an Invalid Date rather than throwing, which used to
+// render as "undefined NaN, NaN" — normalise those to null here instead.
+const toValidDate = (value: unknown): Date | null => {
+  if (value === null || value === undefined) return null;
+  const date = value instanceof Date ? value : new Date(value as string | number);
+  return isNaN(date.getTime()) ? null : date;
+};
+
 // Won date: prefer the timestamp the lead entered 'won' (stateHistory), fall back to updatedAt
 const getDateWon = (lead: Lead): Date | null => {
-  if (lead.stateHistory?.won) {
-    try {
-      return new Date(lead.stateHistory.won);
-    } catch (e) {
-      // Invalid date format, skip
-    }
-  }
-  if (lead.updatedAt) {
-    return lead.updatedAt instanceof Date ? lead.updatedAt : new Date(lead.updatedAt);
-  }
-  return null;
+  return toValidDate(lead.stateHistory?.won) ?? toValidDate(lead.updatedAt);
 };
+
+const MONTH_NAMES = ['January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December'];
+
+// Month bucket a won lead belongs to; leads without a usable date get their own trailing group
+const getMonthKey = (date: Date | null): string =>
+  date ? `${date.getFullYear()}-${String(date.getMonth()).padStart(2, '0')}` : 'no-date';
+
+const getMonthLabel = (date: Date | null): string =>
+  date ? `${MONTH_NAMES[date.getMonth()]} ${date.getFullYear()}` : 'No date won';
 
 export const WonLeadsModal: React.FC<WonLeadsModalProps> = ({ open, onClose, leads }) => {
   const navigate = useNavigate();
@@ -82,8 +91,32 @@ export const WonLeadsModal: React.FC<WonLeadsModalProps> = ({ open, onClose, lea
       }));
   }, [leads]);
 
-  const sortedLeads = useMemo(() => {
-    return [...wonLeads].sort((a, b) => {
+  // Month is always the primary grouping; the chosen sort field orders rows inside each month.
+  // Month order follows the Date Won direction, newest first for the other sort fields.
+  const groupedLeads = useMemo(() => {
+    const buckets = new Map<string, { key: string; label: string; sortValue: number; leads: WonLeadRow[] }>();
+
+    wonLeads.forEach(lead => {
+      const key = getMonthKey(lead.dateWon);
+      let bucket = buckets.get(key);
+      if (!bucket) {
+        bucket = {
+          key,
+          label: getMonthLabel(lead.dateWon),
+          // Undated leads always sort last
+          sortValue: lead.dateWon
+            ? new Date(lead.dateWon.getFullYear(), lead.dateWon.getMonth(), 1).getTime()
+            : -Infinity,
+          leads: [],
+        };
+        buckets.set(key, bucket);
+      }
+      bucket.leads.push(lead);
+    });
+
+    const monthDirection = sortBy === 'dateWon' ? sortDirection : 'desc';
+
+    const compare = (a: WonLeadRow, b: WonLeadRow) => {
       const aVal = a[sortBy];
       const bVal = b[sortBy];
 
@@ -98,8 +131,45 @@ export const WonLeadsModal: React.FC<WonLeadsModalProps> = ({ open, onClose, lea
 
       const comparison = String(aVal).localeCompare(String(bVal));
       return sortDirection === 'asc' ? comparison : -comparison;
-    });
+    };
+
+    return Array.from(buckets.values())
+      .sort((a, b) => {
+        if (a.sortValue === b.sortValue) return 0;
+        if (a.sortValue === -Infinity) return 1;
+        if (b.sortValue === -Infinity) return -1;
+        return monthDirection === 'asc' ? a.sortValue - b.sortValue : b.sortValue - a.sortValue;
+      })
+      .map(bucket => ({ ...bucket, leads: [...bucket.leads].sort(compare) }));
   }, [wonLeads, sortBy, sortDirection]);
+
+  const sortedLeads = useMemo(
+    () => groupedLeads.flatMap(group => group.leads),
+    [groupedLeads]
+  );
+
+  // Slice the flattened list for the current page, then re-split it into its month headers
+  const monthGroups = useMemo(() => {
+    const visible = sortedLeads.slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage);
+    const groups: { key: string; label: string; total: number; leads: WonLeadRow[] }[] = [];
+
+    visible.forEach(lead => {
+      const key = getMonthKey(lead.dateWon);
+      const last = groups[groups.length - 1];
+      if (last && last.key === key) {
+        last.leads.push(lead);
+      } else {
+        groups.push({
+          key,
+          label: getMonthLabel(lead.dateWon),
+          total: groupedLeads.find(g => g.key === key)?.leads.length ?? 1,
+          leads: [lead],
+        });
+      }
+    });
+
+    return groups;
+  }, [sortedLeads, groupedLeads, page, rowsPerPage]);
 
   const handleSort = (field: SortField) => {
     if (sortBy === field) {
@@ -112,8 +182,7 @@ export const WonLeadsModal: React.FC<WonLeadsModalProps> = ({ open, onClose, lea
 
   const formatDate = (date: Date | null): string => {
     if (!date) return 'No date';
-    const monthNames = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
-    return `${monthNames[date.getMonth()]} ${date.getDate()}, ${date.getFullYear()}`;
+    return `${MONTH_NAMES[date.getMonth()].slice(0, 3)} ${date.getDate()}, ${date.getFullYear()}`;
   };
 
   return (
@@ -205,9 +274,39 @@ export const WonLeadsModal: React.FC<WonLeadsModalProps> = ({ open, onClose, lea
                   </TableRow>
                 </TableHead>
                 <TableBody>
-                  {sortedLeads
-                    .slice(page * rowsPerPage, page * rowsPerPage + rowsPerPage)
-                    .map((lead) => (
+                  {monthGroups.map((group) => (
+                    <React.Fragment key={group.key}>
+                      <TableRow>
+                        <TableCell
+                          colSpan={4}
+                          sx={{
+                            py: 1,
+                            bgcolor: '#f1f5f9',
+                            borderBottom: '1px solid #e2e8f0',
+                          }}
+                        >
+                          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                            <Typography
+                              variant="subtitle2"
+                              sx={{ fontWeight: 700, color: '#334155', letterSpacing: 0.3 }}
+                            >
+                              {group.label}
+                            </Typography>
+                            <Chip
+                              label={`${group.total} ${group.total === 1 ? 'lead' : 'leads'}`}
+                              size="small"
+                              sx={{
+                                height: 20,
+                                fontSize: '0.7rem',
+                                fontWeight: 600,
+                                bgcolor: '#dcfce7',
+                                color: '#166534',
+                              }}
+                            />
+                          </Box>
+                        </TableCell>
+                      </TableRow>
+                      {group.leads.map((lead) => (
                       <TableRow
                         key={lead.id}
                         hover
@@ -265,7 +364,9 @@ export const WonLeadsModal: React.FC<WonLeadsModalProps> = ({ open, onClose, lea
                           </Typography>
                         </TableCell>
                       </TableRow>
-                    ))}
+                      ))}
+                    </React.Fragment>
+                  ))}
                 </TableBody>
               </Table>
             </TableContainer>
