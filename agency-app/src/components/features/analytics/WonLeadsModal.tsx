@@ -194,7 +194,10 @@ export const WonLeadsModal: React.FC<WonLeadsModalProps> = ({ open, onClose, lea
       PaperProps={{
         sx: {
           borderRadius: 3,
-          maxHeight: '85vh',
+          // Fill the viewport vertically so the table shows as many rows as the
+          // screen allows instead of being capped at a fixed height.
+          height: 'calc(100vh - 64px)',
+          maxHeight: 'calc(100vh - 64px)',
         },
       }}
     >
@@ -224,7 +227,10 @@ export const WonLeadsModal: React.FC<WonLeadsModalProps> = ({ open, onClose, lea
         </IconButton>
       </DialogTitle>
 
-      <DialogContent dividers sx={{ p: 0 }}>
+      <DialogContent
+        dividers
+        sx={{ p: 0, display: 'flex', flexDirection: 'column', overflow: 'hidden' }}
+      >
         {sortedLeads.length === 0 ? (
           <Box sx={{ p: 6, textAlign: 'center' }}>
             <CheckCircleIcon sx={{ fontSize: 64, color: '#cbd5e1', mb: 2 }} />
@@ -237,7 +243,7 @@ export const WonLeadsModal: React.FC<WonLeadsModalProps> = ({ open, onClose, lea
           </Box>
         ) : (
           <>
-            <TableContainer sx={{ maxHeight: 500 }}>
+            <TableContainer sx={{ flex: 1, minHeight: 0 }}>
               <Table stickyHeader size="medium">
                 <TableHead>
                   <TableRow>
@@ -373,6 +379,7 @@ export const WonLeadsModal: React.FC<WonLeadsModalProps> = ({ open, onClose, lea
 
             <TablePagination
               component="div"
+              sx={{ flexShrink: 0, borderTop: '1px solid', borderColor: 'divider' }}
               count={sortedLeads.length}
               page={page}
               onPageChange={(e, newPage) => setPage(newPage)}
