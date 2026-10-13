@@ -52,7 +52,8 @@ const isPositiveResponse = (response: string | undefined): boolean | null => {
   if (
     response === 'Interested' ||
     response === 'Meeting Scheduled' ||
-    response === 'Referred Us'
+    response === 'Referred Us' ||
+    response === 'Question / Objection'
   ) {
     return true;
   }

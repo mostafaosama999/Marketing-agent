@@ -178,7 +178,7 @@ const hasLinkedInResponse = (lead: Lead): boolean => {
     if (response === 'No Response' || response === 'Not Interested' || response === '-') {
       return false;
     }
-    if (response === 'Interested' || response === 'Meeting Scheduled' || response === 'Referred Us') {
+    if (response === 'Interested' || response === 'Meeting Scheduled' || response === 'Referred Us' || response === 'Question / Objection') {
       return true;
     }
     const lowerResponse = response.toLowerCase();
@@ -199,7 +199,7 @@ const hasEmailResponse = (lead: Lead): boolean => {
     if (response === 'No Response' || response === 'Not Interested' || response === '-') {
       return false;
     }
-    if (response === 'Interested' || response === 'Meeting Scheduled' || response === 'Referred Us') {
+    if (response === 'Interested' || response === 'Meeting Scheduled' || response === 'Referred Us' || response === 'Question / Objection') {
       return true;
     }
     const lowerResponse = response.toLowerCase();

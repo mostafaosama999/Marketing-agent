@@ -231,7 +231,8 @@ const LeadAnalytics: React.FC = () => {
       if (
         response === 'Interested' ||
         response === 'Meeting Scheduled' ||
-        response === 'Referred Us'
+        response === 'Referred Us' ||
+        response === 'Question / Objection'
       ) {
         return true;
       }
@@ -277,7 +278,8 @@ const LeadAnalytics: React.FC = () => {
       if (
         response === 'Interested' ||
         response === 'Meeting Scheduled' ||
-        response === 'Referred Us'
+        response === 'Referred Us' ||
+        response === 'Question / Objection'
       ) {
         return true;
       }

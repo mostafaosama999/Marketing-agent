@@ -130,7 +130,8 @@ const hasLinkedInResponse = (lead: Lead): boolean => {
     if (
       response === 'Interested' ||
       response === 'Meeting Scheduled' ||
-      response === 'Referred Us'
+      response === 'Referred Us' ||
+      response === 'Question / Objection'
     ) {
       return true;
     }
@@ -168,7 +169,8 @@ const hasEmailResponse = (lead: Lead): boolean => {
     if (
       response === 'Interested' ||
       response === 'Meeting Scheduled' ||
-      response === 'Referred Us'
+      response === 'Referred Us' ||
+      response === 'Question / Objection'
     ) {
       return true;
     }
@@ -195,7 +197,7 @@ const getResponseType = (lead: Lead, type: 'linkedin' | 'email'): string => {
        lead.customFields?.lead_response ||
        lead.customFields?.['LEAD RESPONSE']);
 
-  if (response && ['Interested', 'Meeting Scheduled', 'Referred Us'].includes(response)) {
+  if (response && ['Interested', 'Meeting Scheduled', 'Referred Us', 'Question / Objection'].includes(response)) {
     return response;
   }
   return 'Replied';
@@ -258,6 +260,8 @@ const getChipStyle = (responseType: string) => {
     return { bgcolor: '#dbeafe', color: '#0077b5' };
   } else if (responseType === 'Referred Us') {
     return { bgcolor: '#fef3c7', color: '#d97706' };
+  } else if (responseType === 'Question / Objection') {
+    return { bgcolor: '#ede9fe', color: '#7c3aed' };
   }
   return { bgcolor: '#e2e8f0', color: '#64748b' };
 };
