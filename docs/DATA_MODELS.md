@@ -1910,7 +1910,7 @@ interface PromptWithMetadata<T = Record<string, any>> {
 | Collection | Document ID | Purpose |
 |------------|-------------|---------|
 | `leads` | `{leadId}` | Lead records |
-| `companies` | `{companyId}` | Company records |
+| `entities` | `{companyId}` | Company records (renamed from `companies`; see `COMPANIES_COLLECTION` in `agency-app/src/services/api/companies.ts`) |
 | `tickets` | `{ticketId}` | Project tickets |
 | `clients` | `{clientId}` | Client profiles |
 | `articleIdeas` | `{ideaId}` | Article ideas |
@@ -1941,7 +1941,7 @@ interface PromptWithMetadata<T = Record<string, any>> {
 - `archived` + `company` + `updatedAt`
 - `status` + `updatedAt`
 
-**Companies Collection:**
+**Companies Collection** (`firestore.indexes.json` still declares these on `companies`, not `entities`):
 - `archived` + `updatedAt`
 - `industry` + `updatedAt`
 
@@ -2181,6 +2181,52 @@ const q = query(presetsRef, where('isDefault', '==', true), limit(1));
 const snapshot = await getDocs(q);
 const defaultPreset = snapshot.docs[0]?.data() as FilterPreset;
 ```
+
+---
+
+## 20. Collections added since the summary above
+
+<!-- appended 2026-10-16 from a grep of collection('...') in functions/src and agency-app/src -->
+
+Top-level collections the code reads or writes that sections 1-19 don't cover. See the owning module for field shapes.
+
+| Collection | Owner (source) | Purpose |
+|------------|----------------|---------|
+| `applicants` | `functions/src/hiring/` | Hiring applicants (Webflow/Payload webhooks, autoscoring, recruiter attribution) |
+| `events` | `functions/src/events/`, `agency-app/src/services/api/events.ts` | Events page records + organizer research |
+| `contentAnalytics/mostafa` | `agency-app/src/services/api/contentAnalyticsService.ts` | Content analytics; see `docs/CONTENT_ANALYTICS.md` |
+| `googleAnalytics/{userId}` (+ `metrics`, `trafficSources`) | `functions/src/analytics/syncGoogleAnalytics.ts` | GA4 sync |
+| `linkedinAnalytics` | `functions/src/analytics/extractLinkedInAnalytics.ts` | LinkedIn analytics used by post generation |
+| `linkedInGenerationJobs/{userId}/jobs` | `functions/src/linkedinGeneration/` | Async LinkedIn post generation jobs |
+| `linkedInPostIdeas` | `functions/src/linkedinGeneration/generatePostIdeas*.ts` | Generated post-idea sessions |
+| `competitors`, `competitorPosts`, `competitorSyncMetadata` | `functions/src/competitors/`, `agency-app/src/services/api/competitor*Service.ts` | Competitor tracking; see `docs/COMPETITOR_SYNC_GUIDE.md` |
+| `aiTrends` | `functions/src/aiTrends/generateAITrends.ts` | Generated AI trend sessions |
+| `newsletters/emails/items` | `functions/src/rag/`, `functions/src/aiTrends/` | Ingested newsletter emails |
+| `newsletterEmbeddings` | `functions/src/rag/newsletterIndexer.ts` | RAG chunks for newsletters |
+| `gmailTokens/{accountType}` | `functions/src/gmail/oauthService.ts` | Gmail OAuth refresh tokens |
+| `apiCosts` | `functions/src/utils/costTracker.ts` | Per-call API cost audit trail |
+| `research_sessions` | `functions/src/utils/firestore.ts` | Research session records |
+| `userReleaseStates` | `agency-app/src/services/api/releaseNotesService.ts` | Per-user release-note state |
+| `tasks` | `agency-app/src/utils/timelineMigration.ts` | Legacy; only read by a migration util |
+| `entities/{id}/offerAnalysis` | `functions/src/offerAnalysis/` | Offer/idea analysis results (subcollection) |
+
+### Nikola collections (`functions/src/nikola/`)
+
+| Collection | Purpose | Locked in `firestore.rules`? |
+|------------|---------|------------------------------|
+| `nikolaDrafts` | Outreach drafts posted to Slack | yes |
+| `nikolaPatches` | Skill patches | yes |
+| `nikolaThreads` | Slack/Gmail thread state | yes |
+| `nikolaContext` | Synced context (Notion + reports) | yes |
+| `nikolaSkillRuns` | Skill run log | yes |
+| `nikolaState/singleton` | Cost gate (month-to-date spend) | yes |
+| `nikolaDiscovery` | Results of the find-companies / find-leads slash commands | yes |
+| `nikolaGmailWatch` | Gmail watch state | yes |
+| `nikolaWorkQueue` | Async work queue | yes |
+| `nikolaMemory/singleton` | Long-term memory facts | **no** (falls under the open catch-all) |
+| `nikolaMemoryCandidates` | Proposed memory facts | **no** |
+| `nikolaRoutingDecisions` | Routing observability log | **no** |
+| `nikolaPendingClarifications` | Pending clarification prompts | **no** |
 
 ---
 

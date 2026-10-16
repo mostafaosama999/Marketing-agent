@@ -1,491 +1,110 @@
-# Marketing Agent - CRM Pipeline System
+# Marketing Agent: CRM, Nikola BDR bot, Hiring
 
-## Firebase Project (READ FIRST)
+React frontend (`agency-app/`) plus Firebase Cloud Functions (`functions/`) on Firebase project `marketing-app-cc237`. Three products share it: the sales CRM (leads, companies, outreach analytics), Nikola (the Slack BDR bot), and the Hiring board.
 
-**This repo deploys to `marketing-app-cc237`** — NOT `ai-adv-5e502`. The workstation-level `CLAUDE.md` calls out `ai-adv-5e502` for the sibling `Agent/` repo, which is a different project; do not confuse them.
+## Firebase project
+- IMPORTANT: always pass `--project marketing-app-cc237` and address Firestore as `projects/marketing-app-cc237/...`; the Firebase MCP's default may resolve to `ai-adv-5e502` (the Agent repo).
+- If the MCP/CLI misbehaves, use `claude_BDR_codecontent/tools/fsq` (defaults to this project). See the workstation root `CLAUDE.md`.
 
-- Frontend Firestore: `agency-app/src/services/firebase/firestore.ts` → `projectId: "marketing-app-cc237"`
-- Functions deploy target: `.firebaserc` → `default: marketing-app-cc237`
-- All applicant docs, leads, companies, function logs, etc. live in `marketing-app-cc237`
+## Commands
+There is no root `package.json`; run everything from `agency-app/` or `functions/`.
 
-When debugging anything Firestore- or Functions-related, always pass `--project marketing-app-cc237` to `firebase` CLI calls and address Firestore via `projects/marketing-app-cc237/...` in the Firebase MCP. The Firebase MCP's default project may resolve to `ai-adv-5e502` — never trust it implicitly for this repo.
+| Where | Command | What it does |
+|---|---|---|
+| `agency-app/` | `npm start` | CRA dev server against production Firebase |
+| `agency-app/` | `npm run start:emulator` | Dev server with `REACT_APP_USE_EMULATOR=true` |
+| `agency-app/` | `npm run build` | Production build into `agency-app/build` |
+| `functions/` | `npm run build` | `tsc`. The `prebuild` hook runs `scripts/copy-bdr-assets.js`, which copies BDR skills and context files from the sibling `claude_BDR_codecontent/` repo into `functions/nikola-bundled/` (gitignored) for Nikola. The build fails if that repo isn't checked out next to this one |
+| `functions/` | `npm run emulator` | Emulators with `--import=../emulator-data --export-on-exit` |
+| `functions/` | `npm run deploy` | `firebase deploy --only functions` (the `firebase.json` predeploy hook rebuilds first) |
+| `functions/` | `npm run logs` | Function logs |
 
-## Deploy Small Changes Without Asking
+- Single function: `firebase deploy --only functions:<exportName> --project marketing-app-cc237`.
+- No real test suite. The `test:*`, `debug:*` and `list:*` scripts in `functions/package.json` are ad-hoc scripts that hit live services; `agency-app`'s `npm test` has no meaningful tests.
+- Node: `agency-app` engines 18.x; `functions` runtime Node 20.
 
-For small, low-risk changes (bug fixes, small UI tweaks, copy/column changes, one-off data corrections) — commit, push, build, and run `firebase deploy` (functions and/or hosting as relevant) immediately, without asking for confirmation first. Still confirm before deploying larger features, schema/security-rule changes, or anything the user hasn't already reviewed in-session.
+## Deploy
+- **Functions** deploy with Firebase (above).
+- **Frontend** is served from DigitalOcean App Platform, not Firebase Hosting. `firebase.json` `hosting.public` points at `frontend/build`, which doesn't exist, so never run `firebase deploy --only hosting` or a bare `firebase deploy`. The newest URL in code is `marketing-app-0149.ondigitalocean.app` (`functions/src/hiring/notifyAppliedThreshold.ts`); Gmail OAuth (`functions/src/gmail/oauthService.ts`) still allow-lists the older `marketing-app-2v32k`. How a DO deploy is triggered (auto-deploy on push to `main`?) is unverified; `agency-app/.app-spec.yaml` is a placeholder template.
+- Small, low-risk changes (bug fixes, small UI tweaks, copy/column changes, one-off data corrections): commit, push, build and deploy without asking. Confirm first for larger features, schema or security-rule changes, or anything the user hasn't reviewed in-session.
 
-## Quick Reference
+## Pipeline and leads
+- 9 `LeadStatus` values (`agency-app/src/types/lead.ts`): `new_lead`, `qualified`, `contacted`, `follow_up`, `nurture`, `won`, `lost`, `previous_client`, `existing_client`. Board stage config lives in `pipelineConfig/default` via `PipelineConfigContext` (label, color, order, visible).
+- Every status change must update both the lead and its `leads/{id}/timeline` subcollection (`stateHistory`, `stateDurations`, `statusChanges[]`). Re-entry into a stage is supported.
+- Outreach channel status: `not_sent | sent | opened | replied | refused | no_response`.
+- Outreach response types counted as positive: `Interested`, `Meeting Scheduled`, `Referred Us`, `Question / Objection`. The list is hardcoded in five places (`utils/outreachHelpers.ts`, `OutreachActivityTable.tsx`, `OutreachResponseModal.tsx`, `KPIsPage.tsx`, `LeadAnalytics.tsx`); update all of them when adding one.
+- Link leads to companies by `companyId`, never by company name.
+- Filtering, CSV import, custom/dropdown fields, bulk ops, archive, company status and enrichment: `docs/features/crm.md`.
 
-1. [UI Design](#ui-design) - Design system and styling rules
-2. [Pipeline & Leads](#pipeline--leads) - 6-stage pipeline, lead management
-3. [Filtering & Bulk Ops](#filtering--bulk-ops) - Advanced filters, CSV import, bulk actions
-4. [Companies & Enrichment](#companies--enrichment) - Company mgmt, Apollo, blog analysis
-5. [User System](#user-system) - Roles, permissions, settings
-6. [Firebase Schema](#firebase-schema) - Collections and data structures
-7. [Content Analytics](#content-analytics) - Multi-platform content performance tracking
+## Companies live in `entities`
+- The Firestore collection is `entities`, not `companies` (`COMPANIES_COLLECTION` in `agency-app/src/services/api/companies.ts`). A few old scripts still read `companies`; don't copy them.
+- `firestore.indexes.json` still declares indexes on `companies` and none on `entities`. Known, not yet fixed.
 
----
-
-## UI Design
-
-**CRITICAL: Design Preservation**
-
-### Core Styling
-- **Background**: `linear-gradient(135deg, #667eea 0%, #764ba2 100%)`
-- **Header**: `rgba(255,255,255,0.95)` + `backdropFilter: blur(20px)`
-- **Columns**: 280px width, glass-morphism effect
-- **Font**: Inter/SF Pro Display
-- **FAB**: Bottom-right (24px), purple gradient
-- **Duration Colors**: 0-3d green, 4-7d orange, 8+d red
-
-### Key Components
-- ViewToggle (Board/Table) with purple accent
-- Filter Row: LeadOwner, Company, Month
-- Cards: White bg, 10px radius, 12px padding, 3px top border for priority
-- Hover: Shadow + translateY(-2px)
-
----
-
-## Pipeline & Leads
-
-### 6 Pipeline Stages
-1. **New Lead** → 2. **Qualified** → 3. **Contacted** → 4. **Follow up** → 5. **Won** / 6. **Lost**
-
-Stored in `pipelineConfig/default`, customizable via `PipelineConfigContext`. Each has: label, color, order, visible.
-
-### Lead Structure
-**Core**: id, name, email, phone, company, companyId, status
-**Extended**: customFields, apolloEnriched, totalApiCosts, archived, archivedAt
-**Outreach**: linkedIn/email status (not_sent|sent|opened|replied|refused|no_response)
-
-### Timeline Tracking (CRITICAL)
-- Subcollection `leads/{id}/timeline/{id}`
-- `stateHistory`: timestamps for each status
-- `stateDurations`: cumulative days in each status
-- `statusChanges`: array of change records
-- Updates on EVERY status change - supports re-entry
-
-### Board Features
-- Drag-and-drop between stages
-- Filters: Owner, Company, Month
-- View toggle: Board/Table
-- Real-time Firebase subscriptions
-- FAB to add leads → LeadDialog
-- Duration color coding on cards
-
----
-
-## Filtering & Bulk Ops
-
-### Advanced Filters
-**Components**: `AdvancedFiltersModal`, `FilterPresetsMenu`, `applyAdvancedFilters()`
-
-**Operators**: equals, contains, startsWith, endsWith, greaterThan, lessThan, before, after, between, isTrue, isFalse
-
-**Presets**: Saved to `filterPresets/{userId}/presets/{presetId}`, can set default preset
-
-### CSV Import
-**Workflow**: Upload CSV → Field Mapping → Deduplication → Import
-- Uses `papaparse` library
-- Auto-maps columns to lead/company fields
-- Custom fields auto-created for unmapped columns
-- **Dropdown Field Detection**: Columns with "dropdown" in the name (case-insensitive) are automatically detected as dropdown fields
-- Auto-extracts unique values from CSV as dropdown options
-- User can add/edit/remove options before importing via `DropdownOptionsEditor`
-- Field definitions saved to `fieldDefinitions` collection
-- Dedup strategies: Skip, Update, Create New
-- Dedup criteria: Email (primary), Name+Company, Phone
-
-### Custom Fields & Dropdown Fields (NEW)
-**Field Definitions System**: Schema-based custom fields with type enforcement
-
-**Field Types**: text, number, date, dropdown
-- Stored in Firestore collection: `fieldDefinitions/{fieldId}`
-- Each definition includes: name, label, entityType, fieldType, section, options (for dropdowns)
-
-**Dropdown Fields**:
-- Detected during CSV import if column name contains "dropdown" (case-insensitive)
-- Examples: "Project Status Dropdown", "Lead Type_Dropdown", "status dropdown"
-- Unique values extracted from CSV data as initial options
-- User can modify options in `DropdownOptionsEditor` component
-
-**Inline Editing**:
-- Dropdown custom fields render as purple gradient chips in table view
-- Click chip → dropdown menu with all options
-- Select new value → updates immediately in Firebase
-- Works for both Lead and Company custom fields
-- Only dropdown fields support inline editing (text/number/date fields require dialog)
-
-**Services**:
-- `fieldDefinitionsService.ts`: CRUD operations for field definitions
-- `fieldValidation.ts`: Validates dropdown values against options
-- `updateLeadCustomField()`, `updateCompanyCustomField()`: Update individual fields
-
-**Components**:
-- `DropdownOptionsEditor.tsx`: Chip-based UI for editing dropdown options
-- Integrated into `CSVFieldMappingDialog` for CSV import
-- Inline editing in `CRMLeadsTable` for quick updates
-
-### Bulk Operations
-**Actions**: Delete, Edit, Archive, Unarchive
-- Table view multi-select with checkboxes
-- `BulkActionsToolbar` shows selected count
-- Functions: `bulkDeleteLeads()`, `archiveLead()`, `unarchiveLead()`
-
-### Archive System
-**Soft-delete** for leads not ready to permanently delete
-- `archived` flag + `archivedAt` timestamp
-- Separate subscription for archived leads
-- `ArchivedLeadsView` modal shows all archived
-- Can unarchive to restore to active CRM
-
----
-
-## Companies & Enrichment
-
-### Apollo.io Integration
-**Functions**: `apolloProxy`, `enrichOrganization`, `searchPeople`
-
-**Lead Enrichment**: Verified emails, LinkedIn URLs, job titles, phone numbers
-**Company Enrichment**: Employee count, funding, tech stack, industry, social URLs, logo
-
-**Data Structure**: `apolloEnrichment` object with apolloId, employeeCount/Range, funding, technologies[], industries[], address, costInfo
-
-**Cost Tracking**: Per-lead, per-company, and per-user in `userCostTracking` collection
-
-### Company Features
-**Core**: name (unique), website, industry, description, customFields, ratingV2
-**Extended**: Blog Analysis, Writing Program Analysis, Offer/Pitch Management, Company Status
-
-### Company Status System (NEW)
-**Overview**: Companies have overall status that auto-syncs from lead statuses with manual override capability
-
-**Status Fields**:
-- `status`: LeadStatus (same 6 stages as leads: new_lead → qualified → contacted → follow_up → nurture → won/lost)
-- `statusLockedManually`: boolean (if true, status won't auto-update from leads)
-- `statusLastUpdatedAt`: Date (timestamp of last status change)
-- `statusLastUpdatedBy`: string (user ID who last updated)
-
-**Status Calculation Logic**:
-- **Majority-based**: Company status = most common status among its leads
-- **Tie-breaker**: If multiple statuses have same count, uses most advanced status
-- **No leads**: Defaults to 'new_lead'
-- **Archived leads**: Excluded from calculation
-
-**Auto-Sync Behavior**:
-- Triggers on: Lead status change, lead creation, lead deletion, bulk lead operations
-- Respects lock: If `statusLockedManually = true`, skips auto-update
-- Error handling: Logs errors but doesn't fail lead operations
-
-**Manual Override**:
-- Click status badge in table → opens menu with all 6 statuses
-- Selecting new status: Sets status AND locks it (`statusLockedManually = true`)
-- Unlock option: Shows in menu if locked, recalculates status from leads
-
-**UI Components**:
-- `CompanyStatusBadge`: Colored badge with lock icon indicator
-- Status column in CompanyTable with inline editing
-- Tooltip shows lock status and explanation
-
-**Services**:
-- `companyStatus.ts`: Core calculation logic (`calculateCompanyStatus`, `updateCompanyStatusFromLeads`, `setCompanyStatusManually`, `unlockCompanyStatus`)
-- Integrated into `companies.ts` and `leads.ts` services
-
-### Blog Analysis (`qualifyBlog` function)
-Analyzes company blog for content writing fit:
-- Last active post, monthly frequency
-- Writer types (employees/freelancers)
-- Blog nature: isAIWritten, isTechnical, rating (low/medium/high), hasCodeExamples
-- isDeveloperB2BSaas flag
-- OpenAI GPT-4 powered
-
-### Writing Program Analysis
-**Functions**: `findWritingProgram`, `analyzeProgram`
-Detects paid writing programs and extracts:
-- Payment amount/method/details with sourceSnippet
-- Requirements and submission guidelines
-- Contact email and response time
-- Open/closed dates
-
-### Offer Management
-Store custom pitch per company in `offer: { blogIdea, createdAt, updatedAt }`
-
-### Company-Lead Linking
-Auto-creates companies when leads added. Lead has `companyId` reference.
-
----
-
-## User System
-
-### Roles & Permissions
-1. **Writer**: Own tasks only, no CRM access
-2. **Marketing Analyst**: View/edit leads & companies, no delete
-3. **Manager**: Full CRM, create/edit/delete, team view
-4. **CEO**: Full system access + user/role management
-
-**Permission Matrix**: Writers blocked from CRM. Analysts can view/edit. Managers/CEOs full access.
-
-### Navigation
-`Navbar.tsx` dynamically renders based on role. Writers see "My Tasks", others see Leads/Companies/Analytics/Team/Monitoring.
-
-### Auth System
-**Context**: `AuthContext.tsx`, Hook: `useAuth()`
-**Protected Routes**: `ProtectedRoute.tsx` wraps all routes except `/login`
-**User Profile**: `users/{userId}` collection with uid, email, displayName, role, createdAt
-
-### Settings
-**Page**: `SettingsPage.tsx`
-**Sections**: Profile, Notifications, Default Views, API Cost Tracking, Data Management
-**Collections**: `userPreferences/{userId}`, `userCostTracking/{userId}`
-**Table Columns**: `TableColumnVisibilityMenu`, saved to localStorage as 'crm_table_columns'
-
----
+## Users and routes
+- `UserRole` (`agency-app/src/types/auth.ts`): `CEO`, `Manager`, `Marketing Analyst`, `Writer`, plus lowercase `admin`, `manager`, `writer`, `viewer`. `Navbar.tsx` only checks the capitalised ones.
+- Nav (`Navbar.tsx`): Settings, Leads, Companies, Analytics and KPIs for every role; Team and Monitoring for CEO/Manager/Marketing Analyst; "My Tasks" (`/writer`) for Writers, but `App.tsx` has no `/writer` route.
+- Routes (`App.tsx`): `/`, `/crm`, `/leads`, `/leads/:leadId`, `/companies`, `/companies/:companyId`, `/events`, `/events/:eventId`, `/hiring`, `/hiring/writing-tests`, `/hiring/outbound`, `/hiring/analytics`, `/team`, `/team-member/:userId`, `/analytics`, `/analytics/outbound`, `/inbound-generation`, `/kpis`, `/monitoring`, `/settings`, `/settings/:tab`, `/auth/gmail/callback`, `/login`.
+- Auth: `AuthContext.tsx` / `useAuth()`; `ProtectedRoute.tsx` wraps everything except `/login`.
 
 ## Cloud Functions
+All exports are in `functions/src/index.ts`. Grouped by area:
 
-**Runtime**: Node.js 20, Firebase Functions v5, `functions/src/index.ts`
+| Area | Exports |
+|---|---|
+| Apollo | `fetchApolloEmail`, `apolloBulkEnrichPeople`, `enrichOrganizationCloud`, `searchPeopleCloud`, `initApolloJobTitles` |
+| Blog / writing programs | `qualifyCompanyBlog`, `findWritingProgramCloud`, `analyzeWritingProgramDetailsCloud`, `generateBlogAuditCloud`, `discoverCompanyWebsiteCloud` |
+| Offer / blog ideas | `analyzeCompanyOffer`, `analyzeCompanyWebsiteCloud`, `generateOfferIdeasCloud` (V1), `generateOfferIdeasV2Cloud` + `v2Stage*Cloud`, `generateOfferIdeasV3Cloud`, `refreshAIConceptsCloud`, `getAIConceptsStatusCloud`, `sendOfferSlackNotificationCloud` |
+| LinkedIn content | `generateLinkedInPostAsync`, `getLinkedInGenerationJob`, `generatePostIdeas`, `generatePostFromIdea`, `generatePostIdeasRAG`, `generatePostFromIdeaRAG`, `generateAITrends` |
+| RAG newsletters | `indexNewsletters`, `indexSingleNewsletter`, `getRAGStatus` |
+| Competitors | `findCompetitorsV2`, `extractCompetitorPosts` |
+| Analytics | `extractLinkedInAnalytics`, `syncGoogleAnalytics`, `scheduledGoogleAnalyticsSync` |
+| Gmail | `scheduledEmailSync`, `manualEmailSync`, `getGmailAuthUrl`, `exchangeGmailOAuthCode`, `checkGmailConnectionStatus`, `createGmailDraftCloud`, `createFollowUpDraftCloud`, `createHiringDraftCloud` |
+| Hiring | `webflowHiringWebhook`, `payloadApplicationWebhook`, `importApplicantsCloud`, `parseApplicantProfileCloud`, `scoreApplicantOnCreate`, `ghostStaleWritingTests`, `backfillJobPostCloud`, `backfillRecruiterAttributionCloud`, `syncRecruiterAttributionScheduled`, `backfillAiRejectedCloud` |
+| Events | `researchEventOrganizer`, `onEventCreatedResearchOrganizer` |
+| Webflow / Sheets | `dailyWebflowSync`, `profileScraperSync`, `sheetsScraperSync`, `triggerSheetsScraper`, `triggerProfileScraper`, `runScraperOnly`, `runAllScrapersManual`, `getCSVDownloadUrl`, `listCSVFiles`, `getScraperStatusInfo` |
+| Nikola | `nikolaSlackEvents`, `nikolaSlashCommand`, `nikolaContextSync`, `nikolaGmailWebhook`, `setupNikolaGmailWatchHttp`, `nikolaWorkQueueProcessor`, `nikolaCompanyIndustrySync`, `nikolaMemoryExtractor` (`nikolaMorningBatch` is disabled) |
+| Misc | `healthCheck` |
 
-### Apollo Functions
-- `apolloProxy`: CORS proxy for Apollo API
-- `enrichOrganization`: Company enrichment
-- `searchPeople`: Find people at company
+- Blog idea V1 (`functions/src/offerAnalysis/generateOfferIdeas.ts`) is FROZEN: never modify it. Each new version gets its own directory (`v2/`, `v3/`, next `v4/`). Stage details: `docs/OFFER_IDEA_GENERATION.md`.
+- New features or versions must never block or degrade existing ones: each version runs, saves to Firestore incrementally and displays independently; an error in one must not stop the others; a page refresh restores completed results.
+- Functions use the v1 API (`functions.https.onCall`, `functions.runWith`) on firebase-functions v5. Config comes mostly from `functions.config()`; `hiring/scoreApplicant.ts` mixes in `defineSecret("APIFY_TOKEN")` via `runWith({secrets})`.
 
-### Blog Analysis
-- `qualifyBlog`: Analyze blog (RSS/sitemap discovery, OpenAI GPT-4)
-- `findWritingProgram`: Detect writing program URL (GPT-3.5)
-- `analyzeProgram`: Extract payment/requirements (GPT-4)
+## Nikola (Slack BDR bot)
+- Overview and function table: `docs/NIKOLA.md`. Architecture (routing, analyst/planner skills, hybrid memory): `docs/NIKOLA_V2.md`.
+- After any wrong dispatch, fill in `docs/NIKOLA_MISROUTE_POSTMORTEM.md`; it feeds prompt fixes.
+- Firecrawl defaults for Nikola code: `.claude/rules/nikola.md`.
 
-### Content Generation
-- `generateLinkedInPost`: Blog → LinkedIn post
-- `generateBlogIdea`: Generate blog topic ideas
-
-### Blog Idea Generation Versioning
-
-Each version is a separate cloud function with complete isolation:
-
-| Version | File | Cloud Function | Description |
-|---------|------|----------------|-------------|
-| V1 | `offerAnalysis/generateOfferIdeas.ts` | `generateOfferIdeasCloud` | Template-based (original) |
-| V2 | `offerAnalysis/v2/generateIdeasV2.ts` | `generateOfferIdeasV2Cloud` | 4-stage personalized pipeline |
-
-**Rules:**
-- **V1 file is FROZEN** - do not modify
-- Each new version gets its own directory: `v3/`, `v4/`, etc.
-- Frontend calls each version's cloud function separately via `Promise.all`
-- Frontend combines results for display in tabs
-- Choosing from either version assigns to the same downstream fields
-
-**V2 Pipeline Stages:**
-1. `analyzeCompanyDifferentiators.ts` - Extract unique differentiators from Apollo/blog data
-2. `analyzeContentGaps.ts` - Identify content gaps based on tech stack and audience
-3. `promptsV2.ts` - Generate ideas from company context (no fixed concept table)
-4. `validateIdeas.ts` - LLM-as-Judge validation with personalization scores
-
-### Integrations
-- `webflowDailySync`: Scheduler (2 AM UTC), sync Webflow CMS
-- `slackNotification`: onCreate trigger for new leads
-- `sheetsSync`: Hourly export to Google Sheets
-- `trackApiCost`: onWrite trigger, aggregate user costs
-
-**Deploy**: `npm run deploy` or `firebase deploy --only functions:apolloProxy`
-**Security**: All require auth, API keys in env config, input validation
-
----
-
-## Firebase Schema
-
-### Collections
-- `leads/{leadId}` + subcollection `timeline/{leadId}`
-- `companies/{companyId}`
-- `pipelineConfig/default` (single doc)
-- `filterPresets/{userId}/presets/{presetId}`
-- `userPreferences/{userId}`
-- `userCostTracking/{userId}`
-- `users/{userId}`
-- `fieldDefinitions/{fieldId}` (NEW - schema for custom fields)
-
-### Lead Document
-**Core**: id, name, email, phone, company, companyId, status, customFields
-**Timeline**: stateHistory{}, stateDurations{} (flattened from subcollection)
-**Extended**: apolloEnriched, totalApiCosts, outreach{linkedIn, email}, archived, archivedAt, archivedBy
-
-**Subcollection `timeline/{leadId}`**: stateHistory, stateDurations, statusChanges[] with fromStatus, toStatus, changedBy, changedAt
-
-### Company Document
-**Core**: id, name (unique), website, industry, description, customFields, ratingV2, ratingV2UpdatedBy, ratingV2UpdatedAt
-**Status**: status (LeadStatus), statusLockedManually (boolean), statusLastUpdatedAt (Date), statusLastUpdatedBy (string)
-**Extended**: totalApiCosts, archived, offer{blogIdea}, blogAnalysis{}, writingProgramAnalysis{}, apolloEnrichment{}
-
-### Other Collections
-**pipelineConfig**: stages[] with id, label, color, order, visible
-**filterPresets**: filters{}, advancedRules[], isDefault
-**userPreferences**: defaultView, defaultFilterPresetId, tableColumns{}, notifications{}, theme
-**userCostTracking**: totalCosts{apollo, openai, total}, costsByMonth{}, costsByEntity{}
-**users**: uid, email, displayName, role, photoURL
-**fieldDefinitions** (NEW): id, name, label, entityType (lead|company), fieldType (text|number|date|dropdown), section (general|linkedin|email), options[] (for dropdowns), required, createdAt, createdBy, updatedAt, updatedBy
-
-### Firestore Indexes (Required)
-**leads**: archived+status+updatedAt, archived+company+updatedAt, status+updatedAt
-**companies**: archived+updatedAt, industry+updatedAt
-
-### Content Analytics Collection
-**`contentAnalytics/mostafa`**: Parent doc with cross-platform summary (platforms{}, crossPlatform{}, lastSyncAt)
-**Subcollections**: linkedin_discovery, linkedin_engagement, linkedin_posts, linkedin_followers, linkedin_demographics, tds_articles, tds_summary, medium_stories, medium_summary
-**See**: `docs/CONTENT_ANALYTICS.md` for full schema details
-
-### Security Rules
-- All require authentication
-- Writers: no access to leads/companies
-- Analysts: read/write leads/companies, no delete
-- Managers/CEOs: full access
-- Users can only r/w own preferences/presets
-
----
+## Firestore
+- Collection reference: `docs/DATA_MODELS.md` (section 20 lists the newer collections, including all `nikola*`).
+- WARNING: `firestore.rules` is in DEVELOPMENT MODE: every collection is readable and writable by anyone, with no auth check, except the nine listed `nikola*` collections, which are `if false` (admin SDK only). `nikolaMemory`, `nikolaMemoryCandidates`, `nikolaRoutingDecisions` and `nikolaPendingClarifications` are not in that list, so they're open too.
 
 ## Content Analytics
+- Full docs: `docs/CONTENT_ANALYTICS.md`. Stored under `contentAnalytics/mostafa`; the user ID is hardcoded to `'mostafa'`, not a Firebase Auth UID.
+- Synced by the `/sync-analytics` skill in `claude_BDR_codecontent/` or the in-app ContentSyncDialog. TDS and Medium sync 2026+ content only. LinkedIn Excel uploads go in `data/linkedin/` (gitignored).
 
-**Full docs**: `docs/CONTENT_ANALYTICS.md`
-
-Multi-platform content marketing analytics synced from LinkedIn (Excel), TDS (paste), and Medium (paste).
-
-**Key points:**
-- User ID is hardcoded to `'mostafa'` (not Firebase Auth UID)
-- TDS and Medium only sync 2026+ content
-- LinkedIn syncs all available data from Excel
-- Sync via Claude skill (`/sync-analytics`) or browser UI (ContentSyncDialog)
-- BDR `content-ideas` skill reads this data in Phase 0 for analytics-driven idea generation
-- Data directory: `data/linkedin/` for Excel uploads (gitignored)
-
----
-
-## Feature Documentation
-
-**CRITICAL: Before working on any feature, check `/docs` for existing documentation.** Features in this codebase are complex and have non-obvious constraints (frozen files, caching strategies, multi-pipeline independence requirements). Reading the relevant doc first prevents breaking existing behavior.
+## Feature docs
+Check `docs/` before working on a feature; several have non-obvious constraints (frozen files, caching, independent pipelines).
 
 | Doc | Feature |
-|-----|---------|
-| `docs/OFFER_IDEA_GENERATION.md` | V1/V2/V3 blog idea generation, AI concepts, bulk ops, costs |
-| `docs/CONTENT_ANALYTICS.md` | Multi-platform content analytics (LinkedIn, TDS, Medium), Firestore schema, sync skill, BDR integration |
-| `docs/HIRING_AUTOSCORING.md` | Inbound applicant autoscoring: Apify LinkedIn enrichment + GPT-4o-mini cross-checks, schema, cost, config |
-| `docs/HIRING_BATCH_NOTIFICATIONS.md` | Slack ping to #hiring every 5 new applicants in `applied` (post-AI-screen): counter doc, paths counted, config |
-| `docs/NIKOLA_V2.md` | Nikola V2 architecture: 3-path routing, analyst/planner skills, hybrid memory, observability — replaces the V1 ad-hoc dispatch |
-| `docs/NIKOLA_MISROUTE_POSTMORTEM.md` | Template for capturing every Nikola misroute. Mandatory after any wrong dispatch; feeds prompt fixes |
+|---|---|
+| `docs/features/crm.md` | Filters, CSV import, custom fields, bulk ops, archive, company status, enrichment, common issues |
+| `docs/DATA_MODELS.md` | Firestore collections and types |
+| `docs/OFFER_IDEA_GENERATION.md` | V1/V2/V3 blog idea generation, AI concepts, costs |
+| `docs/CONTENT_ANALYTICS.md` | LinkedIn/TDS/Medium analytics, schema, sync skill |
+| `docs/HIRING_AUTOSCORING.md` | Applicant autoscoring (Apify LinkedIn enrichment + GPT-4o-mini) |
+| `docs/HIRING_BATCH_NOTIFICATIONS.md` | #hiring Slack ping every 5 new `applied` applicants |
+| `docs/NIKOLA.md`, `docs/NIKOLA_V2.md`, `docs/NIKOLA_MISROUTE_POSTMORTEM.md` | Nikola bot, architecture, misroute template |
+| `docs/GMAIL_INTEGRATION_SUMMARY.md`, `docs/GMAIL_SETUP.md`, `docs/GMAIL_QUICK_START.md` | Gmail sync and drafts |
+| `docs/GOOGLE_ANALYTICS_ARCHITECTURE.md`, `docs/GOOGLE_ANALYTICS_SETUP.md`, `docs/GOOGLE_ANALYTICS_IMPLEMENTATION_SUMMARY.md` | GA4 sync |
+| `docs/COMPETITOR_SYNC_GUIDE.md` | Competitor post extraction |
+| `docs/DEPLOYMENT.md` | Possibly stale: uses `functions:config:set` and Firebase Hosting |
+| `.claude/rules/ui.md` | UI design tokens (loads when editing `agency-app/src/**`) |
 
-### 🚨 MANDATORY: Documentation Updates for Systems
-- **New system added**: When implementing a new system or major feature, you MUST create a corresponding `.md` file in `docs/` and link it in the table above.
-- **Existing system changed**: When modifying any system that already has documentation in `docs/`, you MUST update the relevant `.md` file to reflect the changes.
-- **Never skip this**: Documentation must stay in sync with the code at all times.
+## Mandatory documentation
+- **New system:** create a `.md` in `docs/` and add it to the table above.
+- **Changed system:** update its existing doc in the same change.
+- **Every bug fix:** add `bugs/YYYY-MM-DD-short-description.md` with these sections: Summary, Investigation (what was checked and ruled out), Root Cause, Fix (files and lines), Tech Debt. Do it even for small fixes; investigations are expensive to repeat.
 
-### 🚨 MANDATORY: Bug Documentation
-- **Every bug fix MUST be documented** in the `bugs/` folder as a `.md` file
-- **File naming**: `bugs/YYYY-MM-DD-short-description.md` (e.g., `bugs/2026-04-05-outreach-data-not-mapped.md`)
-- **Required sections in each bug doc**:
-  1. **Summary** — One-line description of the bug
-  2. **Investigation** — Steps taken to diagnose the root cause, what was checked, what was ruled out
-  3. **Root Cause** — The actual underlying issue
-  4. **Fix** — What was changed and where (file paths, line numbers)
-  5. **Tech Debt** — Any remaining issues, shortcuts taken, or follow-up work needed
-- **Why**: Bug investigations are expensive. Documenting them prevents re-investigation of similar issues and builds institutional knowledge about fragile areas of the codebase
-- **Never skip this**: Even for small fixes — if you investigated a bug, document it
-
----
-
-## Best Practices & Troubleshooting
-
-### Feature Independence (CRITICAL)
-- **New features/versions must NEVER block, break, or degrade existing ones**
-- When adding a new version (e.g. V3 alongside V1/V2), each must run and display independently
-- Each version should save results to Firestore independently (incremental writes, not one atomic save at the end)
-- UI must allow viewing completed results while other versions are still generating
-- Errors in one version must not prevent other versions from completing
-- Page refresh must restore all completed version results from Firestore
-
-### Performance
-- Pagination for large lists, load timeline only in detail view
-- Denormalize companyName on lead
-- Unsubscribe on component unmount
-
-### Cost Management
-- Enrich strategically (qualified leads only)
-- Batch OpenAI analysis
-- Use Firestore `limit()`
-
-### Data Integrity
-- ALWAYS update both lead + timeline subcollection
-- Use companyId not just name
-- Run dedup before bulk imports
-
-### Common Issues
-1. **Leads not showing**: Check subscription active, lead not archived, security rules, cache
-2. **Apollo fails**: Verify API key, credit balance, domain valid, CORS
-3. **CSV errors**: UTF-8, required fields, email format, dedup strategy
-4. **Drag-drop broken**: Board view active, lead has id, refresh if sync lost
-5. **Dropdown fields not detected**: Ensure column name contains "dropdown" (case-insensitive), check CSV encoding
-6. **Inline edit not working**: Verify field definition exists in Firestore `fieldDefinitions` collection, check fieldType is "dropdown"
-7. **Company status not updating**: Check `statusLockedManually` flag, verify lead has `companyId`, check console for errors
-
-**Debug**: `localStorage.setItem('crm_debug', 'true')`
-
----
-
-## Firecrawl Cost Guardrails
-
-Nikola's `web_search` and `scrape` tools (`functions/src/nikola/tools/firecrawlTool.ts`) call the Firecrawl API with the **shared account key** — the same key used by the Firecrawl MCP in every other workstation repo. The account is on the **100,000 credits/month plan, hard cap** (upgraded 2026-08-25 from Hobby / 5,000). When credits run out, Nikola auto-falls back to Apify (which has its own $29 cap), so runaway Firecrawl spend still cascades into Apify spend.
-
-**Rules (MANDATORY):**
-- **`search` bills ~1 credit per result.** The code default in `firecrawlTool.ts` is still `limit: 5`; raising it up to **`limit ≤ 20`** is now fine, above that needs a cost justification. `scrapeContent: true` additionally bills a scrape per result; default it off.
-- **`scrape` markdown by default.** `json` format and social-media URLs both bill 5 credits/page (YouTube/TikTok/Instagram auto-escalate to stealth proxy) — affordable on the 100k plan, but justify them per feature rather than defaulting to them in Nikola tools.
-- **Never add a `crawl` endpoint** to Nikola without a hard `limit ≤ 200`.
-- Any new Nikola feature or scheduled job that calls Firecrawl must state its worst-case credits-per-run before deploy, and a recurring job's daily worst case must stay **under 1,000 credits/day**.
-- Check remaining credits: `curl -s -H "Authorization: Bearer $FIRECRAWL_API_KEY" https://api.firecrawl.dev/v2/team/credit-usage`
-
----
-
-**End of Documentation**
-
-## macOS screenshots — NEVER retype the path
-
-macOS names screenshots with a **narrow no-break space (U+202F, bytes `e2 80 af`)** before
-`AM`/`PM` — not a regular space. The two are visually identical, so re-typing the path
-produces a filename that does not exist:
-
-```
-Screenshot 2026-09-08 at 12.17.02 PM.png   ← U+202F  (real file on disk)
-Screenshot 2026-09-08 at 12.17.02 PM.png   ← 0x20    (retyped — does NOT exist)
-```
-
-When the user drags a screenshot in, the path arrives byte-correct. It breaks only when the
-path is **re-typed** into a Read/Bash call. Under `/var/...` the failure is disguised as
-`Refusing to read ...: its symlink resolution changed after permission was checked`
-(`/var` is a symlink to `private/var`) instead of a plain not-found.
-
-### Use the right technique for the location
-
-**Dragged thumbnail** — path looks like
-`/var/folders/.../T/TemporaryItems/NSIRD_screencaptureui_XXXX/Screenshot ....png`.
-Globbing does **not** work here: macOS TCC denies `readdir` on `TemporaryItems`
-(`Operation not permitted`), so `*` cannot expand. Reconstruct the byte instead —
-copy the directory verbatim from the user's message and rebuild only the filename:
-
-```bash
-D="/var/folders/2v/.../T/TemporaryItems/NSIRD_screencaptureui_Dv38AI"
-cp "$D/$(printf 'Screenshot 2026-09-08 at 12.17.02\xe2\x80\xafPM.png')" "$SCRATCH/shot.png"
-```
-
-**Saved to ~/Desktop** — globbing works, use it:
-
-```bash
-cp ~/Desktop/Screenshot*2026-09-08*12.17.02* "$SCRATCH/shot.png"
-```
-
-**Fully general fallback** — the session transcript stores the path with correct bytes:
-
-```bash
-grep -o '/var/folders/[^"]*\.png' ~/.claude/projects/<project-dir>/<session-id>.jsonl | tail -1
-```
-
-Then `Read` the copy in the scratchpad.
-
-**Never tell the user a dragged screenshot is missing or was cleaned up until one of the
-above has actually failed.** The file is almost always still there — a bare `ls` of the
-retyped path lying with `No such file or directory` is the expected symptom, not evidence.
+## Debugging
+- CRM debug logging: `localStorage.setItem('crm_debug', 'true')`.
+- Troubleshooting list for common CRM issues: `docs/features/crm.md`.
